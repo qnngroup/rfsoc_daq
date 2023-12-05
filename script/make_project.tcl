@@ -6,11 +6,8 @@ set sim_files [glob -nocomplain "$dir/../src/verif/*"]
 set rtl_files [glob -nocomplain "$dir/../src/rtl/*"]
 set constraint_files [glob -nocomplain "$dir/../src/constraints/*"]
 
-# clean up project directory
-set proj_files [glob -nocomplain "$dir/../build/proj/*"]
-if {[llength $proj_files] != 0} {
-  file delete -force -- {*}[glob "$dir/../build/proj/*"]
-}
+# clean project directory
+source $dir/clean.tcl
 
 # create a project
 create_project proj $dir/../build/proj -part xczu28dr-ffvg1517-2-e
