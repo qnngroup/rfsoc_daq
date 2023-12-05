@@ -10,9 +10,6 @@ puts $dir
 puts $sim_files
 puts $rtl_files
 
-puts [read [open $sim_files r]]
-puts [read [open $rtl_files r]]
-
 # clean up project directory
 file delete -force -- $dir/../build/proj/*
 
