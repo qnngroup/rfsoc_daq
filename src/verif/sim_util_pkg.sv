@@ -71,7 +71,7 @@ package sim_util_pkg;
       error_count = error_count + 1;
     endfunction
 
-    function finish();
+    function report_errors();
       $display("#################################################");
       if (error_count == 0) begin
         $display("# finished with zero errors");
@@ -80,7 +80,6 @@ package sim_util_pkg;
         $display("#################################################");
       end
       $display("#################################################");
-      $finish;
     endfunction
 
   endclass
