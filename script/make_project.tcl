@@ -10,8 +10,14 @@ set constraint_files [glob -nocomplain "$dir/../src/constraints/*"]
 source $dir/clean.tcl
 
 # create a project
-create_project proj $dir/../build/proj -part xczu28dr-ffvg1517-2-e
-set_property board_part xilinx.com:zcu111:part0:1.4 [current_project]
+if { $project_type == "synth" } {
+  create_project proj $dir/../build/proj -part xczu28dr-ffvg1517-2-e
+  set_property board_part xilinx.com:zcu111:part0:1.4 [current_project]
+} elseif { $project_type == "sim" } {
+  create_project proj $dir/../build/proj
+} else {
+  puts "Invalid project type, choose 'sim' or 'synth'"
+}
 
 # add files
 if {[llength $sim_files] != 0} {

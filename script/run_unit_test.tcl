@@ -7,6 +7,7 @@ if {$argc <= 0} {
 set dir [file dirname [file normalize [info script]]]
 
 # make project
+set project_type "sim"
 source $dir/make_project.tcl
 
 # set toplevel for simulation
