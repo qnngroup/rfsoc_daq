@@ -1,7 +1,12 @@
 import sim_util_pkg::*;
 
 `timescale 1ns / 1ps
-module timetagging_discriminating_buffer_test ();
+module timetagging_discriminating_buffer_test #(
+  parameter bit MULTI_TEST = 0
+) (
+  input wire start,
+  output logic done
+);
 
 sim_util_pkg::generic #(int) util; // abs, max functions on integers
 sim_util_pkg::debug #(.VERBOSITY(DEFAULT)) dbg = new; // printing, error tracking
@@ -34,7 +39,7 @@ Axis_If #(.DWIDTH(AXI_MM_WIDTH)) data_out ();
 Axis_If #(.DWIDTH(2+$clog2($clog2(N_CHANNELS)+1))) buffer_config_in ();
 Axis_If #(.DWIDTH(N_CHANNELS*SAMPLE_WIDTH*2)) discriminator_config_in();
 
-logic start, stop;
+logic capture_start, capture_stop;
 logic [$clog2($clog2(N_CHANNELS)+1)-1:0] banking_mode;
 logic [N_CHANNELS-1:0][SAMPLE_WIDTH-1:0] threshold_high, threshold_low;
 
@@ -44,7 +49,7 @@ always_comb begin
   end
 end
 
-assign buffer_config_in.data = {banking_mode, start, stop};
+assign buffer_config_in.data = {banking_mode, capture_start, capture_stop};
 
 timetagging_discriminating_buffer #(
   .N_CHANNELS(N_CHANNELS),
@@ -360,28 +365,32 @@ task check_results(
 endtask
 
 task start_acq_with_banking_mode(input int mode);
-  start <= 1'b1;
+  capture_start <= 1'b1;
   banking_mode <= mode;
   buffer_config_in.valid <= 1'b1;
   @(posedge clk);
   buffer_config_in.valid <= 1'b0;
-  start <= 1'b0;
+  capture_start <= 1'b0;
 endtask
 
 task stop_acq();
-  stop <= 1'b1;
-  start <= 1'b0;
+  capture_stop <= 1'b1;
+  capture_start <= 1'b0;
   buffer_config_in.valid <= 1'b1;
   @(posedge clk);
   buffer_config_in.valid <= 1'b0;
-  start <= 1'b0;
-  stop <= 1'b0;
+  capture_start <= 1'b0;
+  capture_stop <= 1'b0;
 endtask
 
 initial begin
+  done <= 1'b0;
+  if (MULTI_TEST) begin
+    wait (start === 1'b1);
+  end
   reset <= 1'b1;
-  start <= 1'b0;
-  stop <= 1'b0;
+  capture_start <= 1'b0;
+  capture_stop <= 1'b0;
   timer <= '0; // reset timer for all channels
   banking_mode <= '0; // only enable channel 0 to start
   data_out.ready <= '0;
@@ -464,7 +473,11 @@ initial begin
       end
     end
   end
-  dbg.finish();
+  dbg.report_errors();
+  done <= 1'b1;
+  if (~MULTI_TEST) begin
+    $finish;
+  end
 end
 
 endmodule

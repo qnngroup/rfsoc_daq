@@ -1,9 +1,16 @@
 import sim_util_pkg::*;
 
 `timescale 1ns / 1ps
-module axis_differentiator_test();
+module axis_differentiator_test #(
+  parameter bit MULTI_TEST = 0
+) (
+  input wire start,
+  output logic done
+);
 
-int error_count = 0;
+typedef logic signed [SAMPLE_WIDTH-1:0] int_t; // type for signed samples (needed to check subtraction is working properly)
+sim_util_pkg::generic #(int_t) util; // abs, max functions on int_t
+sim_util_pkg::debug #(.VERBOSITY(DEFAULT)) dbg = new; // printing, error tracking
 
 logic reset;
 logic clk = 0;
@@ -16,13 +23,10 @@ localparam int PARALLEL_SAMPLES = 2;
 Axis_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES)) data_out_if();
 Axis_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES)) data_in_if();
 
-typedef logic signed [SAMPLE_WIDTH-1:0] int_t;
 real d_in;
 int_t received[$];
 int_t expected[$];
 int_t sent[$];
-
-sim_util_pkg::generic #(int_t) util;
 
 always @(posedge clk) begin
   if (reset) begin
@@ -50,18 +54,16 @@ always @(posedge clk) begin
 end
 
 task check_results();
-  $display("received.size() = %0d", received.size());
-  $display("expected.size() = %0d", expected.size());
+  dbg.display($sformatf("received.size() = %0d", received.size()), VERBOSE);
+  dbg.display($sformatf("expected.size() = %0d", expected.size()), VERBOSE);
   if (received.size() != expected.size()) begin
-    $warning("mismatched sizes; got a different number of samples than expected");
-    error_count = error_count + 1;
+    dbg.error("mismatched sizes; got a different number of samples than expected");
   end
   // check the values match, like with axis_x2_test, the rounding could lead
   // to an off-by-one error
   while (received.size() > 0 && expected.size() > 0) begin
     if (util.abs(expected[$] - received[$]) > 1) begin
-      $warning("mismatch: got %x, expected %x", received[$], expected[$]);
-      error_count = error_count + 1;
+      dbg.error($sformatf("mismatch: got %x, expected %x", received[$], expected[$]));
     end
     received.pop_back();
     expected.pop_back();
@@ -79,6 +81,10 @@ axis_differentiator #(
 );
 
 initial begin
+  done <= 1'b0;
+  if (MULTI_TEST) begin
+    wait (start === 1'b1);
+  end
   reset <= 1'b1;
   data_in_if.valid <= 1'b0;
   data_out_if.ready <= 1'b1;
@@ -94,7 +100,10 @@ initial begin
   data_in_if.valid <= 1'b0;
   repeat (10) @(posedge clk);
   check_results();
-  $info("error_count = %d", error_count);
-  $finish;
+  dbg.report_errors();
+  done <= 1'b1;
+  if (~MULTI_TEST) begin
+    $finish;
+  end
 end
 endmodule

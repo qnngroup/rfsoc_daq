@@ -60,18 +60,18 @@ package sim_util_pkg;
     
     int error_count = 0;
 
-    function display(input string message, input verbosity_t verbosity);
+    task display(input string message, input verbosity_t verbosity);
       if (VERBOSITY >= verbosity) begin
         $display(message);
       end
-    endfunction
+    endtask
 
-    function error(input string message);
+    task error(input string message);
       $warning(message);
       error_count = error_count + 1;
-    endfunction
+    endtask
 
-    function report_errors();
+    task report_errors();
       $display("#################################################");
       if (error_count == 0) begin
         $display("# finished with zero errors");
@@ -80,7 +80,7 @@ package sim_util_pkg;
         $display("#################################################");
       end
       $display("#################################################");
-    endfunction
+    endtask
 
   endclass
 
