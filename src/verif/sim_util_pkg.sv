@@ -71,15 +71,15 @@ package sim_util_pkg;
       error_count = error_count + 1;
     endtask
 
-    task report_errors();
+    task finish();
       $display("#################################################");
       if (error_count == 0) begin
         $display("# finished with zero errors");
-      end else begin
-        $error("# finished with %0d errors", error_count);
         $display("#################################################");
+        $finish;
+      end else begin
+        $fatal(" finished with %0d errors\n#################################################", error_count);
       end
-      $display("#################################################");
     endtask
 
   endclass

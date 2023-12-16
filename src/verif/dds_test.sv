@@ -1,7 +1,16 @@
+import sim_util_pkg::*;
+
 `timescale 1ns / 1ps
 module dds_test ();
 
+// TODO actuallly check output is correct
+sim_util_pkg::generic #(int) util; // abs, max functions on ints
+sim_util_pkg::debug #(.VERBOSITY(DEFAULT)) dbg = new; // printing, error tracking
+
 logic reset;
+logic clk = 0;
+localparam CLK_RATE_HZ = 100_000_000;
+always #(0.5s/CLK_RATE_HZ) clk = ~clk;
 
 localparam PHASE_BITS = 24;
 localparam OUTPUT_WIDTH = 18;
@@ -9,10 +18,6 @@ localparam QUANT_BITS = 8;
 localparam PARALLEL_SAMPLES = 4;
 localparam LUT_ADDR_BITS = PHASE_BITS - QUANT_BITS;
 localparam LUT_DEPTH = 2**LUT_ADDR_BITS;
-
-logic clk = 0;
-localparam CLK_RATE_HZ = 100_000_000;
-always #(0.5s/CLK_RATE_HZ) clk = ~clk;
 
 Axis_If #(.DWIDTH(PHASE_BITS)) phase_inc_in();
 Axis_If #(.DWIDTH(OUTPUT_WIDTH*PARALLEL_SAMPLES)) cos_out();
@@ -63,6 +68,9 @@ always @(posedge clk) begin
 end
 
 initial begin
+  dbg.display("################################", DEFAULT);
+  dbg.display("# testing dds signal generator #", DEFAULT);
+  dbg.display("################################", DEFAULT);
   for (int i = 0; i < LUT_DEPTH; i = i + 1) begin
     test_lut[i] <= signed'(int'($floor($cos(2*PI/(LUT_DEPTH)*i)*(2**(OUTPUT_WIDTH-1) - 0.5) - 0.5)));
   end
@@ -85,7 +93,7 @@ initial begin
     cos_out.ready <= 1'b1;
     repeat (3995) @(posedge clk);
   end
-  $finish;
+  dbg.finish();
 end
 
 endmodule

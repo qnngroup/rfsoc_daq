@@ -1,12 +1,7 @@
 import sim_util_pkg::*;
 
 `timescale 1ns / 1ps
-module axis_differentiator_test #(
-  parameter bit MULTI_TEST = 0
-) (
-  input wire start,
-  output logic done
-);
+module axis_differentiator_test ();
 
 typedef logic signed [SAMPLE_WIDTH-1:0] int_t; // type for signed samples (needed to check subtraction is working properly)
 sim_util_pkg::generic #(int_t) util; // abs, max functions on int_t
@@ -81,10 +76,9 @@ axis_differentiator #(
 );
 
 initial begin
-  done <= 1'b0;
-  if (MULTI_TEST) begin
-    wait (start === 1'b1);
-  end
+  dbg.display("###############################", DEFAULT);
+  dbg.display("# testing axis differentiator #", DEFAULT);
+  dbg.display("###############################", DEFAULT);
   reset <= 1'b1;
   data_in_if.valid <= 1'b0;
   data_out_if.ready <= 1'b1;
@@ -100,10 +94,6 @@ initial begin
   data_in_if.valid <= 1'b0;
   repeat (10) @(posedge clk);
   check_results();
-  dbg.report_errors();
-  done <= 1'b1;
-  if (~MULTI_TEST) begin
-    $finish;
-  end
+  dbg.finish();
 end
 endmodule

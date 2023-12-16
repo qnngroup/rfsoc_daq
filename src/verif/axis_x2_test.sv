@@ -1,8 +1,11 @@
+import sim_util_pkg::*;
+
 `timescale 1ns / 1ps
-module axis_x2_test();
+module axis_x2_test ();
 
-
-int error_count = 0;
+typedef logic signed [SAMPLE_WIDTH-1:0] int_t;
+sim_util_pkg::generic #(int_t) util; // abs, max functions on signed sample type
+sim_util_pkg::debug #(.VERBOSITY(DEFAULT)) dbg = new; // printing, error tracking
 
 logic reset;
 logic clk = 0;
@@ -17,12 +20,9 @@ localparam int SAMPLE_INT_BITS = SAMPLE_WIDTH - SAMPLE_FRAC_BITS;
 Axis_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES)) data_out_if();
 Axis_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES)) data_in_if();
 
-typedef logic signed [SAMPLE_WIDTH-1:0] int_t;
 real d_in;
 int_t received[$];
 int_t expected[$];
-
-sim_util_pkg::generic #(int_t) util;
 
 always @(posedge clk) begin
   if (reset) begin
@@ -46,18 +46,20 @@ always @(posedge clk) begin
 end
 
 task check_results();
-  $display("received.size() = %0d", received.size());
-  $display("expected.size() = %0d", expected.size());
+  dbg.display($sformatf("received.size() = %0d", received.size()), VERBOSE);
+  dbg.display($sformatf("expected.size() = %0d", expected.size()), VERBOSE);
   if (received.size() != expected.size()) begin
-    $warning("mismatched sizes; got a different number of samples than expected");
-    error_count = error_count + 1;
+    dbg.error("mismatched sizes; got a different number of samples than expected");
   end
   // check the values match
   // casting to uint_t seems to perform a rounding operation, so the test data may be slightly too large
   while (received.size() > 0 && expected.size() > 0) begin
     if (util.abs(expected[$] - received[$]) > 1) begin
-      $warning("mismatch: got %x, expected %x", received[$], expected[$]);
-      error_count = error_count + 1;
+      dbg.error($sformatf(
+        "mismatch: got %x, expected %x",
+        received[$],
+        expected[$])
+      );
     end
     received.pop_back();
     expected.pop_back();
@@ -76,6 +78,9 @@ axis_x2 #(
 );
 
 initial begin
+  dbg.display("###############################", DEFAULT);
+  dbg.display("# testing axis x^2            #", DEFAULT);
+  dbg.display("###############################", DEFAULT);
   reset <= 1'b1;
   data_in_if.valid <= 1'b0;
   data_out_if.ready <= 1'b1;
@@ -91,7 +96,7 @@ initial begin
   data_in_if.valid <= 1'b0;
   repeat (10) @(posedge clk);
   check_results();
-  $info("error_count = %d", error_count);
-  $finish;
+  dbg.error("test error");
+  dbg.finish();
 end
 endmodule

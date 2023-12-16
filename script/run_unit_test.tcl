@@ -10,10 +10,17 @@ set dir [file dirname [file normalize [info script]]]
 set project_type "sim"
 source $dir/make_project.tcl
 
+set error_count 0
+
+set_property -name {xsim.simulate.runtime} -value {0} -objects [get_filesets sim_1]
 # set toplevel for simulation
 foreach module $argv {
   set_property top $module [current_fileset -sims]
   launch_simulation
   run all
+  if {[get_value -radix unsigned /$module/dbg.error_count]} {
+    incr error_count
+  }
 }
-exit 0
+
+exit $error_count

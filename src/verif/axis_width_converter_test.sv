@@ -1,14 +1,15 @@
 import sim_util_pkg::*;
 
 `timescale 1ns / 1ps
-module axis_width_converter_test();
+module axis_width_converter_test ();
+
+sim_util_pkg::generic #(int) util; // abs, max functions on ints
+sim_util_pkg::debug #(.VERBOSITY(DEFAULT)) dbg = new; // printing, error tracking
 
 logic reset;
 logic clk = 0;
 localparam CLK_RATE_HZ = 100_000_000;
 always #(0.5s/CLK_RATE_HZ) clk = ~clk;
-
-int error_count = 0;
 
 localparam int DWIDTH_DOWN_IN = 256;
 localparam int DWIDTH_UP_IN = 16;
@@ -18,7 +19,6 @@ localparam int UP = 8;
 localparam int COMB_UP = 4;
 localparam int COMB_DOWN = 3;
 
-sim_util_pkg::generic #(int) util;
 localparam int DWIDTH = util.max(util.max(util.max(DWIDTH_DOWN_IN, DWIDTH_UP_IN*UP), (DWIDTH_COMB_IN*COMB_UP)/COMB_DOWN), DWIDTH_COMB_IN);
 
 Axis_If #(.DWIDTH(DWIDTH_DOWN_IN)) downsizer_in ();
@@ -174,51 +174,71 @@ always_ff @(posedge clk) begin
 end
 
 task check_dut(input int dut_select);
+  int max_extra_samples;
   unique case (dut_select)
     0: begin
-      $display("checking downsizer");
+      dbg.display("checking downsizer", VERBOSE);
+      max_extra_samples = 0;
     end
     1: begin
-      $display("checking upsizer");
+      dbg.display("checking upsizer", VERBOSE);
+      max_extra_samples = UP - 1;
     end
     2: begin
-      $display("checking combination up:down");
+      dbg.display("checking combination up:down", VERBOSE);
+      max_extra_samples = COMB_UP*COMB_DOWN - 1;
     end
   endcase
-  $display("sent[%0d].size() = %0d", dut_select, sent[dut_select].size());
-  $display("received[%0d].size() = %0d", dut_select, received[dut_select].size());
-  $display("last_sent[%0d].size() = %0d", dut_select, last_sent[dut_select].size());
-  $display("last_received[%0d].size() = %0d", dut_select, last_received[dut_select].size());
+  dbg.display($sformatf(
+    "sent[%0d].size() = %0d",
+    dut_select,
+    sent[dut_select].size()),
+    DEBUG
+  );
+  dbg.display($sformatf(
+    "received[%0d].size() = %0d",
+    dut_select,
+    received[dut_select].size()),
+    DEBUG
+  );
+  dbg.display($sformatf(
+    "last_sent[%0d].size() = %0d",
+    dut_select,
+    last_sent[dut_select].size()),
+    DEBUG
+  );
+  dbg.display($sformatf(
+    "last_received[%0d].size() = %0d",
+    dut_select,
+    last_received[dut_select].size()),
+    DEBUG
+  );
   while (last_sent[dut_select].size() > 0 && last_received[dut_select].size() > 0) begin
-    $display("last_sent, last_received: %0d, %0d", last_sent[dut_select][$], last_received[dut_select][$]);
+    dbg.display($sformatf(
+      "last_sent, last_received: %0d, %0d",
+      last_sent[dut_select][$],
+      last_received[dut_select][$]),
+      DEBUG
+    );
     last_sent[dut_select].pop_back();
     last_received[dut_select].pop_back();
   end
   // check we got the right amount of data
   if (received[dut_select].size() < sent[dut_select].size()) begin
-    $warning("mismatch in number of received/sent words, received fewer words than sent (received %d, sent %d)", received[dut_select].size(), sent[dut_select].size());
-    error_count = error_count + 1;
+    dbg.error($sformatf(
+      "mismatch in number of received/sent words, received fewer words than sent (received %d, sent %d)",
+      received[dut_select].size(),
+      sent[dut_select].size())
+    );
   end
-  unique case (dut_select)
-    0: begin
-      if (received[dut_select].size() > sent[dut_select].size()) begin
-        $warning("mismatch in number of received/sent words, received more words than sent (received %d, sent %d)", received[dut_select].size(), sent[dut_select].size());
-        error_count = error_count + 1;
-      end
-    end
-    1: begin
-      if (received[dut_select].size() - sent[dut_select].size() >= UP) begin
-        $warning("mismatch in number of received/sent words, received more than UP words more than sent (received %d, sent %d)", received[dut_select].size(), sent[dut_select].size());
-        error_count = error_count + 1;
-      end
-    end
-    2: begin
-      if (received[dut_select].size() - sent[dut_select].size() >= COMB_UP*COMB_DOWN) begin
-        $warning("mismatch in number of received/sent words, received more than COMB_UP*COMB_DOWN words more than sent (received %d, sent %d)", received[dut_select].size(), sent[dut_select].size());
-        error_count = error_count + 1;
-      end
-    end
-  endcase
+  if (received[dut_select].size() - sent[dut_select].size() > max_extra_samples) begin
+    dbg.error($sformatf(
+      "mismatch in number of received/sent words, received %d more words than sent (received %d, sent %d)",
+      received[dut_select].size() - sent[dut_select].size(),
+      received[dut_select].size(),
+      sent[dut_select].size())
+    );
+  end
   // remove invalid subwords if an incomplete word was sent at the end
   if (dut_select > 0) begin
     // do nothing for downsizer; it cannot have invalid subwords
@@ -230,8 +250,11 @@ task check_dut(input int dut_select);
   // check data
   while (sent[dut_select].size() > 0 && received[dut_select].size() > 0) begin
     if (sent[dut_select][$] != received[dut_select][$]) begin
-      error_count = error_count + 1;
-      $warning("data mismatch error (received %x, sent %x)", received[dut_select][$], sent[dut_select][$]);
+      dbg.error($sformatf(
+        "data mismatch error (received %x, sent %x)",
+        received[dut_select][$],
+        sent[dut_select][$])
+      );
     end
     sent[dut_select].pop_back();
     received[dut_select].pop_back();
@@ -257,13 +280,13 @@ initial begin
 
   // do test
   for (int i = 0; i < 3; i++) begin
-    $display("#################################################");
+    dbg.display("#################################################", DEFAULT);
     unique case (i)
-      0: $display("# testing downsizer                             #");
-      1: $display("# testing upsizer                               #");
-      2: $display("# testing combined upsizer/downsizer            #");
+      0: dbg.display("# testing axis downsizer                        #", DEFAULT);
+      1: dbg.display("# testing axis upsizer                          #", DEFAULT);
+      2: dbg.display("# testing axis combined upsizer/downsizer       #", DEFAULT);
     endcase
-    $display("#################################################");
+    dbg.display("#################################################", DEFAULT);
     repeat (50) begin
       for (int j = 1; j <= 2; j++) begin
         // cycle between continuously-high and randomly toggling ready signal on output interface 
@@ -306,15 +329,7 @@ initial begin
     readout_mode[i] <= '0;
   end
 
-  $display("#################################################");
-  if (error_count == 0) begin
-    $display("# finished with zero errors");
-  end else begin
-    $error("# finished with %0d errors", error_count);
-    $display("#################################################");
-  end
-  $display("#################################################");
-  $finish;
+  dbg.finish();
 end
 
 endmodule
