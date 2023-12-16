@@ -10,4 +10,6 @@ echo "# Running unit test #"
 echo "#####################"
 echo "modules to test: $@"
 
-vivado -mode batch -source run_unit_test.tcl -tclargs $@
+script_dir=$(dirname "$(realpath $0)")
+
+vivado -mode batch -source $script_dir/run_unit_test.tcl -tclargs $@

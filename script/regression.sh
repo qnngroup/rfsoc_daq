@@ -7,5 +7,8 @@ echo "# Running regression test #"
 echo "###########################"
 echo "modules to test: $modules"
 
+# https://askubuntu.com/questions/893911/when-writing-a-bash-script-how-do-i-get-the-absolute-path-of-the-location-of-th
+script_dir=$(dirname "$(realpath $0)")
+
 # https://unix.stackexchange.com/questions/29509/transform-an-array-into-arguments-of-a-command
-vivado -mode batch -source run_unit_test.tcl -tclargs $modules
+vivado -mode batch -source $script_dir/run_unit_test.tcl -tclargs $modules

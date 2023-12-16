@@ -13,30 +13,46 @@ Notable features are an arbitrary waveform generator based on piecewise-linear s
     constraints/        XDC contraints
     pynq/               Python drivers and Jupyter notebook
   script/
-    run_bitstream.sh    creates a temporary Vivado project and generates a bitstream
-    run_simulation.sh   creates a temporary Vivado project with the necessary simulation sources
+    bitstream.sh        creates a temporary Vivado project and generates a bitstream
+    unit.sh             creates a temporary Vivado project with the necessary simulation sources and runs one or more unit tests
+    regression.sh       creates a temporary Vivado project and runs unit tests for all test modules in src/verif/
   README.md             this file
 ```
 ## Writing a new module
 
-Create the module `module` in a file called `module.sv` (located in `src/rtl/`), and a unit test module `module_test` in a file called `module_test.sv` (located in `src/verif/`).
-Also add the test module name `module_test` to the list `test_module_list` in [`script/run_simulation.tcl`](script/run_simulation.tcl).
+Create the module `my_module` in a file called `my_module.sv` (located in `src/rtl/`), and a unit test module `my_module_test` in a file called `my_module_test.sv` (located in `src/verif/`).
 
 ### Unit test architecture
 
-Each unit test should have a single input `start` and a parameter `MULTI_TEST` with default value 0.
+Each unit test should create an instance of the `sim_util_pkg::debug` class to track errors in the module.
+The `sim_util_pkg::debug` class offers 3 levels of verbosity: `DEFAULT` (lowest verbosity, good for regression tests or sanity checks), `VERBOSE` (medium verbosity), and `DEBUG` (highest verbosity, good if something is going wrong).
+
+```
+sim_util_pkg::debug #(.VERBOSITY(DEFAULT)) dbg = new;
+```
+
+The method `sim_util_pkg::debug.display(string msg, verbosity_t verbosity)` allows print statements to be generated at differing verbosity levels.
+For example, if the method were called like so:
+
+```
+dbg.display("Running test for module my_module", DEFAULT);
+```
+
+then the message `Running test for module my_module` would always be printed out, regardless of what verbosity setting the instance `dbg_i` is initialized with.
+However, if the method were called like this
+
+```
+dbg.display("Signal in submodule my_module.dut.dut_submodule is x", VERBOSE);
+```
+
+then the message would only be printed if the `dbg_i` was initialized with a verbosity setting of `VERBOSE` or `DEBUG`.
 
 Here's a template:
 ```
 import sim_util_pkg::*;
 
 `timescale 1ns / 1ps
-module module_test #(
-  parameter int MULTI_TEST = 0
-) (
-  input wire start,
-  output logic done
-);
+module module_test ();
 
 sim_util_pkg::debug #(.VERBOSITY(DEFAULT)) dbg = new;
 
@@ -46,49 +62,33 @@ localparam CLK_RATE_HZ = 100_000_000;
 always #(0.5s/CLK_RATE_HZ) clk = ~clk;
 
 initial begin
-  if (MULTI_TEST) begin
-    done <= 1'b0;
-    wait (start === 1'b1);
-  end
-
-  // rest of test bench
+  dbg.display("running test for my_module_test", DEFAULT);
+  // run test
   ...
 
-  dbg.report_errors();
-  if (MULTI_TEST) begin
-    done <= 1'b1;
-  end else begin
-    $finish;
+  dbg.display("super verbose debug information", DEBUG);
+  ...
+
+  // check for an error, and report if so
+  if (error) begin
+    dbg.error("error message");
   end
+
+  // report total number of errors and exit the simulation
+  dbg.finish();
 end
 
 endmodule
 ```
 
-By giving the `MULTI_TEST` parameter a default value of `0`, when running the unit test as a toplevel, it will run immediately.
-However, when the unit test is instantiated in the regression test wrapper which runs all of the unit tests, it will wait until the previous unit test completes before running.
-
-The unit test must also be instantiated in `src/verif/regression_test.sv` like so:
-
-```
-...
-module_test #(.(1)) module_test_i (.start(), .done());
-...
-```
-This is crucial to ensure that future changes to the module (or any modules/packages/classes/libraries it depends on) that break its functionality are caught.
-
 ### Testing your module
 
-Run vivado in batch mode, specifying the name of the test module as a TCL argument:
+Run `$ script/unit.sh my_module_test`. The script can be run from any directory, but it's preferrable to run it from either the repository root or the script directory to avoid cluttering other directories with Vivado log/journal files.
+
+Also note that the unit test script can take a variable number of arguments, allowing for debugging of multiple modules simultaneously:
 
 ```
-$ vivado -mode batch -source script/run_unit_test.tcl -tclargs module_test
-```
-
-Also note that unit_test can take a variable number of arguments, allowing for debugging of multiple modules simultaneously:
-
-```
-$ vivado -mode batch -source script/run_unit_test.tcl -tclargs module1_test [module2_test ...]
+$ script/unit.sh my_module_test [other_module_test ...]
 ```
 
 ## Committing a new module
@@ -98,8 +98,10 @@ Also run a regression test to ensure that the new module (or any other code that
 
 ### Running a regression test
 
-A full regression test (should be done before every commit) can be run by specifiying `regression_test` as the toplevel for the unit test script:
+A full regression test (should be done before every commit) can be run like so:
 
 ```
-$ vivado -mode batch -source script/run_unit_test.tcl -tclargs regression_test
+$ script/regression.sh
 ```
+
+This script generates a list of all test modules (named `[a-zA-Z0-9_]*_test`) located in `src/verif/` and passes them to the unit test script.
