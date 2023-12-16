@@ -35,14 +35,14 @@ The method `sim_util_pkg::debug.display(string msg, verbosity_t verbosity)` allo
 For example, if the method were called like so:
 
 ```
-dbg.display("Running test for module my_module", DEFAULT);
+dbg.display("Running test my_module_test", DEFAULT);
 ```
 
 then the message `Running test for module my_module` would always be printed out, regardless of what verbosity setting the instance `dbg_i` is initialized with.
 However, if the method were called like this
 
 ```
-dbg.display("Signal in submodule my_module.dut.dut_submodule is x", VERBOSE);
+dbg.display("Signal in submodule my_module_test.dut.dut_submodule is x", VERBOSE);
 ```
 
 then the message would only be printed if the `dbg_i` was initialized with a verbosity setting of `VERBOSE` or `DEBUG`.
@@ -52,7 +52,7 @@ Here's a template:
 import sim_util_pkg::*;
 
 `timescale 1ns / 1ps
-module module_test ();
+module my_module_test ();
 
 sim_util_pkg::debug #(.VERBOSITY(DEFAULT)) dbg = new;
 
