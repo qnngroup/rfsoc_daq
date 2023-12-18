@@ -96,7 +96,6 @@ initial begin
   data_in_if.valid <= 1'b0;
   repeat (10) @(posedge clk);
   check_results();
-  dbg.error("test error");
   dbg.finish();
 end
 endmodule

@@ -78,7 +78,7 @@ package sim_util_pkg;
         $display("#################################################");
         $finish;
       end else begin
-        $fatal(" finished with %0d errors\n#################################################", error_count);
+        $fatal(1, " finished with %0d errors\n#################################################", error_count);
       end
     endtask
 
