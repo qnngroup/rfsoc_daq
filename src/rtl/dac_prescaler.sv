@@ -25,12 +25,12 @@ always_ff @(posedge clk) begin
   if (scale_factor.valid && scale_factor.ready) begin
     scale_factor_reg <= scale_factor.data; // always update scale factor
   end
-  if (data_in.valid && data_in.ready) begin
+  if (data_in.ok) begin
     for (int i = 0; i < PARALLEL_SAMPLES; i++) begin
       data_in_reg[i] <= data_in.data[i*SAMPLE_WIDTH+:SAMPLE_WIDTH]; // 0Q16*2Q16 = 2Q32
     end
   end
-  if (data_out.ready) begin
+  if (data_out.ready || ~data_out.valid) begin
     for (int i = 0; i < PARALLEL_SAMPLES; i++) begin
       product[i] <= data_in_reg[i]*scale_factor_reg; // 2Q32
       product_d[i] <= product[i][SAMPLE_WIDTH+SCALE_FRAC_BITS-1-:SAMPLE_WIDTH]; // 0Q16
