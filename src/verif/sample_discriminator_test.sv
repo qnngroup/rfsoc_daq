@@ -3,13 +3,13 @@ import sim_util_pkg::*;
 `timescale 1ns / 1ps
 module sample_discriminator_test();
 
+sim_util_pkg::debug #(.VERBOSITY(DEFAULT)) dbg = new; // printing, error tracking
+
 logic clk = 0;
 localparam CLK_RATE_HZ = 100_000_000;
 always #(0.5s/CLK_RATE_HZ) clk = ~clk;
 
 logic reset;
-
-int error_count = 0;
 
 localparam int N_CHANNELS = 2;
 localparam int SAMPLE_WIDTH = 16;
@@ -91,12 +91,26 @@ task check_results (
 );
   for (int i = 0; i < N_CHANNELS; i++) begin
     // process each channel, first check that we received an appropriate amount of data
-    $display("data_sent[%0d].size() = %0d", i, data_sent[i].size());
-    $display("data_received[%0d].size() = %0d", i, data_received[i].size());
-    $display("timestamps_received[%0d].size() = %0d", i, timestamps_received[i].size());
+    dbg.display($sformatf(
+      "data_sent[%0d].size() = %0d",
+      i,
+      data_sent[i].size()),
+      VERBOSE 
+    );
+    dbg.display($sformatf(
+      "data_received[%0d].size() = %0d",
+      i,
+      data_received[i].size()),
+      VERBOSE
+    );
+    dbg.display($sformatf(
+      "timestamps_received[%0d].size() = %0d",
+      i,
+      timestamps_received[i].size()),
+      VERBOSE
+    );
     if (data_sent[i].size() < data_received[i].size()) begin
-      $error("more data received than sent. this is not possible");
-      error_count = error_count + 1;
+      dbg.error("more data received than sent. this is not possible");
     end
 
     // now process the sent/received data to check the timestamps and check for any mismatched data
@@ -106,13 +120,18 @@ task check_results (
           // new high, we should get a timestamp
           if (timestamps_received[i].size() > 0) begin
             if (timestamps_received[i][$] != {timer[i], sample_index[i]}) begin
-              $warning("mismatched timestamp: got %x, expected %x", timestamps_received[i][$], {timer[i], sample_index[i]});
-              error_count = error_count + 1;
+              dbg.error($sformatf(
+                "mismatched timestamp: got %x, expected %x",
+                timestamps_received[i][$],
+                {timer[i], sample_index[i]})
+              );
             end
             timestamps_received[i].pop_back();
           end else begin
-            $warning("expected a timestamp (with value %x), but no more timestamps left", {timer[i], sample_index[i]});
-            error_count = error_count + 1;
+            dbg.error($sformatf(
+              "expected a timestamp (with value %x), but no more timestamps left",
+              {timer[i], sample_index[i]})
+            );
           end
         end
         is_high[i] = 1'b1;
@@ -121,8 +140,11 @@ task check_results (
       end
       if (is_high[i]) begin
         if (data_sent[i][$] != data_received[i][$]) begin
-          $warning("mismatched data: got %x, expected %x", data_received[i][$], data_sent[i][$]);
-          error_count = error_count + 1;
+          dbg.error($sformatf(
+            "mismatched data: got %x, expected %x",
+            data_received[i][$],
+            data_sent[i][$])
+          );
         end
         data_received[i].pop_back();
         sample_index[i] = sample_index[i] + 1'b1;
@@ -130,10 +152,25 @@ task check_results (
       data_sent[i].pop_back();
       timer[i] = timer[i] + 1'b1;
     end
-    $display("after processing:");
-    $display("data_sent[%0d].size() = %0d", i, data_sent[i].size());
-    $display("data_received[%0d].size() = %0d", i, data_received[i].size());
-    $display("timestamps_received[%0d].size() = %0d", i, timestamps_received[i].size());
+    dbg.display("after processing:", VERBOSE);
+    dbg.display($sformatf(
+      "data_sent[%0d].size() = %0d",
+      i,
+      data_sent[i].size()),
+      VERBOSE
+    );
+    dbg.display($sformatf(
+      "data_received[%0d].size() = %0d",
+      i,
+      data_received[i].size()),
+      VERBOSE
+    );
+    dbg.display($sformatf(
+      "timestamps_received[%0d].size() = %0d",
+      i,
+      timestamps_received[i].size()),
+      VERBOSE
+    );
   end
 endtask
 
@@ -142,6 +179,9 @@ logic [N_CHANNELS-1:0][SAMPLE_INDEX_WIDTH-1:0] sample_index;
 logic [N_CHANNELS-1:0] is_high;
 
 initial begin
+  dbg.display("################################", DEFAULT);
+  dbg.display("# testing sample discriminator #", DEFAULT);
+  dbg.display("################################", DEFAULT);
   reset <= 1'b1;
   for (int i = 0; i < N_CHANNELS; i++) begin
     data_range_low[i] <= '0;
@@ -174,10 +214,10 @@ initial begin
     repeat (50) @(posedge clk);
     data_in.send_samples(clk, 10, 1'b0, 1'b1);
     repeat (50) @(posedge clk);
-    $display("######################################################");
-    $display("# testing run with all data above thresholds         #");
-    $display("# first sample will be zero                          #");
-    $display("######################################################");
+    dbg.display("######################################################", DEFAULT);
+    dbg.display("# testing run with all data above thresholds         #", DEFAULT);
+    dbg.display("# first sample will be zero                          #", DEFAULT);
+    dbg.display("######################################################", DEFAULT);
     check_results(threshold_low, threshold_high, timer, sample_index, is_high);
     
     // send a bunch of data, some below and some above the threshold on channel 0
@@ -194,10 +234,10 @@ initial begin
     repeat (50) @(posedge clk);
     data_in.send_samples(clk, 100, 1'b0, 1'b1);
     repeat (50) @(posedge clk);
-    $display("######################################################");
-    $display("# testing run with channel 0 straddling thresholds   #");
-    $display("# and channel 1 above thresholds                     #");
-    $display("######################################################");
+    dbg.display("######################################################", DEFAULT);
+    dbg.display("# testing run with channel 0 straddling thresholds   #", DEFAULT);
+    dbg.display("# and channel 1 above thresholds                     #", DEFAULT);
+    dbg.display("######################################################", DEFAULT);
     check_results(threshold_low, threshold_high, timer, sample_index, is_high);
 
     // send a bunch of data below the threshold
@@ -215,9 +255,9 @@ initial begin
     repeat (50) @(posedge clk);
     data_in.send_samples(clk, 400, 1'b0, 1'b1);
     repeat (50) @(posedge clk);
-    $display("######################################################");
-    $display("# testing run with all data below thresholds         #");
-    $display("######################################################");
+    dbg.display("######################################################", DEFAULT);
+    dbg.display("# testing run with all data below thresholds         #", DEFAULT);
+    dbg.display("######################################################", DEFAULT);
     check_results(threshold_low, threshold_high, timer, sample_index, is_high);
 
     // send a bunch of data close to the threshold
@@ -235,10 +275,10 @@ initial begin
     repeat (50) @(posedge clk);
     data_in.send_samples(clk, 400, 1'b0, 1'b1);
     repeat (50) @(posedge clk);
-    $display("######################################################");
-    $display("# testing run with both channels straddling          #");
-    $display("# thresholds                                         #");
-    $display("######################################################");
+    dbg.display("######################################################", DEFAULT);
+    dbg.display("# testing run with both channels straddling          #", DEFAULT);
+    dbg.display("# thresholds                                         #", DEFAULT);
+    dbg.display("######################################################", DEFAULT);
     check_results(threshold_low, threshold_high, timer, sample_index, is_high);
 
     // reset state of counter and is_high
@@ -252,15 +292,8 @@ initial begin
     repeat (10) @(posedge clk);
   end
 
-  $display("#################################################");
-  if (error_count == 0) begin
-    $display("# finished with zero errors");
-  end else begin
-    $error("# finished with %0d errors", error_count);
-    $display("#################################################");
-  end
-  $display("#################################################");
-  $finish;
+  dbg.finish();
+
 end
 
 endmodule

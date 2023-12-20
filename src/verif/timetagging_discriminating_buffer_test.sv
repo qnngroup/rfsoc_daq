@@ -1,12 +1,7 @@
 import sim_util_pkg::*;
 
 `timescale 1ns / 1ps
-module timetagging_discriminating_buffer_test #(
-  parameter bit MULTI_TEST = 0
-) (
-  input wire start,
-  output logic done
-);
+module timetagging_discriminating_buffer_test ();
 
 sim_util_pkg::generic #(int) util; // abs, max functions on integers
 sim_util_pkg::debug #(.VERBOSITY(DEFAULT)) dbg = new; // printing, error tracking
@@ -384,10 +379,9 @@ task stop_acq();
 endtask
 
 initial begin
-  done <= 1'b0;
-  if (MULTI_TEST) begin
-    wait (start === 1'b1);
-  end
+  dbg.display("######################################################", DEFAULT);
+  dbg.display("# running test for timetagging_discriminating_buffer #", DEFAULT);
+  dbg.display("######################################################", DEFAULT);
   reset <= 1'b1;
   capture_start <= 1'b0;
   capture_stop <= 1'b0;
@@ -473,11 +467,7 @@ initial begin
       end
     end
   end
-  dbg.report_errors();
-  done <= 1'b1;
-  if (~MULTI_TEST) begin
-    $finish;
-  end
+  dbg.finish();
 end
 
 endmodule
