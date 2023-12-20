@@ -19,26 +19,25 @@ typedef logic signed [SAMPLE_WIDTH-1:0] int_t;
 typedef logic signed [SCALE_WIDTH-1:0] sc_int_t;
 
 sim_util_pkg::generic #(int_t) util; // abs, max functions on signed sample type
-sim_util_pkg::debug #(.VERBOSITY(DEBUG)) dbg = new; // printing, error tracking
+sim_util_pkg::debug #(.VERBOSITY(DEFAULT)) dbg = new; // printing, error tracking
 
 Axis_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES)) data_out_if();
 Axis_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES)) data_in_if();
 Axis_If #(.DWIDTH(SCALE_WIDTH)) scale_factor_if();
 
-sc_int_t scale_factor, scale_factor_d;
+sc_int_t scale_factor;
 assign scale_factor_if.data = scale_factor;
 assign scale_factor_if.valid = 1'b1;
-localparam int LATENCY = 4;
-int_t data_out_test [LATENCY][PARALLEL_SAMPLES];
 
 real d_in;
 real scale;
 
+int_t sent_data [$];
+int_t sent_scale [$];
 int_t expected [$];
 int_t received [$];
 
 always @(posedge clk) begin
-  scale_factor_d <= scale_factor;
   if (reset) begin
     data_in_if.data <= '0;
   end else begin
@@ -48,6 +47,8 @@ always @(posedge clk) begin
         data_in_if.data[i*SAMPLE_WIDTH+:SAMPLE_WIDTH] <= $urandom_range({SAMPLE_WIDTH{1'b1}});
         d_in = real'(int_t'(data_in_if.data[i*SAMPLE_WIDTH+:SAMPLE_WIDTH]));
         scale = real'(sc_int_t'(scale_factor));
+        sent_data.push_front(int_t'(data_in_if.data[i*SAMPLE_WIDTH+:SAMPLE_WIDTH]));
+        sent_scale.push_front(sc_int_t'(scale_factor));
         expected.push_front(int_t'(d_in/(2.0**SAMPLE_FRAC_BITS) * scale/(2.0**SCALE_FRAC_BITS) * 2.0**SAMPLE_FRAC_BITS));
       end
     end
@@ -69,6 +70,14 @@ task check_results();
   // check the values match
   // casting to uint_t seems to perform a rounding operation, so the test data may be slightly too large
   while (received.size() > 0 && expected.size() > 0) begin
+    dbg.display($sformatf(
+      "processing data, scale = %x, sent_data = %x, expected = %x, received = %x",
+      sent_scale[$],
+      sent_data[$],
+      expected[$],
+      received[$]),
+      DEBUG
+    );
     if (util.abs(expected[$] - received[$]) > 1) begin
       dbg.error($sformatf(
         "mismatch: got %x, expected %x",
@@ -78,6 +87,8 @@ task check_results();
     end
     received.pop_back();
     expected.pop_back();
+    sent_scale.pop_back();
+    sent_data.pop_back();
   end
 endtask
 
@@ -107,22 +118,71 @@ initial begin
   reset <= 1'b0;
   scale_factor <= $urandom_range(18'h3ffff);
   repeat(5) @(posedge clk);
-  data_in_if.valid <= 1'b1;
-  repeat (500) @(posedge clk);
-  scale_factor <= $urandom_range(18'h3ffff);
-  repeat (500) begin
-    @(posedge clk);
-    data_in_if.valid <= $urandom_range(0,1) & 1'b1;
-    data_out_if.ready <= $urandom_range(0,1) & 1'b1;
-  end
-  data_in_if.valid <= 1'b0;
-  repeat (1000) begin
-    @(posedge clk);
-    data_out_if.ready <= $urandom_range(0,1) & 1'b1;
-  end
+
+  // send a bunch of data with no backpressure
+  dbg.display("#######################################################", DEFAULT);
+  dbg.display("# testing without backpressure and random data valid  #", DEFAULT);
+  dbg.display("#######################################################", DEFAULT);
   data_out_if.ready <= 1'b1;
-  repeat (500) @(posedge clk);
+  repeat (5) begin
+    // don't send any data while we're changing scale factor
+    data_in_if.valid <= 1'b0;
+    scale_factor <= $urandom_range(18'h3ffff);
+    repeat (5) @(posedge clk);
+    data_in_if.send_samples(clk, 20, 0, 1);
+    repeat (50) @(posedge clk);
+    data_in_if.send_samples(clk, 20, 1, 1);
+    repeat (50) @(posedge clk);
+  end
+  // stop sending data and finish reading out anything that is in the pipeline
+  data_in_if.valid <= 1'b0;
+  data_out_if.ready <= 1'b1;
+  repeat (10) @(posedge clk);
   check_results();
+
+  // apply backpressure with input data always valid
+  dbg.display("#######################################################", DEFAULT);
+  dbg.display("# testing with backpressure and continuous data valid #", DEFAULT);
+  dbg.display("#######################################################", DEFAULT);
+  repeat (5) begin
+    data_in_if.valid <= 1'b0;
+    data_out_if.ready <= 1'b1;
+    scale_factor <= $urandom_range(18'h3ffff);
+    repeat (5) @(posedge clk);
+    data_in_if.valid <= 1'b1;
+    repeat (40) begin
+      data_out_if.ready <= $urandom() & 1'b1;
+      @(posedge clk);
+    end
+  end
+  // stop sending data and finish reading out anything that is in the pipeline
+  data_in_if.valid <= 1'b0;
+  data_out_if.ready <= 1'b1;
+  repeat (10) @(posedge clk);
+  check_results();
+
+
+  // apply backpressure and toggle input data valid
+  dbg.display("#######################################################", DEFAULT);
+  dbg.display("# testing with backpressure and random data valid     #", DEFAULT);
+  dbg.display("#######################################################", DEFAULT);
+  repeat (5) begin
+    data_in_if.valid <= 1'b0;
+    data_out_if.ready <= 1'b1;
+    scale_factor <= $urandom_range(18'h3ffff);
+    repeat (5) @(posedge clk);
+    repeat (40) begin
+      data_in_if.valid <= $urandom() & 1'b1;
+      data_out_if.ready <= $urandom() & 1'b1;
+      @(posedge clk);
+    end
+  end
+  // stop sending data and finish reading out anything that is in the pipeline
+  data_in_if.valid <= 1'b0;
+  data_out_if.ready <= 1'b1;
+  repeat (10) @(posedge clk);
+  check_results();
+
   dbg.finish();
 end
 

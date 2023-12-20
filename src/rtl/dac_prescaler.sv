@@ -36,7 +36,7 @@ always_ff @(posedge clk) begin
       product_d[i] <= product[i][SAMPLE_WIDTH+SCALE_FRAC_BITS-1-:SAMPLE_WIDTH]; // 0Q16
       data_out.data[i*SAMPLE_WIDTH+:SAMPLE_WIDTH] <= product_d[i];
     end
-    valid_d <= {valid_d[2:0], data_in.valid};
+    valid_d <= {valid_d[2:0], data_in.ok};
   end
 end
 
