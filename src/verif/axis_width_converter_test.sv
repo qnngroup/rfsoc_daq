@@ -280,13 +280,11 @@ initial begin
 
   // do test
   for (int i = 0; i < 3; i++) begin
-    dbg.display("#################################################", DEFAULT);
     unique case (i)
-      0: dbg.display("# testing axis downsizer                        #", DEFAULT);
-      1: dbg.display("# testing axis upsizer                          #", DEFAULT);
-      2: dbg.display("# testing axis combined upsizer/downsizer       #", DEFAULT);
+      0: dbg.display("### testing axis downsizer ###", DEFAULT);
+      1: dbg.display("### testing axis upsizer ###", DEFAULT);
+      2: dbg.display("### testing axis combined upsizer/downsizer ###", DEFAULT);
     endcase
-    dbg.display("#################################################", DEFAULT);
     repeat (50) begin
       for (int j = 1; j <= 2; j++) begin
         // cycle between continuously-high and randomly toggling ready signal on output interface 

@@ -120,9 +120,7 @@ lmh6401_spi #(
 );
 
 initial begin
-  dbg.display("################################################", DEFAULT);
-  dbg.display("# running test for lmh6401_spi                 #", DEFAULT);
-  dbg.display("################################################", DEFAULT);
+  dbg.display("### running test for lmh6401_spi ###", DEFAULT);
   reset <= 1;
   data_in_valid <= '0;
   repeat (500) @(posedge clk);

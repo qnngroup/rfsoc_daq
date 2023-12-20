@@ -179,9 +179,7 @@ logic [N_CHANNELS-1:0][SAMPLE_INDEX_WIDTH-1:0] sample_index;
 logic [N_CHANNELS-1:0] is_high;
 
 initial begin
-  dbg.display("################################", DEFAULT);
-  dbg.display("# testing sample discriminator #", DEFAULT);
-  dbg.display("################################", DEFAULT);
+  dbg.display("### testing sample discriminator ###", DEFAULT);
   reset <= 1'b1;
   for (int i = 0; i < N_CHANNELS; i++) begin
     data_range_low[i] <= '0;
@@ -214,10 +212,8 @@ initial begin
     repeat (50) @(posedge clk);
     data_in.send_samples(clk, 10, 1'b0, 1'b1);
     repeat (50) @(posedge clk);
-    dbg.display("######################################################", DEFAULT);
-    dbg.display("# testing run with all data above thresholds         #", DEFAULT);
-    dbg.display("# first sample will be zero                          #", DEFAULT);
-    dbg.display("######################################################", DEFAULT);
+    dbg.display("testing run with all data above thresholds", VERBOSE);
+    dbg.display("first sample will be zero", VERBOSE);
     check_results(threshold_low, threshold_high, timer, sample_index, is_high);
     
     // send a bunch of data, some below and some above the threshold on channel 0
@@ -234,10 +230,8 @@ initial begin
     repeat (50) @(posedge clk);
     data_in.send_samples(clk, 100, 1'b0, 1'b1);
     repeat (50) @(posedge clk);
-    dbg.display("######################################################", DEFAULT);
-    dbg.display("# testing run with channel 0 straddling thresholds   #", DEFAULT);
-    dbg.display("# and channel 1 above thresholds                     #", DEFAULT);
-    dbg.display("######################################################", DEFAULT);
+    dbg.display("testing run with channel 0 straddling thresholds", VERBOSE);
+    dbg.display("and channel 1 above thresholds", VERBOSE);
     check_results(threshold_low, threshold_high, timer, sample_index, is_high);
 
     // send a bunch of data below the threshold
@@ -255,9 +249,7 @@ initial begin
     repeat (50) @(posedge clk);
     data_in.send_samples(clk, 400, 1'b0, 1'b1);
     repeat (50) @(posedge clk);
-    dbg.display("######################################################", DEFAULT);
-    dbg.display("# testing run with all data below thresholds         #", DEFAULT);
-    dbg.display("######################################################", DEFAULT);
+    dbg.display("testing run with all data below thresholds", VERBOSE);
     check_results(threshold_low, threshold_high, timer, sample_index, is_high);
 
     // send a bunch of data close to the threshold
@@ -275,10 +267,7 @@ initial begin
     repeat (50) @(posedge clk);
     data_in.send_samples(clk, 400, 1'b0, 1'b1);
     repeat (50) @(posedge clk);
-    dbg.display("######################################################", DEFAULT);
-    dbg.display("# testing run with both channels straddling          #", DEFAULT);
-    dbg.display("# thresholds                                         #", DEFAULT);
-    dbg.display("######################################################", DEFAULT);
+    dbg.display("testing run with both channels straddling thresholds", VERBOSE);
     check_results(threshold_low, threshold_high, timer, sample_index, is_high);
 
     // reset state of counter and is_high

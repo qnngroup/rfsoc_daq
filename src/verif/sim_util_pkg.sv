@@ -62,7 +62,11 @@ package sim_util_pkg;
 
     task display(input string message, input verbosity_t verbosity);
       if (VERBOSITY >= verbosity) begin
-        $display(message);
+        unique case (verbosity)
+          DEFAULT: $display("\033[01;37m%s\033[00m", message);
+          VERBOSE: $display("  \033[01;37m%s\033[00m", message);
+          DEBUG: $display("    \033[01;37m%s\033[00m", message);
+        endcase
       end
     endtask
 
@@ -72,13 +76,11 @@ package sim_util_pkg;
     endtask
 
     task finish();
-      $display("#################################################");
       if (error_count == 0) begin
-        $display("# finished with zero errors");
-        $display("#################################################");
+        $display("\033[01;32m### finished with zero errors ###\033[00m");
         $finish;
       end else begin
-        $fatal(1, " finished with %0d errors\n#################################################", error_count);
+        $fatal(1, "\033[01;31m### finished with %0d errors ###\033[00m", error_count);
       end
     endtask
 

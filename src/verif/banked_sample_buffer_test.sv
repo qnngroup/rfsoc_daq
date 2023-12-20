@@ -153,9 +153,7 @@ endtask
 int samples_to_send;
 
 initial begin
-  dbg.display("######################################################", DEFAULT);
-  dbg.display("# testing banked_sample_buffer                       #", DEFAULT);
-  dbg.display("######################################################", DEFAULT);
+  dbg.display("### testing banked_sample_buffer ###", DEFAULT);
   reset <= 1'b1;
   start <= 1'b0;
   stop <= 1'b0;
@@ -178,9 +176,9 @@ initial begin
         repeat (10) @(posedge clk);
         stop_acq();
         data_out.do_readout(clk, 1'b1, 100000);
-        dbg.display($sformatf("checking results n_samples   = %d", samples_to_send), DEFAULT);
-        dbg.display($sformatf("banking mode                 = %d", bank_mode), DEFAULT);
-        dbg.display($sformatf("samples sent with rand_valid = %d", in_valid_rand), DEFAULT);
+        dbg.display($sformatf("checking results n_samples   = %d", samples_to_send), VERBOSE);
+        dbg.display($sformatf("banking mode                 = %d", bank_mode), VERBOSE);
+        dbg.display($sformatf("samples sent with rand_valid = %d", in_valid_rand), VERBOSE);
         // The second argument of check_results is if it's okay for there to
         // be missing samples that weren't stored.
         // When data_in.valid is randomly toggled on and off and enough samples
@@ -302,9 +300,7 @@ task check_results();
 endtask
 
 initial begin
-  dbg.display("######################################################", DEFAULT);
-  dbg.display("# testing banked_sample_buffer                       #", DEFAULT);
-  dbg.display("######################################################", DEFAULT);
+  dbg.display("### testing banked_sample_buffer ###", DEFAULT);
   reset <= 1'b1;
   start <= 1'b0;
   stop <= 1'b0;
@@ -326,7 +322,7 @@ initial begin
   @(posedge clk);
   stop <= 1'b0;
   data_out.do_readout(clk, 1'b1, 100000);
-  dbg.display("checking results for test with a few samples", DEFAULT);
+  dbg.display("checking results for test with a few samples", VERBOSE);
   check_results();
   // do more tests
 
@@ -343,7 +339,7 @@ initial begin
   @(posedge clk);
   stop <= 1'b0;
   data_out.do_readout(clk, 1'b1, 1000);
-  dbg.display("checking results for test with one sample", DEFAULT);
+  dbg.display("checking results for test with one sample", VERBOSE);
   check_results();
 
   // test with no samples
@@ -358,7 +354,7 @@ initial begin
   @(posedge clk);
   stop <= 1'b0;
   data_out.do_readout(clk, 1'b1, 1000);
-  dbg.display("checking results for test with no samples", DEFAULT);
+  dbg.display("checking results for test with no samples", VERBOSE);
   check_results();
 
   // fill up buffer
@@ -376,7 +372,7 @@ initial begin
   @(posedge clk);
   stop <= 1'b0;
   data_out.do_readout(clk, 1'b1, 100000);
-  dbg.display("checking results for test with 1024 samples (full buffer)", DEFAULT);
+  dbg.display("checking results for test with 1024 samples (full buffer)", VERBOSE);
   check_results();
   repeat (500) @(posedge clk);
   dbg.finish();

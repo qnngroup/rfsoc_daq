@@ -107,9 +107,7 @@ dac_prescaler #(
 );
 
 initial begin
-  dbg.display("######################################", DEFAULT);
-  dbg.display("# running test for dac_prescaler     #", DEFAULT);
-  dbg.display("######################################", DEFAULT);
+  dbg.display("### running test for dac_prescaler ###", DEFAULT);
   reset <= 1'b1;
   data_in_if.data <= '0;
   data_in_if.valid <= 1'b0;
@@ -120,9 +118,7 @@ initial begin
   repeat(5) @(posedge clk);
 
   // send a bunch of data with no backpressure
-  dbg.display("#######################################################", DEFAULT);
-  dbg.display("# testing without backpressure and random data valid  #", DEFAULT);
-  dbg.display("#######################################################", DEFAULT);
+  dbg.display("testing without backpressure and random data valid", VERBOSE);
   data_out_if.ready <= 1'b1;
   repeat (5) begin
     // don't send any data while we're changing scale factor
@@ -141,9 +137,7 @@ initial begin
   check_results();
 
   // apply backpressure with input data always valid
-  dbg.display("#######################################################", DEFAULT);
-  dbg.display("# testing with backpressure and continuous data valid #", DEFAULT);
-  dbg.display("#######################################################", DEFAULT);
+  dbg.display("testing with backpressure and continuous data valid", VERBOSE);
   repeat (5) begin
     data_in_if.valid <= 1'b0;
     data_out_if.ready <= 1'b1;
@@ -163,9 +157,7 @@ initial begin
 
 
   // apply backpressure and toggle input data valid
-  dbg.display("#######################################################", DEFAULT);
-  dbg.display("# testing with backpressure and random data valid     #", DEFAULT);
-  dbg.display("#######################################################", DEFAULT);
+  dbg.display("testing with backpressure and random data valid", VERBOSE);
   repeat (5) begin
     data_in_if.valid <= 1'b0;
     data_out_if.ready <= 1'b1;

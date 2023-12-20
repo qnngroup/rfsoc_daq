@@ -125,9 +125,9 @@ task check_results(
 
   // first report the size of the buffers
   for (int i = 0; i < N_CHANNELS; i++) begin
-    dbg.display($sformatf("data_sent[%0d].size() = %0d", i, data_sent[i].size()), DEFAULT);
+    dbg.display($sformatf("data_sent[%0d].size() = %0d", i, data_sent[i].size()), VERBOSE);
   end
-  dbg.display($sformatf("data_received.size() = %0d", data_received.size()), DEFAULT);
+  dbg.display($sformatf("data_received.size() = %0d", data_received.size()), VERBOSE);
 
   ///////////////////////////////////////////////////////////////////
   // organize DMA output into data structures for easier analysis
@@ -379,9 +379,7 @@ task stop_acq();
 endtask
 
 initial begin
-  dbg.display("######################################################", DEFAULT);
-  dbg.display("# running test for timetagging_discriminating_buffer #", DEFAULT);
-  dbg.display("######################################################", DEFAULT);
+  dbg.display("### running test for timetagging_discriminating_buffer ###", DEFAULT);
   reset <= 1'b1;
   capture_start <= 1'b0;
   capture_stop <= 1'b0;
@@ -458,11 +456,9 @@ initial begin
         repeat (10) @(posedge clk);
         stop_acq();
         data_out.do_readout(clk, 1'b1, 100000);
-        dbg.display("######################################################", DEFAULT);
-        dbg.display($sformatf("# checking results amplitude_mode = %d", amplitude_mode), DEFAULT);
-        dbg.display($sformatf("# banking mode                    = %d", bank_mode), DEFAULT);
-        dbg.display($sformatf("# samples sent with rand_valid    = %d", in_valid_rand), DEFAULT);
-        dbg.display("######################################################", DEFAULT);
+        dbg.display($sformatf("checking results amplitude_mode = %0d", amplitude_mode), VERBOSE);
+        dbg.display($sformatf("banking mode                    = %0d", bank_mode), VERBOSE);
+        dbg.display($sformatf("samples sent with rand_valid    = %0d", in_valid_rand), VERBOSE);
         check_results(bank_mode, threshold_high, threshold_low, timer);
       end
     end
