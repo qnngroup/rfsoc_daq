@@ -52,13 +52,11 @@ always_ff @(posedge clk) begin
     cs_n <= '1;
     sdi <= 1'b0;
   end else begin
-    if (data_in_valid && data_in_ready) begin
-      state <= SENDING;
-    end
     unique case (state)
       IDLE: if (data_in_valid && data_in_ready) begin 
         state <= SENDING;
         addr <= addr_in;
+        // only perform writes, so set MSB of data to 0
         data <= {1'b0, data_in[14:0]};
       end
       SENDING: begin
