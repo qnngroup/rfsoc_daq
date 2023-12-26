@@ -1,5 +1,24 @@
-// banked sample buffer
-module banked_sample_buffer #(
+// sample_buffer.sv - Reed Foster
+// Buffer for storing samples from multiple independent ADC channels.
+// The buffer is organized by banks, which can be grouped arbitrarly
+// based on the banking mode.
+// This allows for flexible use of multiple channels: if fewer than the
+// maximum number of channels are required for use, then the banks typically
+// dedicated to the now-unused channels can be used to expand the buffer
+// capacity of the active channels.
+//
+// For independent banking mode, each input channel has its own separate bank
+// For single-channel mode, only the first input channel can write to the
+// sample buffer (but it has more storage as a result)
+// For dual-channel mode, the first two input channels can write to the sample
+// buffer
+// For quad-channel mode, ...
+//
+// A channel multiplexer switch can be used to change which channels are
+// active so that any physical channel can be routed to the first input
+// channel of this module (allowing high-capacity buffering in single-channel
+// mode for any physical input channel)
+module sample_buffer #(
   parameter int N_CHANNELS = 8, // number of ADC channels
   parameter int BUFFER_DEPTH = 8192, // maximum capacity across all channels
   parameter int PARALLEL_SAMPLES = 16, // 4.096 GS/s @ 256 MHz
@@ -9,22 +28,28 @@ module banked_sample_buffer #(
   Axis_Parallel_If.Slave_Simple data_in, // all channels in parallel
   Axis_If.Master_Full data_out,
   Axis_If.Slave_Simple config_in, // {banking_mode, start, stop}
-  input wire stop_aux, // input from other buffer for parallel operation of separate buffers
+  // stop_aux allows parallel operation of separate buffers
+  // (e.g. for timestamp/data buffers in sparse sample buffer)
+  // when one buffer fills, it can trigger a stop on all other buffers
+  input wire stop_aux, 
   output logic capture_started, buffer_full
 );
 
-// never apply backpressure to discriminator or ADC
+// never apply backpressure to sample discriminator or ADC
 assign data_in.ready = '1; // all channels
 assign config_in.ready = 1'b1;
 
-// e.g. for 8 channels, single-channel mode, dual-channel, 4-channel, and 8-channel modes
+// There are $clog2(N_CHANNELS) + 1 banking modes for N_CHANNELS ADC channels
+// e.g. for 8 channels: single-channel mode, dual-channel, 4-channel, and 8-channel modes
+// e.g. for 16 channels: single-channel mode, dual-channel, 4-channel, 8-channel, and 16-channel modes
 localparam int N_BANKING_MODES = $clog2(N_CHANNELS) + 1;
 logic [$clog2(N_BANKING_MODES)-1:0] banking_mode;
-logic [$clog2(N_CHANNELS):0] n_active_channels; // extra bit so we can represent N_CHANNELS
+logic [$clog2(N_CHANNELS):0] n_active_channels; // extra bit so we can represent n from [0,...N_CHANNELS]
 assign n_active_channels = 1'b1 << banking_mode;
 logic start, stop;
 assign capture_started = start;
 
+// process new configuration data
 always_ff @(posedge clk) begin
   if (reset) begin
     start <= '0;
@@ -43,9 +68,10 @@ always_ff @(posedge clk) begin
   end
 end
 
+// logic to track when banks fill up and trigger the stop of other banks when
+// one bank fills up
 logic [N_CHANNELS-1:0] banks_full, banks_full_latch;
 logic [N_CHANNELS-1:0] full_mask;
-logic [N_CHANNELS-1:0] banks_first;
 logic banks_stop;
 // output a flag when the buffer fills up so we can stop other buffers running in parallel
 assign buffer_full = |(full_mask & banks_full);
@@ -64,11 +90,18 @@ always_comb begin
   end
 end
 
-// latch banks_full
-// banks_full_latch pretends previous banks are still full even after they've been fully read out.
-// when arriving data is sparse in time, a previous bank may be read out
-// before the currently selected bank is done capturing samples, causing it to
-// erroneously stop sample capture (since it's data_in.valid signal goes low)
+// latch banks_full: when operating with banking_mode < MAX_BANKING_MODE,
+// multiple banks are assigned to the same input channel. They are filled in
+// order, so later banks are only accessed after earlier banks are filled up.
+// if the input data is sparse (i.e. the valid signal is not high very often),
+// which can happen at lower sample rates and a readout is initiated before
+// all of the banks fill up, then earlier banks can be fully read out while
+// new data is still coming in.
+// 
+// banks_full_latch pretends previous banks are still full even after they've
+// been fully read out. When arriving data is sparse in time, a previous bank
+// may be read out before the currently selected bank is done capturing samples,
+// causing it to erroneously stop sample capture (since it's data_in.valid signal goes low)
 // *essentially*: as soon as a bank is full, treat it as if it's full until all of the banks
 // are read out (instead of treating it as no longer full once it is read out)
 always_ff @(posedge clk) begin
@@ -146,14 +179,16 @@ generate
     Axis_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES)) bank_in ();
     Axis_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES)) bank_out ();
 
+    logic first_sample;
+
     // connect bank_out to all_banks_out
     // mux first sample from the bank with the channel ID
-    assign all_banks_out.data[i] = banks_first[i] ? (i % n_active_channels) : bank_out.data;
+    assign all_banks_out.data[i] = first_sample ? (i % n_active_channels) : bank_out.data;
     assign all_banks_out.valid[i] = bank_out.valid;
     assign all_banks_out.last[i] = bank_out.last;
     assign bank_out.ready = all_banks_out.ready[i];
 
-    buffer_bank #(
+    sample_buffer_bank #(
       .BUFFER_DEPTH(BUFFER_DEPTH),
       .PARALLEL_SAMPLES(PARALLEL_SAMPLES),
       .SAMPLE_WIDTH(SAMPLE_WIDTH)
@@ -165,7 +200,7 @@ generate
       .start,
       .stop(banks_stop),
       .full(banks_full[i]),
-      .first(banks_first[i])
+      .first(first_sample)
     );
 
     // mux the channels of data_in depending on banking_mode
@@ -173,6 +208,9 @@ generate
     // when chaining banks in series, which bank should the current bank i wait for
     always_comb begin
       if ((n_active_channels != N_CHANNELS) && (i >= n_active_channels)) begin
+        // if the banking mode is not fully-independent (i.e. fewer than the
+        // maximum number of channels are in use), then only activate the
+        // current bank if previous banks are full
         bank_in.valid = valid_d & (banks_full[i - n_active_channels] | banks_full_latch[i - n_active_channels]);
       end else begin
         bank_in.valid = valid_d;
@@ -187,7 +225,15 @@ endgenerate
 
 endmodule
 
-module buffer_bank #(
+// individual banks used in sample_buffer
+// each bank has a buffer as well as a state machine for handling capture of
+// samples into the buffer and readout of the buffer
+// the buffer outputs two quantities before reading out the saved sequence of
+// samples:
+//  - which channel the contents belong to (implemented as 0 in this module,
+//    but muxed in the sample_buffer)
+//  - number of captured samples
+module sample_buffer_bank #(
   parameter int BUFFER_DEPTH = 1024,
   parameter int PARALLEL_SAMPLES = 16, // 4.096 GS/s @ 256 MHz
   parameter int SAMPLE_WIDTH = 16 // 12-bit ADC
@@ -204,7 +250,7 @@ enum {IDLE, CAPTURE, POSTCAPTURE, PRETRANSFER, TRANSFER} state;
 // a high-memory, low-channel count banking mode)
 // CAPTURE: save samples until full or until stop is supplied
 // POSTCAPTURE: output an empty sample (to be overwritten by
-// banked_sample_buffer with the channel index)
+// sample_buffer with the channel index)
 // PRETRANSFER: output number of captured samples
 // TRANSFER: output samples
 
@@ -228,7 +274,12 @@ always_ff @(posedge clk) begin
   end else begin
     unique case (state)
       IDLE: if (start) state <= CAPTURE;
+      // transition out of capture mode either when a manual stop is received or the buffer fills
       CAPTURE: if (stop || (data_in.ok && (write_addr == BUFFER_DEPTH - 1))) state <= POSTCAPTURE;
+      // POSTCAPTURE and PRETRANSFER are additional "wait" states used to send
+      // out information about the contents captured in the buffer:
+      //   - which channel the conents belong to
+      //   - how many samples were saved
       POSTCAPTURE: if (data_out.ok) state <= PRETRANSFER;
       // only transition after successfully sending out number of captured samples:
       PRETRANSFER: if (data_out.ok) begin
@@ -282,6 +333,10 @@ always_ff @(posedge clk) begin
         end
       end
       POSTCAPTURE: begin
+        // output a separate signal to indicate when the first sample is being
+        // sent out. This allows the sample_buffer to mux the output of the
+        // sample_buffer_bank with the ID of the channel whose data is stored
+        // in the bank
         first <= 1'b1;
         data_out_d[3] <= '1;
         if (data_out.ok) begin

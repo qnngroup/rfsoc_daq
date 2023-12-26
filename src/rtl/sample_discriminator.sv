@@ -2,10 +2,10 @@
 // If input sample is above some threshold (w/ hysteresis), it is passed through,
 // otherwise it is dropped. If the preceeding sample was below the low threshold,
 // then a timestamp is also sent out
-// The timestamp also contains a count of saved samples up to the event that triggered
-// the creation of the timestamp.
-// This allows the samples to be associated with specific sample that was saved.
-// The sample count and hysteresis is reset every time a new capture is started.
+// In addition to the timestamp, the number of saved samples up to the event that
+// triggered timestamp creation is reported.
+// This allows the timestamp to be associated with a specific sample that was saved.
+// The sample count (not the timestamp) and hysteresis tracker are reset every time a new capture is started.
 module sample_discriminator #( 
   parameter int SAMPLE_WIDTH = 16,
   parameter int PARALLEL_SAMPLES = 16,
@@ -28,12 +28,17 @@ assign data_in.ready = '1; // don't apply backpressure
 
 typedef logic signed [SAMPLE_WIDTH-1:0] signed_sample_t;
 
+// high/low threshold for hysteresis
 logic [N_CHANNELS-1:0][SAMPLE_WIDTH-1:0] threshold_low, threshold_high;
+// delay data input to match latency of hysteresis-tracking circuit
 logic [N_CHANNELS-1:0][PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0] data_in_reg;
 logic [N_CHANNELS-1:0] data_in_valid;
+// timer and latency-matching pipeline stage
 logic [N_CHANNELS-1:0][CLOCK_WIDTH-1:0] timer, timer_d;
+// sample index to associate timestamp with a saved sample
 logic [N_CHANNELS-1:0][SAMPLE_INDEX_WIDTH-1:0] sample_index;
 
+// hysteresis-tracking logic
 logic [N_CHANNELS-1:0] is_high, is_high_d;
 logic [N_CHANNELS-1:0] new_is_high;
 
@@ -54,7 +59,7 @@ always_ff @(posedge clk) begin
   end
 end
 
-// if we're dealing with multiple parallel samples, check to see if any of
+// since there are multiple parallel samples, check to see if any of
 // them exceed the high threshold or if all of them are below the low
 // threshold
 logic [N_CHANNELS-1:0] any_above_high, all_below_low;

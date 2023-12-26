@@ -1,7 +1,7 @@
 import sim_util_pkg::*;
 
 `timescale 1ns / 1ps
-module timetagging_discriminating_buffer_test ();
+module sparse_sample_buffer_test ();
 
 sim_util_pkg::generic #(int) util; // abs, max functions on integers
 sim_util_pkg::debug #(.VERBOSITY(DEFAULT)) dbg = new; // printing, error tracking
@@ -46,7 +46,7 @@ end
 
 assign buffer_config_in.data = {banking_mode, capture_start, capture_stop};
 
-timetagging_discriminating_buffer #(
+sparse_sample_buffer #(
   .N_CHANNELS(N_CHANNELS),
   .TSTAMP_BUFFER_DEPTH(TSTAMP_BUFFER_DEPTH),
   .DATA_BUFFER_DEPTH(DATA_BUFFER_DEPTH),
@@ -379,7 +379,7 @@ task stop_acq();
 endtask
 
 initial begin
-  dbg.display("### running test for timetagging_discriminating_buffer ###", DEFAULT);
+  dbg.display("### running test for sparse_sample_buffer ###", DEFAULT);
   reset <= 1'b1;
   capture_start <= 1'b0;
   capture_stop <= 1'b0;

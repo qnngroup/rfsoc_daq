@@ -71,7 +71,7 @@ package sim_util_pkg;
     endtask
 
     task error(input string message);
-      $warning(message);
+      $warning("\033[01;31m%s\033[00m", message);
       error_count = error_count + 1;
     endtask
 

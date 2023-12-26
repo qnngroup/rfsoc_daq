@@ -1,5 +1,6 @@
-// width converter
-// constructs a single UP -> DOWN resizer
+// axis_width_converter.sv - Reed Foster
+// width converter modules for Axis_If interfaces
+// axis_width_converter constructs a single UP -> DOWN resizer
 // The UP resizer always accepts samples, so it can run at full rate.
 // Therefore, the rate of the input is limited by the output rate.
 // If DOWN > UP, then the input must stall occasionally, which is to be
@@ -38,6 +39,8 @@ axis_downsizer #(
 
 endmodule
 
+// axis_downsizer
+// converts a stream of wide transactions into multiple narrower transactions
 module axis_downsizer #(
   parameter int DWIDTH = 256,
   parameter int DOWN = 2
@@ -57,6 +60,7 @@ logic read_final, rollover;
 assign read_final = counter == DOWN - 1;
 assign rollover = read_final & data_out.ready;
 
+// only accept new samples when we're done breaking up the current sample
 assign data_in.ready = rollover | (~data_out.valid);
 
 assign data_out.data = data_reg[counter];
@@ -87,6 +91,8 @@ end
 
 endmodule
 
+// axis_upsizer
+// combines subsequent narrow transactions into a single large transaction
 module axis_upsizer #(
   parameter int DWIDTH = 16,
   parameter int UP = 8
@@ -100,6 +106,12 @@ localparam DWIDTH_OUT = DWIDTH*UP;
 
 logic [UP-1:0][DWIDTH-1:0] data_reg;
 logic [$clog2(UP)-1:0] counter;
+logic write_final;
+
+// finish assembling the large word when its full or if the last value
+// from data_in arrives (the MSBs of the final word will be invalid if
+// the input burst size is not an integer multiple of UP)
+assign write_final = ((counter == UP - 1) | data_in.last) && data_in.ok;
 
 assign data_in.ready = data_out.ready;
 assign data_out.data = data_reg;
@@ -112,12 +124,12 @@ always_ff @(posedge clk) begin
     data_out.last <= '0;
   end else begin
     if ((!data_out.valid) || data_out.ready) begin
-      data_out.valid <= ((counter == UP - 1) | (data_in.last)) && data_in.ok;
+      data_out.valid <= write_final;
       data_out.last <= data_in.last;
     end
     if (data_in.ok) begin
       data_reg[counter] <= data_in.data;
-      if ((counter == UP - 1) || data_in.last) begin
+      if (write_final) begin
         // reset counter when we get the last word
         counter <= '0;
       end else begin

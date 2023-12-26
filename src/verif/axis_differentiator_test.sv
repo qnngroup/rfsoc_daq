@@ -3,6 +3,9 @@ import sim_util_pkg::*;
 `timescale 1ns / 1ps
 module axis_differentiator_test ();
 
+localparam int SAMPLE_WIDTH = 16;
+localparam int PARALLEL_SAMPLES = 2;
+
 typedef logic signed [SAMPLE_WIDTH-1:0] int_t; // type for signed samples (needed to check subtraction is working properly)
 sim_util_pkg::generic #(int_t) util; // abs, max functions on int_t
 sim_util_pkg::debug #(.VERBOSITY(DEFAULT)) dbg = new; // printing, error tracking
@@ -11,9 +14,6 @@ logic reset;
 logic clk = 0;
 localparam CLK_RATE_HZ = 100_000_000;
 always #(0.5s/CLK_RATE_HZ) clk = ~clk;
-
-localparam int SAMPLE_WIDTH = 16;
-localparam int PARALLEL_SAMPLES = 2;
 
 Axis_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES)) data_out_if();
 Axis_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES)) data_in_if();

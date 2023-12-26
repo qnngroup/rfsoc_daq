@@ -1,7 +1,16 @@
 import sim_util_pkg::*;
 
+// test for sample_buffer
+// - verifies for each banking mode that the buffer correctly stores all of the
+//   data sent to it, and that it sends out the data in the correct format
+// - covers various cases of filling up single banks, multiple banks, or
+//   completely filling the buffer
+// - covers input data being sparse in time (i.e. low sample rate data) by
+//   toggling the input valid signal
+// - tests readout with continuous and toggling ready signal to verify
+//   backpressure handling logic
 `timescale 1ns / 1ps
-module banked_sample_buffer_test ();
+module sample_buffer_test ();
 
 sim_util_pkg::debug #(.VERBOSITY(DEFAULT)) dbg = new; // printing, error tracking
 
@@ -25,7 +34,7 @@ Axis_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .PARALLEL_CHANNELS(N_
 Axis_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH)) data_out ();
 Axis_If #(.DWIDTH(2+$clog2($clog2(N_CHANNELS)+1))) config_in ();
 
-banked_sample_buffer #(
+sample_buffer #(
   .N_CHANNELS(N_CHANNELS),
   .BUFFER_DEPTH(BUFFER_DEPTH),
   .PARALLEL_SAMPLES(PARALLEL_SAMPLES),
@@ -153,7 +162,7 @@ endtask
 int samples_to_send;
 
 initial begin
-  dbg.display("### testing banked_sample_buffer ###", DEFAULT);
+  dbg.display("### testing sample_buffer ###", DEFAULT);
   reset <= 1'b1;
   start <= 1'b0;
   stop <= 1'b0;
@@ -198,7 +207,7 @@ endmodule
 
 // test for the individual banks
 `timescale 1ns / 1ps
-module buffer_bank_test ();
+module sample_buffer_bank_test ();
 
 sim_util_pkg::debug #(.VERBOSITY(DEFAULT)) dbg = new; // printing, error tracking
 
@@ -214,7 +223,7 @@ logic full;
 Axis_If #(.DWIDTH(16)) data_in ();
 Axis_If #(.DWIDTH(16)) data_out ();
 
-buffer_bank #(
+sample_buffer_bank #(
   .BUFFER_DEPTH(1024),
   .PARALLEL_SAMPLES(2),
   .SAMPLE_WIDTH(16)
@@ -300,7 +309,7 @@ task check_results();
 endtask
 
 initial begin
-  dbg.display("### testing banked_sample_buffer ###", DEFAULT);
+  dbg.display("### testing sample_buffer_bank ###", DEFAULT);
   reset <= 1'b1;
   start <= 1'b0;
   stop <= 1'b0;

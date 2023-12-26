@@ -1,3 +1,6 @@
+// lmh6401_spi.sv - Reed Foster
+// Output-only SPI module for controlling the gain setting of multiple LMH6401
+// variable-gain amplifiers (VGAs)
 module lmh6401_spi #(
   parameter int AXIS_CLK_FREQ = 150_000_000,
   parameter int SPI_CLK_FREQ = 1_000_000,
@@ -6,17 +9,19 @@ module lmh6401_spi #(
   input wire clk, reset,
   input [$clog2(NUM_CHANNELS)-1:0] addr_in,
   input [15:0] data_in,
-  input data_in_valid,
+  input data_in_valid,  // should really be an Axis_If interface
   output data_in_ready,
   output logic [NUM_CHANNELS-1:0] cs_n,
   output logic sck,
   output logic sdi
 );
 
+// use a counter for a clock divider to produce the SPI clock output
 localparam int CLK_DIV = int'(AXIS_CLK_FREQ/SPI_CLK_FREQ);
 localparam int CLK_COUNTER_BITS = $clog2(CLK_DIV);
 localparam int CLK_COUNTER_MAX = int'(CLK_DIV / 2) - 1;
 
+// update data output on the falling edge of SCK
 logic sck_last;
 
 logic [CLK_COUNTER_BITS-1:0] clk_counter;
@@ -43,6 +48,7 @@ logic [3:0] bits_sent;
 logic sck_negedge;
 assign sck_negedge = (sck_last == 1'b1 && clk_counter == CLK_COUNTER_MAX);
 
+// only accept new data when idling
 assign data_in_ready = state == IDLE;
 
 always_ff @(posedge clk) begin
@@ -56,12 +62,14 @@ always_ff @(posedge clk) begin
       IDLE: if (data_in_valid && data_in_ready) begin 
         state <= SENDING;
         addr <= addr_in;
-        // only perform writes, so set MSB of data to 0
+        // only perform writes, so set MSB of data to 0 so we don't
+        // accidentally read data from one of the VGAs
         data <= {1'b0, data_in[14:0]};
       end
       SENDING: begin
         if (sck_negedge) begin
           cs_n[addr] <= 1'b0;
+          // shift data
           sdi <= data[15];
           data <= {data[14:0], 1'b1};
           bits_sent <= bits_sent + 1'b1;
@@ -71,6 +79,7 @@ always_ff @(posedge clk) begin
         end
       end
       FINISH: if (sck_negedge) begin
+        // deassert CS to disable the current slave module
         cs_n[addr] <= 1'b1;
         state <= IDLE;
       end

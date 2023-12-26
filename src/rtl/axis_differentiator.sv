@@ -1,4 +1,4 @@
-// axis_differentiator - Reed Foster
+// axis_differentiator.sv - Reed Foster
 // computes first-order finite difference to approximate time derivative of
 // input signal
 module axis_differentiator #(
@@ -10,12 +10,18 @@ module axis_differentiator #(
   Axis_If.Master_Simple data_out
 );
 
-// register signals to infer DSPs
+// register signals to infer DSP hardware subtractor
 // can't do packed arrays because of signed type
 logic signed [SAMPLE_WIDTH-1:0] data_in_reg [PARALLEL_SAMPLES]; // 0Q16, 2Q14
+// need to delay the last parallel sample so that we can use it in the next
+// cycle for the finite difference with the first parallel sample
 logic signed [SAMPLE_WIDTH-1:0] data_in_reg_d; // 0Q16, 2Q14
+// register the output of the subtraction
 logic signed [SAMPLE_WIDTH:0] diff [PARALLEL_SAMPLES]; // 0Q16+0Q16 = 1Q16, 2Q14+2Q14 = 3Q14
+// shift and truncate the subtraction result (probably don't really need to
+// register this, but we don't care about latency too much)
 logic signed [SAMPLE_WIDTH-1:0] diff_d [PARALLEL_SAMPLES]; // 1Q15, 3Q13
+// delay valid signal to match latency of DSP
 logic [3:0] valid_d;
 
 always_ff @(posedge clk) begin
@@ -34,7 +40,11 @@ always_ff @(posedge clk) begin
     end
     if (data_out.ready || (!data_out.valid)) begin
       for (int i = 0; i < PARALLEL_SAMPLES; i++) begin
+        // for the 0th parallel sample, it's previous neighbor arrived in the
+        // last clock cycle, so we need to use data_in_reg_d
+        // otherwise, just subtract the i-1th parallel sample
         diff[i] <= data_in_reg[i] - ((i == 0) ? data_in_reg_d : data_in_reg[i-1]); // 1Q16
+        // round and truncate
         diff_d[i] <= diff[i][SAMPLE_WIDTH-:SAMPLE_WIDTH]; // 1Q15
         data_out.data[i*SAMPLE_WIDTH+:SAMPLE_WIDTH] <= diff_d[i];
       end

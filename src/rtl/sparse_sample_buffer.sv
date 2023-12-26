@@ -1,6 +1,7 @@
-// timetagging_discriminating_buffer - Reed Foster
-// performs threshold-based sample discrimination
-module timetagging_discriminating_buffer #(
+// sparse_sample_buffer - Reed Foster
+// performs threshold-based sample discrimination on multiple channels and
+// saves the results (raw data and timestamps) in a banked sample buffer
+module sparse_sample_buffer #(
   parameter int N_CHANNELS = 2, // number of input channels
   parameter int TSTAMP_BUFFER_DEPTH = 1024, // depth of timestamp buffer
   parameter int DATA_BUFFER_DEPTH = 32768, // depth of data/sample buffer
@@ -24,13 +25,16 @@ assign timestamps_width = TIMESTAMP_WIDTH;
 // when either buffer fills up, it triggers a stop on the other with the stop_aux input
 logic [1:0] buffer_full;
 
-// axi-stream interfaces
+// discriminator outputs
 Axis_Parallel_If #(.DWIDTH(TIMESTAMP_WIDTH), .PARALLEL_CHANNELS(N_CHANNELS)) disc_timestamps();
 Axis_Parallel_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES), .PARALLEL_CHANNELS(N_CHANNELS)) disc_data();
+// config interfaces to timestamp and data buffers
 Axis_If #(.DWIDTH($clog2($clog2(N_CHANNELS)+1)+2)) buffer_timestamp_config ();
 Axis_If #(.DWIDTH($clog2($clog2(N_CHANNELS)+1)+2)) buffer_data_config ();
+// raw buffer outputs
 Axis_If #(.DWIDTH(TIMESTAMP_WIDTH)) buffer_timestamp_out ();
 Axis_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES)) buffer_data_out ();
+// resized buffer outputs that are ready for multiplexing
 Axis_If #(.DWIDTH(AXI_MM_WIDTH)) buffer_timestamp_out_resized ();
 Axis_If #(.DWIDTH(AXI_MM_WIDTH)) buffer_data_out_resized ();
 
@@ -70,7 +74,7 @@ sample_discriminator #(
   .reset_state(start & ~start_d) // reset sample_index count and is_high whenever a new capture is started
 );
 
-banked_sample_buffer #(
+sample_buffer #(
   .SAMPLE_WIDTH(SAMPLE_WIDTH),
   .BUFFER_DEPTH(DATA_BUFFER_DEPTH),
   .PARALLEL_SAMPLES(PARALLEL_SAMPLES),
@@ -86,7 +90,7 @@ banked_sample_buffer #(
   .buffer_full(buffer_full[1])
 );
 
-banked_sample_buffer #(
+sample_buffer #(
   .SAMPLE_WIDTH(TIMESTAMP_WIDTH),
   .BUFFER_DEPTH(TSTAMP_BUFFER_DEPTH),
   .PARALLEL_SAMPLES(1),

@@ -1,4 +1,4 @@
-// axis_x2 - Reed Foster
+// axis_x2.sv - Reed Foster
 // computes x^2 on axi-stream data
 module axis_x2 #(
   parameter int SAMPLE_WIDTH = 16,
@@ -10,10 +10,13 @@ module axis_x2 #(
   Axis_If.Master_Simple data_out
 );
 
-// register signals to infer DSPs
+// register signals to infer DSP hardware multiplier
+// lots of pipeline registers to enable the DSP to run at high clock rates
 // can't do packed arrays because of signed type
 logic signed [SAMPLE_WIDTH-1:0] data_in_reg [PARALLEL_SAMPLES]; // 0Q16, 2Q14
+// register the full-width product
 logic signed [2*SAMPLE_WIDTH-1:0] product [PARALLEL_SAMPLES]; // 0Q32, 4Q28
+// shift and truncate the product and register it
 logic signed [SAMPLE_WIDTH-1:0] product_d [PARALLEL_SAMPLES]; // 0Q16, 4Q12
 logic [3:0] valid_d;
 
