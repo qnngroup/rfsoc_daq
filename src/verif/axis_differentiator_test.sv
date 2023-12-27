@@ -1,3 +1,8 @@
+// axis_differentiator_test.sv - Reed Foster
+// tests that the output of the axis differentiator module is correct by
+// comparing with a behavioral model (implemented with real subtraction in
+// systemverilog)
+
 import sim_util_pkg::*;
 
 `timescale 1ns / 1ps
@@ -18,10 +23,15 @@ always #(0.5s/CLK_RATE_HZ) clk = ~clk;
 Axis_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES)) data_out_if();
 Axis_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES)) data_in_if();
 
+// Save sent, expected, and actual data in queues to be processed at the end
+// of the test. Using a queue eliminates the need to account for latency in
+// the test (assuming that all of the data that is sent to the module can be
+// read out without sending new data; i.e. data_in.valid can be held low for
+// a few cycles to empty the processing pipeline)
 real d_in;
 int_t received[$];
 int_t expected[$];
-int_t sent[$];
+int_t sent[$]; // only really used for debugging purposes
 
 always @(posedge clk) begin
   if (reset) begin
@@ -33,8 +43,13 @@ always @(posedge clk) begin
         data_in_if.data[i*SAMPLE_WIDTH+:SAMPLE_WIDTH] <= $urandom_range({SAMPLE_WIDTH{1'b1}});
         sent.push_front(int_t'(data_in_if.data[i*SAMPLE_WIDTH+:SAMPLE_WIDTH]));
         if (sent.size() > 1) begin
+          // if we've sent more than one sample, then just compute the
+          // difference of the currently-being-sent sample with the
+          // previously-sent sample
           expected.push_front((sent[0] - sent[1]) / 2);
         end else begin
+          // if this is the first sample, then the module will default to just
+          // sending that sample (i.e. it assumes the previous sample was zero)
           expected.push_front(sent[0] / 2);
         end
       end
@@ -54,8 +69,9 @@ task check_results();
   if (received.size() != expected.size()) begin
     dbg.error("mismatched sizes; got a different number of samples than expected");
   end
-  // check the values match, like with axis_x2_test, the rounding could lead
-  // to an off-by-one error
+  // check the values match, like with axis_x2_test, the rounding during
+  // type-casting could lead to an off-by-one error, so just make sure that
+  // we're within 1 LSB of the expected result
   while (received.size() > 0 && expected.size() > 0) begin
     if (util.abs(expected[$] - received[$]) > 1) begin
       dbg.error($sformatf("mismatch: got %x, expected %x", received[$], expected[$]));
@@ -82,6 +98,7 @@ initial begin
   data_out_if.ready <= 1'b1;
   repeat (100) @(posedge clk);
   reset <= 1'b0;
+  // randomize ready and valid signals
   repeat (2000) begin
     @(posedge clk);
     data_in_if.valid <= $urandom() & 1'b1;

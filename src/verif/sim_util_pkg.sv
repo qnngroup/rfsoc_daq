@@ -1,5 +1,12 @@
+// sim_util_pkg.sv - Reed Foster
+// package with various simulation utilities: a class for the sample
+// discriminator logic, a class with max and absolute value for generic types,
+// and a debugging class for tracking errors and printing messages with varying
+// degrees of verbosity
+
 package sim_util_pkg;
 
+  // tools
   class sample_discriminator_util #(
     parameter int SAMPLE_WIDTH = 16,
     parameter int PARALLEL_SAMPLES = 2

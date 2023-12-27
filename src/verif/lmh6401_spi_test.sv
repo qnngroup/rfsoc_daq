@@ -1,3 +1,9 @@
+// lmh6401_spi_test.sv - Reed Foster
+// Check that the lmh6401_spi module is correctly serializing data and only
+// ever pulls one CS line low (i.e. only one slave is active at a time)
+// Output is compared to input bit-by-bit at the end of the test by comparing
+// queues of sent bits and received bits
+
 import sim_util_pkg::*;
 
 `timescale 1ns / 1ps

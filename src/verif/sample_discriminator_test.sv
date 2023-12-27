@@ -1,3 +1,14 @@
+// sample_discriminator_test.sv - Reed Foster
+// Check that the sample discriminator ignores samples below the threshold and
+// saves samples above the threshold, for a variety of different threshold
+// options and input settings
+// Saves the data that was sent to and received from the DUT in systemverilog
+// queues, then compares the queues at the end of the test to ensure that no
+// data above the high threshold was missed and that no data below the low
+// threshold was passed through (also ensures that any data below the high
+// threshold that arrived before any data below the low threshold is also
+// saved; i.e. it tests for the correct hysteresis behavior).
+
 import sim_util_pkg::*;
 
 `timescale 1ns / 1ps

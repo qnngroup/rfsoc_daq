@@ -1,3 +1,14 @@
+// dds_test.sv - Reed Foster
+// Check that DDS module is generating the correct sinusoidal data in steady
+// state by comparing the output with a golden model based on systemverilog
+// $cos() on real numbers. That is, the golden model keeps its own phase
+// variable in increments it between each sample in the output stream,
+// verifying that the output stream values are the correct cos(phase) quantity
+// ***NOTE***
+// Does not verify correct behavior of phase-transients, but this should be
+// straightforward to implement by tracking the latency from changing the
+// phase_inc configuration to the observable output frequency change
+
 import sim_util_pkg::*;
 
 `timescale 1ns / 1ps
@@ -39,6 +50,7 @@ dds #(.PHASE_BITS(PHASE_BITS), .OUTPUT_WIDTH(OUTPUT_WIDTH), .QUANT_BITS(QUANT_BI
   .phase_inc_in
 );
 
+// test data at a few different frequencies
 localparam int N_FREQS = 4;
 int freqs [N_FREQS] = {12_130_000, 517_036_000, 1_729_725_000, 2_759_000};
 
@@ -78,7 +90,6 @@ task automatic check_output(inout phase_t phase, input phase_t phase_inc, input 
     VERBOSE
   );
   while (received.size() > 0) begin
-    // first four 12 samples are with previous phase inc
     expected = sample_t'($floor((2**(OUTPUT_WIDTH-1) - 0.5)*$cos(2*PI/real'(2**PHASE_BITS)*real'(phase))-0.5));
     if (util.abs(received[$] - expected) > 4'hf) begin
       dbg.error($sformatf(
@@ -94,6 +105,7 @@ task automatic check_output(inout phase_t phase, input phase_t phase_inc, input 
       received[$]),
       DEBUG
     );
+    // first few samples are with previous phase inc:
     // 5 cycles of latency
     if (count < 4*PARALLEL_SAMPLES) begin
       phase = phase + phase_inc_prev;

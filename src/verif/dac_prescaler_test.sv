@@ -1,8 +1,19 @@
+// dac_prescaler_test.sv - Reed Foster
+// Check that output signal is scaled by the correct amount in steady-state by
+// comparing the sent/expected values with the received values. The comparison
+// is done at the end of the test by comparing values stored in sytemverilog
+// queues.
+// ***NOTE***
+// Does not verify correct transient behavior when the scale factor is changed
+// (since the scale factor change is not intended to be varied dynamically)
+// This would be relatively straightforward to implement if the input were
+// constrained to be continuous (i.e. valid = 1 always), but for discontinous
+// valid input data, tracking when the scale factor changes is a little tricky
+
 import sim_util_pkg::*;
 
 `timescale 1ns / 1ps
 module dac_prescaler_test ();
-
 
 logic reset;
 logic clk = 0;
@@ -15,6 +26,7 @@ localparam int SCALE_WIDTH = 18;
 localparam int SAMPLE_FRAC_BITS = 16;
 localparam int SCALE_FRAC_BITS = 16;
 
+// signed int types for samples and scale factors
 typedef logic signed [SAMPLE_WIDTH-1:0] int_t;
 typedef logic signed [SCALE_WIDTH-1:0] sc_int_t;
 
@@ -41,7 +53,8 @@ always @(posedge clk) begin
   if (reset) begin
     data_in_if.data <= '0;
   end else begin
-    // save data we send, as well as what it should be transformed into
+    // save data/scale_factor we send, as well as what should be outputted based on the
+    // scale factor and sent data
     if (data_in_if.ok) begin
       for (int i = 0; i < PARALLEL_SAMPLES; i++) begin
         data_in_if.data[i*SAMPLE_WIDTH+:SAMPLE_WIDTH] <= $urandom_range({SAMPLE_WIDTH{1'b1}});

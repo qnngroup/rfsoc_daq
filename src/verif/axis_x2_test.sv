@@ -1,3 +1,10 @@
+// axis_x2_test.sv - Reed Foster
+// Check that output axi-stream interface is producing a stream of samples that
+// are the squares of the input axi-stream samples
+// Saves all expected/received samples in queues and compares the input/output
+// at the end of the test to verify operation. Computes expected quantities
+// using systemverilog multiplication with reals and typecasting.
+
 import sim_util_pkg::*;
 
 `timescale 1ns / 1ps
@@ -52,7 +59,8 @@ task check_results();
     dbg.error("mismatched sizes; got a different number of samples than expected");
   end
   // check the values match
-  // casting to uint_t seems to perform a rounding operation, so the test data may be slightly too large
+  // casting to uint_t seems to perform a rounding operation, so just make
+  // sure we're within 1 LSB of the expected result
   while (received.size() > 0 && expected.size() > 0) begin
     if (util.abs(expected[$] - received[$]) > 1) begin
       dbg.error($sformatf(
@@ -84,6 +92,7 @@ initial begin
   data_out_if.ready <= 1'b1;
   repeat (100) @(posedge clk);
   reset <= 1'b0;
+  // randomly toggle input valid and output ready
   repeat (2000) begin
     @(posedge clk);
     data_in_if.valid <= $urandom() & 1'b1;

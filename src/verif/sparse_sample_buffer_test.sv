@@ -1,3 +1,9 @@
+// sparse_sample_buffer_test.sv - Reed Foster
+// Check that the combined banked sample_buffer and sample_discriminator work
+// correctly, saving the correct data and outputting it in the correct format
+// (i.e. timestamps first, then data, and for each bank, outputting the
+// corresponding channel index and sample quantity stored in that bank)
+
 import sim_util_pkg::*;
 
 `timescale 1ns / 1ps
@@ -132,9 +138,18 @@ task check_results(
   ///////////////////////////////////////////////////////////////////
   // organize DMA output into data structures for easier analysis
   ///////////////////////////////////////////////////////////////////
+  // Since each DMA word is not aligned with the size of the
+  // samples/timestamps, break up the DMA output into individual samples and
+  // timestamps. Logically, this code converts the DMA output (which is stored
+  // as a queue of words that are AXI_MM_WIDTH wide) into a single, very long
+  // word, which is then scanned into separate queues corresponding to samples
+  // and timestamps. Also parses the information of channel ID and sample
+  // count that are outputted at the beginning of each bank's readout cycle
   dma_word_leftover_bits = 0;
+  // first, we parse timestamps, then we parse samples
   word_width = TIMESTAMP_WIDTH;
   parse_mode = TIMESTAMP;
+  // initialize big long word that contains timestamps or samples
   dma_word = '0;
   need_channel_id = 1'b1;
   need_word_count = 1'b1;
@@ -200,9 +215,15 @@ task check_results(
     end
   end
 
-  /////////////////////////////
-  // process data
-  /////////////////////////////
+  //////////////////////////////////////
+  // process data "like normal"
+  //////////////////////////////////////
+  // Make sure the correct number of samples and timestamps were received, and
+  // that the hysteresis tracking worked correctly (i.e. no samples above the
+  // high threshold were missed, and no samples below the low threshold passed
+  // through, as well as no missing samples that were above the low threshold
+  // and appeared after a sample that was above the high threshold).
+
   // first check that we didn't get any extra samples or timestamps
   for (int channel = 1 << banking_mode; channel < N_CHANNELS; channel++) begin
     if (timestamps[channel].size() > 0) begin

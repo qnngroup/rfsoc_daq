@@ -1,3 +1,8 @@
+// axis_width_converter_test.sv - Reed Foster
+// Check that all Axis_If interface axi-stream resizer modules work correctly
+// by saving all sent/received data and comparing each subword at the end of
+// the test
+
 import sim_util_pkg::*;
 
 `timescale 1ns / 1ps
@@ -19,6 +24,8 @@ localparam int UP = 8;
 localparam int COMB_UP = 4;
 localparam int COMB_DOWN = 3;
 
+// choose a standard datawidth for all of the DUTs that can fit the largest
+// signal (input or output)
 localparam int DWIDTH = util.max(util.max(util.max(DWIDTH_DOWN_IN, DWIDTH_UP_IN*UP), (DWIDTH_COMB_IN*COMB_UP)/COMB_DOWN), DWIDTH_COMB_IN);
 
 Axis_If #(.DWIDTH(DWIDTH_DOWN_IN)) downsizer_in ();
@@ -117,34 +124,34 @@ always_ff @(posedge clk) begin
   if (reset) begin
     data[1] <= '0;
   end else begin
-    for (int i = 0; i < 3; i++) begin
+    for (int dut = 0; dut < 3; dut++) begin // select which dut is active
       // inputs
-      if (ok[0][i]) begin
-        for (int j = 0; j < DWIDTH/8; j++) begin
-          data[0][i][j*8+:8] <= $urandom_range(0,8'hff);
+      if (ok[0][dut]) begin
+        for (int word = 0; word < DWIDTH/8; word++) begin
+          data[0][dut][word*8+:8] <= $urandom_range(0,8'hff);
         end
         // save data that was sent, split up into individual "words"
-        for (int j = 0; j < NUM_WORDS[0][i]; j++) begin
-          for (int k = 0; k < WORD_SIZE[i]; k++) begin
-            sent_word[k] = data[0][i][j*WORD_SIZE[i]+k];
+        for (int word = 0; word < NUM_WORDS[0][dut]; word++) begin
+          for (int i = 0; i < WORD_SIZE[dut]; i++) begin
+            sent_word[i] = data[0][dut][word*WORD_SIZE[dut]+i];
           end
-          sent[i].push_front(sent_word & ((1 << WORD_SIZE[i]) - 1));
+          sent[dut].push_front(sent_word & ((1 << WORD_SIZE[dut]) - 1));
         end
-        if (last[0][i]) begin
-          last_sent[i].push_front(sent[i].size());
+        if (last[0][dut]) begin
+          last_sent[dut].push_front(sent[dut].size());
         end
       end
       // outputs
-      if (ok[1][i]) begin
+      if (ok[1][dut]) begin
         // save data that was received, split up into individual "words"
-        for (int j = 0; j < NUM_WORDS[1][i]; j++) begin
-          for (int k = 0; k < WORD_SIZE[i]; k++) begin
-            received_word[k] = data[1][i][j*WORD_SIZE[i]+k];
+        for (int word = 0; word < NUM_WORDS[1][dut]; word++) begin
+          for (int i = 0; i < WORD_SIZE[dut]; i++) begin
+            received_word[i] = data[1][dut][word*WORD_SIZE[dut]+i];
           end
-          received[i].push_front(received_word & ((1 << WORD_SIZE[i]) - 1));
+          received[dut].push_front(received_word & ((1 << WORD_SIZE[dut]) - 1));
         end
-        if (last[1][i]) begin
-          last_received[i].push_front(received[i].size());
+        if (last[1][dut]) begin
+          last_received[dut].push_front(received[dut].size());
         end
       end
     end
@@ -157,16 +164,16 @@ always_ff @(posedge clk) begin
   if (reset) begin
     out_ready <= '0;
   end else begin
-    for (int i = 0; i < 3; i++) begin
-      unique case (readout_mode[i])
+    for (int dut = 0; dut < 3; dut++) begin
+      unique case (readout_mode[dut])
         0: begin
-          out_ready[i] <= '0;
+          out_ready[dut] <= '0;
         end
         1: begin
-          out_ready[i] <= 1'b1;
+          out_ready[dut] <= 1'b1;
         end
         2: begin
-          out_ready[i] <= $urandom() & 1'b1;
+          out_ready[dut] <= $urandom() & 1'b1;
         end
       endcase
     end
@@ -279,8 +286,8 @@ initial begin
   repeat (50) @(posedge clk);
 
   // do test
-  for (int i = 0; i < 3; i++) begin
-    unique case (i)
+  for (int dut = 0; dut < 3; dut++) begin
+    unique case (dut)
       0: dbg.display("### testing axis downsizer ###", DEFAULT);
       1: dbg.display("### testing axis upsizer ###", DEFAULT);
       2: dbg.display("### testing axis combined upsizer/downsizer ###", DEFAULT);
@@ -288,8 +295,8 @@ initial begin
     repeat (50) begin
       for (int j = 1; j <= 2; j++) begin
         // cycle between continuously-high and randomly toggling ready signal on output interface 
-        readout_mode[i] <= j;
-        unique case (i)
+        readout_mode[dut] <= j;
+        unique case (dut)
           0: begin
             // send samples with random arrivals
             downsizer_in.send_samples(clk, $urandom_range(3,100), 1'b1, 1'b1);
@@ -309,22 +316,22 @@ initial begin
             comb_in.send_samples(clk, $urandom_range(3,100), 1'b1, 1'b1);
           end
         endcase
-        last[0][i] <= 1'b1;
-        in_valid[i] <= 1'b1;
+        last[0][dut] <= 1'b1;
+        in_valid[dut] <= 1'b1;
         // wait until last is actually registered by the DUT before deasserting it
-        do begin @(posedge clk); end while (!ok[0][i]);
-        last[0][i] <= 1'b0;
-        in_valid[i] <= 1'b0;
+        do begin @(posedge clk); end while (!ok[0][dut]);
+        last[0][dut] <= 1'b0;
+        in_valid[dut] <= 1'b0;
 
         // read out everything, waiting until last signal on DUT output
-        do begin @(posedge clk); end while (!(last[1][i] && ok[1][i]));
+        do begin @(posedge clk); end while (!(last[1][dut] && ok[1][dut]));
         // check the output data matches the input
-        check_dut(i);
+        check_dut(dut);
         repeat (100) @(posedge clk);
       end
     end
     // disable readout of DUT when finished
-    readout_mode[i] <= '0;
+    readout_mode[dut] <= '0;
   end
 
   dbg.finish();

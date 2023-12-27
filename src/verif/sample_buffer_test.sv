@@ -1,6 +1,9 @@
-import sim_util_pkg::*;
-
-// test for sample_buffer
+// sample_buffer_test.sv - Reed Foster
+// Verifies correct operation of the banked sample buffer for a variety of
+// configurations by comparing the data sent to the buffer with the data
+// received from the buffer at the end of each subtest. These data are
+// tracked with systemverilog queues.
+// Properties to ensure/check:
 // - verifies for each banking mode that the buffer correctly stores all of the
 //   data sent to it, and that it sends out the data in the correct format
 // - covers various cases of filling up single banks, multiple banks, or
@@ -8,7 +11,8 @@ import sim_util_pkg::*;
 // - covers input data being sparse in time (i.e. low sample rate data) by
 //   toggling the input valid signal
 // - tests readout with continuous and toggling ready signal to verify
-//   backpressure handling logic
+//   backpressure handling logicimport sim_util_pkg::*;
+
 `timescale 1ns / 1ps
 module sample_buffer_test ();
 
