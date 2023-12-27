@@ -13,6 +13,8 @@
 // - tests readout with continuous and toggling ready signal to verify
 //   backpressure handling logicimport sim_util_pkg::*;
 
+import sim_util_pkg::*;
+
 `timescale 1ns / 1ps
 module sample_buffer_test ();
 
