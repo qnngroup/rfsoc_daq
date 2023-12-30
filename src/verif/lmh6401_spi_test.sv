@@ -19,9 +19,11 @@ logic reset;
 
 localparam NUM_CHANNELS = 4;
 
+Axis_If #(.DWIDTH($clog2(NUM_CHANNELS) + 16)) command_in ();
+
 logic [$clog2(NUM_CHANNELS)-1:0] addr_in;
 logic [15:0] data_in;
-logic data_in_valid, data_in_ready;
+assign command_in.data = {addr_in, data_in};
 logic [NUM_CHANNELS-1:0] cs_n;
 logic sck, sck_d;
 logic sdi;
@@ -49,10 +51,9 @@ endtask
 always @(posedge clk) begin
   sck_d <= sck;
   if (reset) begin
-    data_in <= '0;
-    addr_in <= '0;
+    {addr_in, data_in} <= '0;
   end else begin
-    if (data_in_valid && data_in_ready) begin
+    if (command_in.ok) begin
       // send new random data and address
       data_in <= $urandom_range(0, 15'h7fff);
       addr_in <= $urandom_range(0, NUM_CHANNELS-1);
@@ -91,8 +92,10 @@ task check_results();
     );
     if (received[channel].size() != sent[channel].size()) begin
       dbg.error($sformatf(
-        "mismatched sizes for channel %d; got a different number of samples than expected",
-        channel)
+        "mismatched sizes for channel %0d; got %0d samples, expected %0d",
+        channel,
+        received[channel].size(),
+        sent[channel].size())
       );
     end
     while (received[channel].size() > 0 && sent[channel].size() > 0) begin
@@ -116,10 +119,7 @@ lmh6401_spi #(
   .NUM_CHANNELS(NUM_CHANNELS)
 ) dut_i (
   .clk, .reset,
-  .addr_in,
-  .data_in,
-  .data_in_valid,
-  .data_in_ready,
+  .command_in,
   .cs_n,
   .sck,
   .sdi
@@ -127,24 +127,24 @@ lmh6401_spi #(
 
 initial begin
   dbg.display("### running test for lmh6401_spi ###", DEFAULT);
-  reset <= 1;
-  data_in_valid <= '0;
+  reset <= 1'b1;
+  command_in.valid <= '0;
   repeat (500) @(posedge clk);
   reset <= 0;
   repeat (500) @(posedge clk);
-  // toggle data_in_valid;
+  // toggle command_in.valid;
   repeat (500) begin
-    data_in_valid <= $urandom() & 1'b1;
+    command_in.valid <= $urandom() & 1'b1;
     @(posedge clk);
-    if (data_in_valid && data_in_ready) begin
+    if (command_in.ok) begin
       // wait 16 cycles of SCK
       repeat (16) @(negedge sck);
     end
-    while (!data_in_ready) @(posedge clk);
+    while (!command_in.ready) @(posedge clk);
   end
-  data_in_valid <= 1'b0;
+  command_in.valid <= 1'b0;
   repeat (16) @(negedge sck);
-  while (!data_in_ready) @(posedge clk);
+  while (!command_in.ready) @(posedge clk);
   repeat (100) @(posedge clk);
   check_results();
   dbg.finish();

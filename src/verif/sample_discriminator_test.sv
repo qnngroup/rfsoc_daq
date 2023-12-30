@@ -31,9 +31,9 @@ localparam int CLOCK_WIDTH = 50;
 sim_util_pkg::sample_discriminator_util #(.SAMPLE_WIDTH(SAMPLE_WIDTH), .PARALLEL_SAMPLES(PARALLEL_SAMPLES)) util;
 
 Axis_If #(.DWIDTH(N_CHANNELS*SAMPLE_WIDTH*2)) config_in();
-Axis_Parallel_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES), .PARALLEL_CHANNELS(N_CHANNELS)) data_in();
-Axis_Parallel_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES), .PARALLEL_CHANNELS(N_CHANNELS)) data_out();
-Axis_Parallel_If #(.DWIDTH(SAMPLE_INDEX_WIDTH+CLOCK_WIDTH), .PARALLEL_CHANNELS(N_CHANNELS)) timestamps_out();
+Axis_Parallel_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES), .CHANNELS(N_CHANNELS)) data_in();
+Axis_Parallel_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES), .CHANNELS(N_CHANNELS)) data_out();
+Axis_Parallel_If #(.DWIDTH(SAMPLE_INDEX_WIDTH+CLOCK_WIDTH), .CHANNELS(N_CHANNELS)) timestamps_out();
 
 logic [N_CHANNELS-1:0][SAMPLE_WIDTH-1:0] threshold_high, threshold_low;
 always_comb begin
@@ -72,26 +72,21 @@ always @(posedge clk) begin
     data_in.data <= '0;
   end else begin
     for (int i = 0; i < N_CHANNELS; i++) begin
-      if (data_in.ok[i]) begin
+      if (data_in.valid[i]) begin
         data_sent[i].push_front(data_in.data[i]);
         for (int j = 0; j < PARALLEL_SAMPLES; j++) begin
           data_in.data[i][j*SAMPLE_WIDTH+:SAMPLE_WIDTH] <= $urandom_range(data_range_low[i], data_range_high[i]);
         end
       end
-      if (data_out.ok[i]) begin
+      if (data_out.valid[i]) begin
         data_received[i].push_front(data_out.data[i]);
       end
-      if (timestamps_out.ok[i]) begin
+      if (timestamps_out.valid[i]) begin
         timestamps_received[i].push_front(timestamps_out.data[i]);
       end
     end
   end
 end
-
-// always accept data, which is the expected behavior of the sample buffer
-// that will be connected to the sample discriminator
-assign data_out.ready = '1;
-assign timestamps_out.ready = '1;
 
 task check_results (
   input logic [N_CHANNELS-1:0][SAMPLE_WIDTH-1:0] threshold_low,
@@ -219,9 +214,9 @@ initial begin
     // loop a couple times, resetting the state to make sure we get the
     // correct behavior
     // send a bunch of data with discrimination disabled
-    data_in.send_samples(clk, 10, 1'b1, 1'b1);
+    data_in.send_samples(clk, 10, 1'b1, 1'b1, 1'b1);
     repeat (50) @(posedge clk);
-    data_in.send_samples(clk, 10, 1'b0, 1'b1);
+    data_in.send_samples(clk, 10, 1'b0, 1'b1, 1'b1);
     repeat (50) @(posedge clk);
     dbg.display("testing run with all data above thresholds", VERBOSE);
     dbg.display("first sample will be zero", VERBOSE);
@@ -237,9 +232,9 @@ initial begin
     @(posedge clk);
     config_in.valid <= 1'b0;
     repeat (50) @(posedge clk);
-    data_in.send_samples(clk, 100, 1'b1, 1'b1);
+    data_in.send_samples(clk, 100, 1'b1, 1'b1, 1'b1);
     repeat (50) @(posedge clk);
-    data_in.send_samples(clk, 100, 1'b0, 1'b1);
+    data_in.send_samples(clk, 100, 1'b0, 1'b1, 1'b1);
     repeat (50) @(posedge clk);
     dbg.display("testing run with channel 0 straddling thresholds", VERBOSE);
     dbg.display("and channel 1 above thresholds", VERBOSE);
@@ -256,9 +251,9 @@ initial begin
     @(posedge clk);
     config_in.valid <= 1'b0;
     repeat (50) @(posedge clk);
-    data_in.send_samples(clk, 400, 1'b1, 1'b1);
+    data_in.send_samples(clk, 400, 1'b1, 1'b1, 1'b1);
     repeat (50) @(posedge clk);
-    data_in.send_samples(clk, 400, 1'b0, 1'b1);
+    data_in.send_samples(clk, 400, 1'b0, 1'b1, 1'b1);
     repeat (50) @(posedge clk);
     dbg.display("testing run with all data below thresholds", VERBOSE);
     check_results(threshold_low, threshold_high, timer, sample_index, is_high);
@@ -274,9 +269,9 @@ initial begin
     @(posedge clk);
     config_in.valid <= 1'b0;
     repeat (50) @(posedge clk);
-    data_in.send_samples(clk, 400, 1'b1, 1'b1);
+    data_in.send_samples(clk, 400, 1'b1, 1'b1, 1'b1);
     repeat (50) @(posedge clk);
-    data_in.send_samples(clk, 400, 1'b0, 1'b1);
+    data_in.send_samples(clk, 400, 1'b0, 1'b1, 1'b1);
     repeat (50) @(posedge clk);
     dbg.display("testing run with both channels straddling thresholds", VERBOSE);
     check_results(threshold_low, threshold_high, timer, sample_index, is_high);

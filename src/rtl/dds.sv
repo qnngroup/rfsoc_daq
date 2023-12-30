@@ -8,15 +8,13 @@ module dds #(
   parameter int PARALLEL_SAMPLES = 4
 ) (
   input wire clk, reset,
-  Axis_If.Master_Simple cos_out,
-  Axis_If.Slave_Simple phase_inc_in
+  Axis_If.Master_Stream cos_out,
+  Axis_If.Slave_Realtime phase_inc_in
 );
 
 
 localparam int LUT_ADDR_BITS = PHASE_BITS - QUANT_BITS;
 localparam int LUT_DEPTH = 2**LUT_ADDR_BITS;
-
-assign phase_inc_in.ready = 1'b1;
 
 // generate LUT for phase -> cos(phase) conversion
 // LUT entries are indexed normalized to 2*pi (so 4x more space is used than
@@ -39,7 +37,6 @@ logic [PARALLEL_SAMPLES-1:0][PHASE_BITS-1:0] phase_inc;
 // only quantity that actually gets incremented
 logic [PARALLEL_SAMPLES-1:0][PHASE_BITS-1:0] sample_phase;
 logic [PHASE_BITS-1:0] cycle_phase;
-assign phase_inc_in.ready = 1'b1;
 
 // delay data_valid to match phase increment + LUT latency
 logic [4:0] data_valid;
@@ -53,7 +50,7 @@ always_ff @(posedge clk) begin
     data_valid <= '0;
   end else begin
     // load new phase_inc
-    if (phase_inc_in.ok) begin
+    if (phase_inc_in.valid) begin
       for (int i = 0; i < PARALLEL_SAMPLES; i = i + 1) begin
         // phase_inc[0] = 1*phase_in_in.data
         // phase_inc[1] = 2*phase_in_in.data

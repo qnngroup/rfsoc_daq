@@ -6,8 +6,8 @@ module axis_x2 #(
   parameter int SAMPLE_FRAC_BITS = 16
 ) (
   input wire clk, reset,
-  Axis_If.Slave_Simple data_in,
-  Axis_If.Master_Simple data_out
+  Axis_If.Slave_Stream data_in,
+  Axis_If.Master_Stream data_out
 );
 
 // register signals to infer DSP hardware multiplier

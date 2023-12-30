@@ -67,7 +67,7 @@ always @(posedge clk) begin
   if (reset) begin
     phase_inc <= '0;
   end else begin
-    if (phase_inc_in.ok) begin
+    if (phase_inc_in.valid) begin
       phase_inc <= phase_inc_in.data;
     end
     if (cos_out.ok) begin

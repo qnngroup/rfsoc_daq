@@ -14,17 +14,14 @@ module sample_discriminator #(
   parameter int CLOCK_WIDTH = 50 // rolls over roughly every 3 days at 4GS/s (100 days at 32MS/s)
 ) (
   input wire clk, reset,
-  Axis_Parallel_If.Slave_Simple data_in,
-  Axis_Parallel_If.Master_Simple data_out,
-  Axis_Parallel_If.Master_Simple timestamps_out,
-  Axis_If.Slave_Simple config_in, // {threshold_high, threshold_low} for each channel
+  Axis_Parallel_If.Slave_Realtime data_in,
+  Axis_Parallel_If.Master_Realtime data_out,
+  Axis_Parallel_If.Master_Realtime timestamps_out,
+  Axis_If.Slave_Realtime config_in, // {threshold_high, threshold_low} for each channel
   input wire reset_state
 );
 
 localparam int TIMESTAMP_WIDTH = SAMPLE_INDEX_WIDTH + CLOCK_WIDTH;
-
-assign config_in.ready = 1'b1;
-assign data_in.ready = '1; // don't apply backpressure
 
 typedef logic signed [SAMPLE_WIDTH-1:0] signed_sample_t;
 
@@ -50,7 +47,7 @@ always_ff @(posedge clk) begin
     threshold_low <= '0;
     threshold_high <= '0;
   end else begin
-    if (config_in.ok) begin
+    if (config_in.valid) begin
       for (int i = 0; i < N_CHANNELS; i++) begin
         threshold_high[i] <= config_in.data[2*SAMPLE_WIDTH*i+SAMPLE_WIDTH+:SAMPLE_WIDTH];
         threshold_low[i] <= config_in.data[2*SAMPLE_WIDTH*i+:SAMPLE_WIDTH];
@@ -114,7 +111,7 @@ always_ff @(posedge clk) begin
         is_high_d[i] <= 1'b0;
         // reset sample_index
         sample_index[i] <= '0;
-        if (data_in.ok[i] && any_above_high[i]) begin
+        if (data_in.valid[i] && any_above_high[i]) begin
           // keep is_high if input data is valid and above threshold
           // that way we don't miss the first sample
           is_high[i] <= 1'b1;
@@ -131,7 +128,7 @@ always_ff @(posedge clk) begin
           sample_index[i] <= sample_index[i] + 1'b1;
         end
         // update is_high only when we get a new, valid sample
-        if (data_in.ok[i]) begin
+        if (data_in.valid[i]) begin
           if (any_above_high[i]) begin
             is_high[i] <= 1'b1;
           end else if (all_below_low[i]) begin
@@ -140,7 +137,7 @@ always_ff @(posedge clk) begin
         end
       end
       // update timer (input sample counter)
-      if (data_in.ok[i]) begin
+      if (data_in.valid[i]) begin
         timer[i] <= timer[i] + 1'b1;
       end
     end

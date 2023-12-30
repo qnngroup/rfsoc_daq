@@ -6,8 +6,8 @@ module axis_differentiator #(
   parameter int PARALLEL_SAMPLES = 2
 ) (
   input wire clk, reset,
-  Axis_If.Slave_Simple data_in,
-  Axis_If.Master_Simple data_out
+  Axis_If.Slave_Stream data_in,
+  Axis_If.Master_Stream data_out
 );
 
 // register signals to infer DSP hardware subtractor

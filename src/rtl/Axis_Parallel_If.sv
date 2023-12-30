@@ -2,17 +2,18 @@
 // multiple axi-stream interfaces in parallel
 interface Axis_Parallel_If #(
   parameter DWIDTH = 32,
-  parameter PARALLEL_CHANNELS = 1
+  parameter CHANNELS = 1
 );
 
-logic [PARALLEL_CHANNELS-1:0][DWIDTH - 1:0]  data;
-logic [PARALLEL_CHANNELS-1:0]                ready;
-logic [PARALLEL_CHANNELS-1:0]                valid;
-logic [PARALLEL_CHANNELS-1:0]                last;
-logic [PARALLEL_CHANNELS-1:0]                ok;
+logic [CHANNELS-1:0][DWIDTH - 1:0]  data;
+logic [CHANNELS-1:0]                ready;
+logic [CHANNELS-1:0]                valid;
+logic [CHANNELS-1:0]                last;
+logic [CHANNELS-1:0]                ok;
 
 assign ok = ready & valid;
 
+// master/slave packetized interface
 modport Master_Full (
   input   ready,
   output  valid,
@@ -29,18 +30,30 @@ modport Slave_Full (
   output  ok
 );
 
-modport Master_Simple (
+// master/slave stream with backpressure
+modport Master_Stream (
   input   ready,
   output  valid,
   output  data,
   output  ok
 );
 
-modport Slave_Simple (
+modport Slave_Stream (
   output  ready,
   input   valid,
   input   data,
   output  ok
+);
+
+// master/slave stream with no backpressure
+modport Master_Realtime (
+  output  valid,
+  output  data
+);
+
+modport Slave_Realtime (
+  input   valid,
+  input   data
 );
 
 // Similar to Axis_If interface send_samples method.
@@ -50,20 +63,21 @@ task automatic send_samples(
   ref clk,
   input int n_samples,
   input bit rand_arrivals,
-  input bit reset_valid
+  input bit reset_valid,
+  input bit ignore_ready
 );
-  int samples_sent [PARALLEL_CHANNELS]; // track number of samples sent for each channel
-  logic [PARALLEL_CHANNELS-1:0] done; // 1 bit for each parallel channel to track if it's sent n_samples yet
+  int samples_sent [CHANNELS]; // track number of samples sent for each channel
+  logic [CHANNELS-1:0] done; // 1 bit for each parallel channel to track if it's sent n_samples yet
   // reset
   done = '0;
-  for (int i = 0; i < PARALLEL_CHANNELS; i++) begin
+  for (int i = 0; i < CHANNELS; i++) begin
     samples_sent[i] = 0;
   end
   valid <= '1; // enable all channels
   while (~done) begin
     @(posedge clk);
-    for (int i = 0; i < PARALLEL_CHANNELS; i++) begin
-      if (ok[i]) begin
+    for (int i = 0; i < CHANNELS; i++) begin
+      if (ok[i] | (valid[i] & ignore_ready)) begin
         if (samples_sent[i] == n_samples - 1) begin
           done[i] = 1'b1;
         end else begin
@@ -72,7 +86,7 @@ task automatic send_samples(
       end
     end
     if (rand_arrivals) begin
-      valid <= $urandom_range((1 << PARALLEL_CHANNELS) - 1) & (~done);
+      valid <= $urandom_range((1 << CHANNELS) - 1) & (~done);
     end
   end
   if (reset_valid) begin

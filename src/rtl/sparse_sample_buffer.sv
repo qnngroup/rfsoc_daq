@@ -12,10 +12,10 @@ module sparse_sample_buffer #(
 ) (
   input wire clk, reset,
   output logic [31:0] timestamp_width, // output so that PS can correctly parse output data
-  Axis_Parallel_If.Slave_Simple data_in, // all channels in parallel
+  Axis_Parallel_If.Slave_Realtime data_in, // all channels in parallel
   Axis_If.Master_Full data_out,
-  Axis_If.Slave_Simple discriminator_config_in, // {threshold_high, threshold_low} for each channel
-  Axis_If.Slave_Simple buffer_config_in // {banking_mode, start, stop}
+  Axis_If.Slave_Realtime discriminator_config_in, // {threshold_high, threshold_low} for each channel
+  Axis_If.Slave_Realtime buffer_config_in // {banking_mode, start, stop}
 );
 
 localparam int SAMPLE_INDEX_WIDTH = $clog2(DATA_BUFFER_DEPTH*N_CHANNELS);
@@ -26,8 +26,8 @@ assign timestamps_width = TIMESTAMP_WIDTH;
 logic [1:0] buffer_full;
 
 // discriminator outputs
-Axis_Parallel_If #(.DWIDTH(TIMESTAMP_WIDTH), .PARALLEL_CHANNELS(N_CHANNELS)) disc_timestamps();
-Axis_Parallel_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES), .PARALLEL_CHANNELS(N_CHANNELS)) disc_data();
+Axis_Parallel_If #(.DWIDTH(TIMESTAMP_WIDTH), .CHANNELS(N_CHANNELS)) disc_timestamps();
+Axis_Parallel_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES), .CHANNELS(N_CHANNELS)) disc_data();
 // config interfaces to timestamp and data buffers
 Axis_If #(.DWIDTH($clog2($clog2(N_CHANNELS)+1)+2)) buffer_timestamp_config ();
 Axis_If #(.DWIDTH($clog2($clog2(N_CHANNELS)+1)+2)) buffer_data_config ();
@@ -43,7 +43,6 @@ assign buffer_timestamp_config.data = buffer_config_in.data;
 assign buffer_timestamp_config.valid = buffer_config_in.valid;
 assign buffer_data_config.data = buffer_config_in.data;
 assign buffer_data_config.valid = buffer_config_in.valid;
-assign buffer_config_in.ready = 1'b1; // doesn't matter what we do here, since both modules hold ready = 1'b1
 
 logic start, start_d;
 always_ff @(posedge clk) begin
@@ -52,7 +51,7 @@ always_ff @(posedge clk) begin
     start_d <= '0;
   end else begin
     start_d <= start;
-    if (buffer_config_in.ok) begin
+    if (buffer_config_in.valid) begin
       start <= buffer_config_in.data[1];
     end
   end

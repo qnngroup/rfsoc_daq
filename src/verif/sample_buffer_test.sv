@@ -36,7 +36,7 @@ logic [2:0] banking_mode;
 
 assign config_in.data = {banking_mode, start, stop};
 
-Axis_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .PARALLEL_CHANNELS(N_CHANNELS)) data_in ();
+Axis_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(N_CHANNELS)) data_in ();
 Axis_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH)) data_out ();
 Axis_If #(.DWIDTH(2+$clog2($clog2(N_CHANNELS)+1))) config_in ();
 
@@ -187,7 +187,7 @@ initial begin
           1: samples_to_send = ((BUFFER_DEPTH - $urandom_range(2,10)) / (1 << bank_mode))*N_CHANNELS;
           2: samples_to_send = (BUFFER_DEPTH / (1 << bank_mode))*N_CHANNELS; // fill all buffers
         endcase
-        data_in.send_samples(clk, samples_to_send, in_valid_rand & 1'b1, 1'b1);
+        data_in.send_samples(clk, samples_to_send, in_valid_rand & 1'b1, 1'b1, 1'b1);
         repeat (10) @(posedge clk);
         stop_acq();
         data_out.do_readout(clk, 1'b1, 100000);
@@ -268,15 +268,6 @@ always @(posedge clk) begin
   end
 end
 
-task send_samples(input int n_samples, input int delay);
-  repeat (n_samples) begin
-    data_in.valid <= 1'b1;
-    @(posedge clk);
-    data_in.valid <= 1'b0;
-    repeat (delay) @(posedge clk);
-  end
-endtask
-
 
 // check that the DUT correctly saved everything
 task check_results();
@@ -329,9 +320,9 @@ initial begin
   start <= 1'b0;
   repeat (100) @(posedge clk);
   // send samples
-  data_in.send_samples(clk, 32, 1'b1, 1'b1);
-  data_in.send_samples(clk, 64, 1'b0, 1'b1);
-  data_in.send_samples(clk, 32, 1'b1, 1'b1);
+  data_in.send_samples(clk, 32, 1'b1, 1'b1, 1'b0);
+  data_in.send_samples(clk, 64, 1'b0, 1'b1, 1'b0);
+  data_in.send_samples(clk, 32, 1'b1, 1'b1, 1'b0);
   repeat (50) @(posedge clk);
   stop <= 1'b1;
   @(posedge clk);
@@ -348,7 +339,7 @@ initial begin
   start <= 1'b0;
   repeat (100) @(posedge clk);
   // send samples
-  data_in.send_samples(clk, 1, 1'b0, 1'b1);
+  data_in.send_samples(clk, 1, 1'b0, 1'b1, 1'b0);
   repeat (50) @(posedge clk);
   stop <= 1'b1;
   @(posedge clk);
@@ -379,9 +370,9 @@ initial begin
   start <= 1'b0;
   repeat (100) @(posedge clk);
   // send samples
-  data_in.send_samples(clk, 256, 1'b1, 1'b1);
-  data_in.send_samples(clk, 512, 1'b0, 1'b1);
-  data_in.send_samples(clk, 256, 1'b1, 1'b1);
+  data_in.send_samples(clk, 256, 1'b1, 1'b1, 1'b0);
+  data_in.send_samples(clk, 512, 1'b0, 1'b1, 1'b0);
+  data_in.send_samples(clk, 256, 1'b1, 1'b1, 1'b0);
   repeat (50) @(posedge clk);
   stop <= 1'b1;
   @(posedge clk);

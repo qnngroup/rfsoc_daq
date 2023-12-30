@@ -12,6 +12,7 @@ logic                 ok;
 
 assign ok = ready & valid;
 
+// master/slave packetized interface
 modport Master_Full (
   input   ready,
   output  valid,
@@ -28,18 +29,30 @@ modport Slave_Full (
   output  ok
 );
 
-modport Master_Simple (
+// master/slave stream with backpressure
+modport Master_Stream (
   input   ready,
   output  valid,
   output  data,
   output  ok
 );
 
-modport Slave_Simple (
+modport Slave_Stream (
   output  ready,
   input   valid,
   input   data,
   output  ok
+);
+
+// master/slave stream with no backpressure
+modport Master_Realtime (
+  output  valid,
+  output  data
+);
+
+modport Slave_Realtime (
+  input   valid,
+  input   data
 );
 
 ////////////////////////////////
@@ -55,7 +68,8 @@ task automatic send_samples(
   ref clk, // reference to clock signal in testbench
   input int n_samples, // number of samples to send
   input bit rand_arrivals, // if 1, toggle valid, otherwise leave it high
-  input bit reset_valid // if 1, reset valid signal after sending the samples
+  input bit reset_valid, // if 1, reset valid signal after sending the samples
+  input bit ignore_ready // if 1, ignore ready signal (useful for realtime interfaces which don't assign ready)
 );
   int samples_sent;
   // reset
@@ -63,7 +77,7 @@ task automatic send_samples(
   valid <= 1'b1;
   while (samples_sent < n_samples) begin
     @(posedge clk);
-    if (ok) begin
+    if (ok | (valid & ignore_ready)) begin
       samples_sent = samples_sent + 1'b1;
     end
     if (rand_arrivals) begin

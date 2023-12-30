@@ -25,19 +25,15 @@ module sample_buffer #(
   parameter int SAMPLE_WIDTH = 16 // 12-bit ADC
 ) (
   input wire clk, reset,
-  Axis_Parallel_If.Slave_Simple data_in, // all channels in parallel
+  Axis_Parallel_If.Slave_Realtime data_in, // all channels in parallel
   Axis_If.Master_Full data_out,
-  Axis_If.Slave_Simple config_in, // {banking_mode, start, stop}
+  Axis_If.Slave_Realtime config_in, // {banking_mode, start, stop}
   // stop_aux allows parallel operation of separate buffers
   // (e.g. for timestamp/data buffers in sparse sample buffer)
   // when one buffer fills, it can trigger a stop on all other buffers
   input wire stop_aux, 
   output logic capture_started, buffer_full
 );
-
-// never apply backpressure to sample discriminator or ADC
-assign data_in.ready = '1; // all channels
-assign config_in.ready = 1'b1;
 
 // There are $clog2(N_CHANNELS) + 1 banking modes for N_CHANNELS ADC channels
 // e.g. for 8 channels: single-channel mode, dual-channel, 4-channel, and 8-channel modes
@@ -56,7 +52,7 @@ always_ff @(posedge clk) begin
     stop <= '0;
     banking_mode <= '0;
   end else begin
-    if (config_in.ok) begin
+    if (config_in.valid) begin
       banking_mode <= config_in.data[2+:$clog2(N_BANKING_MODES)];
       start <= config_in.data[1];
       stop <= config_in.data[0];
@@ -123,7 +119,7 @@ end
 
 
 // bundle of axistreams for each bank output
-Axis_Parallel_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES), .PARALLEL_CHANNELS(N_CHANNELS)) all_banks_out ();
+Axis_Parallel_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES), .CHANNELS(N_CHANNELS)) all_banks_out ();
 
 // select which bank we're actively reading out
 logic [$clog2(N_CHANNELS)-1:0] bank_select;
@@ -175,7 +171,7 @@ genvar i;
 generate
   for (i = 0; i < N_CHANNELS; i++) begin: bank_i
     // only a single interface, but PARALLEL_SAMPLES wide
-    // PARALLEL_CHANNELS is used for multiple parallel interfaces with separate valid/ready
+    // CHANNELS is used for multiple parallel interfaces with separate valid/ready
     Axis_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES)) bank_in ();
     Axis_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES)) bank_out ();
 
@@ -239,7 +235,7 @@ module sample_buffer_bank #(
   parameter int SAMPLE_WIDTH = 16 // 12-bit ADC
 ) (
   input wire clk, reset,
-  Axis_If.Slave_Simple data_in, // one channel
+  Axis_If.Slave_Stream data_in, // one channel
   Axis_If.Master_Full data_out,
   input logic start, stop,
   output logic full, first

@@ -299,21 +299,21 @@ initial begin
         unique case (dut)
           0: begin
             // send samples with random arrivals
-            downsizer_in.send_samples(clk, $urandom_range(3,100), 1'b1, 1'b1);
+            downsizer_in.send_samples(clk, $urandom_range(3,100), 1'b1, 1'b1, 1'b0);
             // send samples all at once
-            downsizer_in.send_samples(clk, $urandom_range(3,100), 1'b0, 1'b1);
+            downsizer_in.send_samples(clk, $urandom_range(3,100), 1'b0, 1'b1, 1'b0);
             // send samples with random arrivals
-            downsizer_in.send_samples(clk, $urandom_range(3,100), 1'b1, 1'b1);
+            downsizer_in.send_samples(clk, $urandom_range(3,100), 1'b1, 1'b1, 1'b0);
           end
           1: begin
-            upsizer_in.send_samples(clk, $urandom_range(3,100), 1'b1, 1'b1);
-            upsizer_in.send_samples(clk, $urandom_range(3,100), 1'b0, 1'b1);
-            upsizer_in.send_samples(clk, $urandom_range(3,100), 1'b1, 1'b1);
+            upsizer_in.send_samples(clk, $urandom_range(3,100), 1'b1, 1'b1, 1'b0);
+            upsizer_in.send_samples(clk, $urandom_range(3,100), 1'b0, 1'b1, 1'b0);
+            upsizer_in.send_samples(clk, $urandom_range(3,100), 1'b1, 1'b1, 1'b0);
           end
           2: begin
-            comb_in.send_samples(clk, $urandom_range(3,100), 1'b1, 1'b1);
-            comb_in.send_samples(clk, $urandom_range(3,100), 1'b0, 1'b1);
-            comb_in.send_samples(clk, $urandom_range(3,100), 1'b1, 1'b1);
+            comb_in.send_samples(clk, $urandom_range(3,100), 1'b1, 1'b1, 1'b0);
+            comb_in.send_samples(clk, $urandom_range(3,100), 1'b0, 1'b1, 1'b0);
+            comb_in.send_samples(clk, $urandom_range(3,100), 1'b1, 1'b1, 1'b0);
           end
         endcase
         last[0][dut] <= 1'b1;

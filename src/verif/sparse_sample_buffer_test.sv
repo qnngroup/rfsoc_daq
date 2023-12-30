@@ -35,7 +35,7 @@ localparam int DMA_WORD_PARSE_WIDTH = util.max(2*TIMESTAMP_WIDTH, 2*PARALLEL_SAM
 // util for functions any_above_high and all_below_low for comparing data to thresholds
 sim_util_pkg::sample_discriminator_util #(.SAMPLE_WIDTH(SAMPLE_WIDTH), .PARALLEL_SAMPLES(PARALLEL_SAMPLES)) disc_util;
 
-Axis_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .PARALLEL_CHANNELS(N_CHANNELS)) data_in ();
+Axis_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(N_CHANNELS)) data_in ();
 Axis_If #(.DWIDTH(AXI_MM_WIDTH)) data_out ();
 Axis_If #(.DWIDTH(2+$clog2($clog2(N_CHANNELS)+1))) buffer_config_in ();
 Axis_If #(.DWIDTH(N_CHANNELS*SAMPLE_WIDTH*2)) discriminator_config_in();
@@ -82,11 +82,11 @@ always @(posedge clk) begin
     if (reset) begin
       data_in.data[i] <= '0;
     end else begin
-      if (data_in.ok[i]) begin
+      if (data_in.valid[i]) begin
         // save data that was sent
         data_sent[i].push_front(data_in.data[i]);
       end
-      if (data_in.ok[i] || update_input_data) begin
+      if (data_in.valid[i] || update_input_data) begin
         // send new data
         for (int j = 0; j < PARALLEL_SAMPLES; j++) begin
           data_in.data[i][j*SAMPLE_WIDTH+:SAMPLE_WIDTH] <= $urandom_range(data_range_low[i], data_range_high[i]);
@@ -473,7 +473,7 @@ initial begin
         repeat (10) @(posedge clk);
         start_acq_with_banking_mode(bank_mode);
 
-        data_in.send_samples(clk, $urandom_range(50,500), in_valid_rand & 1'b1, 1'b1);
+        data_in.send_samples(clk, $urandom_range(50,500), in_valid_rand & 1'b1, 1'b1, 1'b1);
         repeat (10) @(posedge clk);
         stop_acq();
         data_out.do_readout(clk, 1'b1, 100000);

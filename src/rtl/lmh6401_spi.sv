@@ -7,10 +7,7 @@ module lmh6401_spi #(
   parameter int NUM_CHANNELS = 2
 ) (
   input wire clk, reset,
-  input [$clog2(NUM_CHANNELS)-1:0] addr_in,
-  input [15:0] data_in,
-  input data_in_valid,  // should really be an Axis_If interface
-  output data_in_ready,
+  Axis_If.Slave_Stream command_in, // {addr + data}
   output logic [NUM_CHANNELS-1:0] cs_n,
   output logic sck,
   output logic sdi
@@ -49,7 +46,7 @@ logic sck_negedge;
 assign sck_negedge = (sck_last == 1'b1 && clk_counter == CLK_COUNTER_MAX);
 
 // only accept new data when idling
-assign data_in_ready = state == IDLE;
+assign command_in.ready = state == IDLE;
 
 always_ff @(posedge clk) begin
   if (reset) begin
@@ -59,12 +56,12 @@ always_ff @(posedge clk) begin
     sdi <= 1'b0;
   end else begin
     unique case (state)
-      IDLE: if (data_in_valid && data_in_ready) begin 
+      IDLE: if (command_in.ok) begin 
         state <= SENDING;
-        addr <= addr_in;
+        addr <= command_in.data[16+:$clog2(NUM_CHANNELS)];
         // only perform writes, so set MSB of data to 0 so we don't
         // accidentally read data from one of the VGAs
-        data <= {1'b0, data_in[14:0]};
+        data <= {1'b0, command_in.data[14:0]};
       end
       SENDING: begin
         if (sck_negedge) begin
