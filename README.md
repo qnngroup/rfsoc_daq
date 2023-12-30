@@ -20,7 +20,7 @@ Notable features are an arbitrary waveform generator based on piecewise-linear s
 ```
 ## Writing a new module
 
-Create the module `my_module` in a file called `my_module.sv` (located in `src/rtl/`), and a unit test module `my_module_test` in a file called `my_module_test.sv` (located in `src/verif/`).
+Create the module `my_module` in a file called `my_module.sv` (located in an appropriate subdirectory of `src/rtl/`), and a unit test module `my_module_test` in a file called `my_module_test.sv` (located in the same subdirectory as `my_module.sv`).
 
 ### Unit test architecture
 
@@ -104,4 +104,4 @@ A full regression test (should be done before every commit) can be run like so:
 $ script/regression.sh
 ```
 
-This script generates a list of all test modules (named `[a-zA-Z0-9_]*_test`) located in `src/verif/` and passes them to the unit test script.
+This script generates a list of all test modules (named `[a-zA-Z0-9_]*_test`) in `src/` and passes them to the unit test script.
