@@ -9,7 +9,7 @@
 module sample_discriminator #( 
   parameter int SAMPLE_WIDTH = 16,
   parameter int PARALLEL_SAMPLES = 16,
-  parameter int N_CHANNELS = 8,
+  parameter int CHANNELS = 8,
   parameter int SAMPLE_INDEX_WIDTH = 14, // ideally keep the sum of this and CLOCK_WIDTH at most 64
   parameter int CLOCK_WIDTH = 50 // rolls over roughly every 3 days at 4GS/s (100 days at 32MS/s)
 ) (
@@ -26,18 +26,18 @@ localparam int TIMESTAMP_WIDTH = SAMPLE_INDEX_WIDTH + CLOCK_WIDTH;
 typedef logic signed [SAMPLE_WIDTH-1:0] signed_sample_t;
 
 // high/low threshold for hysteresis
-logic [N_CHANNELS-1:0][SAMPLE_WIDTH-1:0] threshold_low, threshold_high;
+logic [CHANNELS-1:0][SAMPLE_WIDTH-1:0] threshold_low, threshold_high;
 // delay data input to match latency of hysteresis-tracking circuit
-logic [N_CHANNELS-1:0][PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0] data_in_reg;
-logic [N_CHANNELS-1:0] data_in_valid;
+logic [CHANNELS-1:0][PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0] data_in_reg;
+logic [CHANNELS-1:0] data_in_valid;
 // timer and latency-matching pipeline stage
-logic [N_CHANNELS-1:0][CLOCK_WIDTH-1:0] timer, timer_d;
+logic [CHANNELS-1:0][CLOCK_WIDTH-1:0] timer, timer_d;
 // sample index to associate timestamp with a saved sample
-logic [N_CHANNELS-1:0][SAMPLE_INDEX_WIDTH-1:0] sample_index;
+logic [CHANNELS-1:0][SAMPLE_INDEX_WIDTH-1:0] sample_index;
 
 // hysteresis-tracking logic
-logic [N_CHANNELS-1:0] is_high, is_high_d;
-logic [N_CHANNELS-1:0] new_is_high;
+logic [CHANNELS-1:0] is_high, is_high_d;
+logic [CHANNELS-1:0] new_is_high;
 
 assign new_is_high = is_high & (~is_high_d);
 
@@ -48,7 +48,7 @@ always_ff @(posedge clk) begin
     threshold_high <= '0;
   end else begin
     if (config_in.valid) begin
-      for (int i = 0; i < N_CHANNELS; i++) begin
+      for (int i = 0; i < CHANNELS; i++) begin
         threshold_high[i] <= config_in.data[2*SAMPLE_WIDTH*i+SAMPLE_WIDTH+:SAMPLE_WIDTH];
         threshold_low[i] <= config_in.data[2*SAMPLE_WIDTH*i+:SAMPLE_WIDTH];
       end
@@ -59,9 +59,9 @@ end
 // since there are multiple parallel samples, check to see if any of
 // them exceed the high threshold or if all of them are below the low
 // threshold
-logic [N_CHANNELS-1:0] any_above_high, all_below_low;
+logic [CHANNELS-1:0] any_above_high, all_below_low;
 always_comb begin
-  for (int i = 0; i < N_CHANNELS; i++) begin
+  for (int i = 0; i < CHANNELS; i++) begin
     any_above_high[i] = 1'b0;
     all_below_low[i] = 1'b1;
     for (int j = 0; j < PARALLEL_SAMPLES; j++) begin
@@ -79,7 +79,7 @@ always_ff @(posedge clk) begin
   // pipeline stage for timer to match sample_index delay
   timer_d <= timer;
   timestamps_out.valid <= new_is_high;
-  for (int i = 0; i < N_CHANNELS; i++) begin
+  for (int i = 0; i < CHANNELS; i++) begin
     timestamps_out.data[i] <= {timer_d[i], sample_index[i]};
   end
 
@@ -99,7 +99,7 @@ always_ff @(posedge clk) begin
     sample_index <= '0;
   end else begin
     // update sample_index, timer and is_high for each channel
-    for (int i = 0; i < N_CHANNELS; i++) begin
+    for (int i = 0; i < CHANNELS; i++) begin
       if (reset_state) begin
         // don't reset timer, since we want
         // to be able to track the arrival time of

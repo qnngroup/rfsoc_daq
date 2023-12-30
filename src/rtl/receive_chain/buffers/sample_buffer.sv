@@ -19,7 +19,7 @@
 // channel of this module (allowing high-capacity buffering in single-channel
 // mode for any physical input channel)
 module sample_buffer #(
-  parameter int N_CHANNELS = 8, // number of ADC channels
+  parameter int CHANNELS = 8, // number of ADC channels
   parameter int BUFFER_DEPTH = 8192, // maximum capacity across all channels
   parameter int PARALLEL_SAMPLES = 16, // 4.096 GS/s @ 256 MHz
   parameter int SAMPLE_WIDTH = 16 // 12-bit ADC
@@ -35,12 +35,12 @@ module sample_buffer #(
   output logic capture_started, buffer_full
 );
 
-// There are $clog2(N_CHANNELS) + 1 banking modes for N_CHANNELS ADC channels
+// There are $clog2(CHANNELS) + 1 banking modes for CHANNELS ADC channels
 // e.g. for 8 channels: single-channel mode, dual-channel, 4-channel, and 8-channel modes
 // e.g. for 16 channels: single-channel mode, dual-channel, 4-channel, 8-channel, and 16-channel modes
-localparam int N_BANKING_MODES = $clog2(N_CHANNELS) + 1;
+localparam int N_BANKING_MODES = $clog2(CHANNELS) + 1;
 logic [$clog2(N_BANKING_MODES)-1:0] banking_mode;
-logic [$clog2(N_CHANNELS):0] n_active_channels; // extra bit so we can represent n from [0,...N_CHANNELS]
+logic [$clog2(CHANNELS):0] n_active_channels; // extra bit so we can represent n from [0,...CHANNELS]
 assign n_active_channels = 1'b1 << banking_mode;
 logic start, stop;
 assign capture_started = start;
@@ -66,8 +66,8 @@ end
 
 // logic to track when banks fill up and trigger the stop of other banks when
 // one bank fills up
-logic [N_CHANNELS-1:0] banks_full, banks_full_latch;
-logic [N_CHANNELS-1:0] full_mask;
+logic [CHANNELS-1:0] banks_full, banks_full_latch;
+logic [CHANNELS-1:0] full_mask;
 logic banks_stop;
 // output a flag when the buffer fills up so we can stop other buffers running in parallel
 assign buffer_full = |(full_mask & banks_full);
@@ -77,11 +77,11 @@ always_comb begin
   end else begin
     // capture is only stopped when (one of) the final bank(s) fills up
     // use the appropriate mask on banks_full to decide when to stop capture
-    // if banking_mode == 0: mask = 1 << N_CHANNELS
-    // if banking_mode == 1: mask = 3 << (N_CHANNELS - 1)
-    // if banking_mode == 2: mask = 7 << (N_CHANNELS - 2)
+    // if banking_mode == 0: mask = 1 << CHANNELS
+    // if banking_mode == 1: mask = 3 << (CHANNELS - 1)
+    // if banking_mode == 2: mask = 7 << (CHANNELS - 2)
     // ...
-    full_mask = ((2 << banking_mode) - 1) << (N_CHANNELS - banking_mode);
+    full_mask = ((2 << banking_mode) - 1) << (CHANNELS - banking_mode);
     banks_stop = |(full_mask & banks_full);
   end
 end
@@ -108,7 +108,7 @@ always_ff @(posedge clk) begin
       // reset when we're done reading out all banks
       banks_full_latch <= '0;
     end else begin
-      for (int i = 0; i < N_CHANNELS; i++) begin
+      for (int i = 0; i < CHANNELS; i++) begin
         if (banks_full[i]) begin
           banks_full_latch[i] <= 1'b1;
         end
@@ -119,10 +119,10 @@ end
 
 
 // bundle of axistreams for each bank output
-Axis_Parallel_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES), .CHANNELS(N_CHANNELS)) all_banks_out ();
+Axis_Parallel_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES), .CHANNELS(CHANNELS)) all_banks_out ();
 
 // select which bank we're actively reading out
-logic [$clog2(N_CHANNELS)-1:0] bank_select;
+logic [$clog2(CHANNELS)-1:0] bank_select;
 always_ff @(posedge clk) begin
   if (reset) begin
     bank_select <= '0;
@@ -130,7 +130,7 @@ always_ff @(posedge clk) begin
     if (start) begin
       bank_select <= '0;
     end else if (all_banks_out.ok[bank_select] && all_banks_out.last[bank_select]) begin
-      if (bank_select == N_CHANNELS - 1) begin
+      if (bank_select == CHANNELS - 1) begin
         bank_select <= '0;
       end else begin
         bank_select <= bank_select + 1'b1;
@@ -150,14 +150,14 @@ always_ff @(posedge clk) begin
       data_out.data <= all_banks_out.data[bank_select];
       data_out.valid <= all_banks_out.valid[bank_select];
       // only take last signal from the final bank, and only when the final bank is selected
-      data_out.last <= (bank_select == N_CHANNELS - 1) && all_banks_out.last[bank_select];
+      data_out.last <= (bank_select == CHANNELS - 1) && all_banks_out.last[bank_select];
     end
   end
 end
 
 // only supply a ready signal to the bank currently selected for readout
 always_comb begin
-  for (int i = 0; i < N_CHANNELS; i++) begin
+  for (int i = 0; i < CHANNELS; i++) begin
     if (i == bank_select) begin
       all_banks_out.ready[i] = data_out.ready;
     end else begin
@@ -169,7 +169,7 @@ end
 // generate banks
 genvar i;
 generate
-  for (i = 0; i < N_CHANNELS; i++) begin: bank_i
+  for (i = 0; i < CHANNELS; i++) begin: bank_i
     // only a single interface, but PARALLEL_SAMPLES wide
     // CHANNELS is used for multiple parallel interfaces with separate valid/ready
     Axis_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES)) bank_in ();
@@ -203,7 +203,7 @@ generate
     logic valid_d; // match latency of registered data input
     // when chaining banks in series, which bank should the current bank i wait for
     always_comb begin
-      if ((n_active_channels != N_CHANNELS) && (i >= n_active_channels)) begin
+      if ((n_active_channels != CHANNELS) && (i >= n_active_channels)) begin
         // if the banking mode is not fully-independent (i.e. fewer than the
         // maximum number of channels are in use), then only activate the
         // current bank if previous banks are full

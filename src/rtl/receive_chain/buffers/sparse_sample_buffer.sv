@@ -2,7 +2,7 @@
 // performs threshold-based sample discrimination on multiple channels and
 // saves the results (raw data and timestamps) in a banked sample buffer
 module sparse_sample_buffer #(
-  parameter int N_CHANNELS = 2, // number of input channels
+  parameter int CHANNELS = 2, // number of input channels
   parameter int TSTAMP_BUFFER_DEPTH = 1024, // depth of timestamp buffer
   parameter int DATA_BUFFER_DEPTH = 32768, // depth of data/sample buffer
   parameter int AXI_MM_WIDTH = 128, // width of DMA AXI-stream interface
@@ -18,7 +18,7 @@ module sparse_sample_buffer #(
   Axis_If.Slave_Realtime buffer_config_in // {banking_mode, start, stop}
 );
 
-localparam int SAMPLE_INDEX_WIDTH = $clog2(DATA_BUFFER_DEPTH*N_CHANNELS);
+localparam int SAMPLE_INDEX_WIDTH = $clog2(DATA_BUFFER_DEPTH*CHANNELS);
 localparam int TIMESTAMP_WIDTH = SAMPLE_WIDTH * ((SAMPLE_INDEX_WIDTH + APPROX_CLOCK_WIDTH + (SAMPLE_WIDTH - 1)) / SAMPLE_WIDTH);
 assign timestamps_width = TIMESTAMP_WIDTH;
 
@@ -26,11 +26,11 @@ assign timestamps_width = TIMESTAMP_WIDTH;
 logic [1:0] buffer_full;
 
 // discriminator outputs
-Axis_Parallel_If #(.DWIDTH(TIMESTAMP_WIDTH), .CHANNELS(N_CHANNELS)) disc_timestamps();
-Axis_Parallel_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES), .CHANNELS(N_CHANNELS)) disc_data();
+Axis_Parallel_If #(.DWIDTH(TIMESTAMP_WIDTH), .CHANNELS(CHANNELS)) disc_timestamps();
+Axis_Parallel_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES), .CHANNELS(CHANNELS)) disc_data();
 // config interfaces to timestamp and data buffers
-Axis_If #(.DWIDTH($clog2($clog2(N_CHANNELS)+1)+2)) buffer_timestamp_config ();
-Axis_If #(.DWIDTH($clog2($clog2(N_CHANNELS)+1)+2)) buffer_data_config ();
+Axis_If #(.DWIDTH($clog2($clog2(CHANNELS)+1)+2)) buffer_timestamp_config ();
+Axis_If #(.DWIDTH($clog2($clog2(CHANNELS)+1)+2)) buffer_data_config ();
 // raw buffer outputs
 Axis_If #(.DWIDTH(TIMESTAMP_WIDTH)) buffer_timestamp_out ();
 Axis_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES)) buffer_data_out ();
@@ -60,7 +60,7 @@ end
 sample_discriminator #(
   .SAMPLE_WIDTH(SAMPLE_WIDTH),
   .PARALLEL_SAMPLES(PARALLEL_SAMPLES),
-  .N_CHANNELS(N_CHANNELS),
+  .CHANNELS(CHANNELS),
   .SAMPLE_INDEX_WIDTH(SAMPLE_INDEX_WIDTH),
   .CLOCK_WIDTH(TIMESTAMP_WIDTH - SAMPLE_INDEX_WIDTH)
 ) disc_i (
@@ -77,7 +77,7 @@ sample_buffer #(
   .SAMPLE_WIDTH(SAMPLE_WIDTH),
   .BUFFER_DEPTH(DATA_BUFFER_DEPTH),
   .PARALLEL_SAMPLES(PARALLEL_SAMPLES),
-  .N_CHANNELS(N_CHANNELS)
+  .CHANNELS(CHANNELS)
 ) data_buffer_i (
   .clk,
   .reset,
@@ -93,7 +93,7 @@ sample_buffer #(
   .SAMPLE_WIDTH(TIMESTAMP_WIDTH),
   .BUFFER_DEPTH(TSTAMP_BUFFER_DEPTH),
   .PARALLEL_SAMPLES(1),
-  .N_CHANNELS(N_CHANNELS)
+  .CHANNELS(CHANNELS)
 ) timestamp_buffer_i (
   .clk,
   .reset,
