@@ -65,7 +65,7 @@
         `define OKAY   2'b00 // General signal for a successful transaction (or that an exclusive access failed)
         `define EXOKAY 2'b01 // Either the write OR read was okay
         `define SLVERR 2'b10 // Transaction recieved but error in execution
-        `define DECERR 2'b00 // No slave at transaction address
+        `define DECERR 2'b11 // No slave at transaction address
 
         logic[`ADDR_NUM-1:0][31:0] addrs = {32'(`MEM_SIZE_ADDR), 32'(`RUN_PWL_ADDR), 32'(`PWL_PREP_ADDR), 32'(`DAC2_ADDR), 32'(`DAC1_ADDR), 32'(`SCALE_DAC_OUT_ADDR), 32'(`MAX_BURST_SIZE_ADDR), 32'(`ILA_BURST_SIZE_ADDR), 32'(`DAC_ILA_RESP_VALID_ADDR), 32'(`DAC_ILA_RESP_ADDR), 32'(`DAC_ILA_TRIG_ADDR), 32'(`DAC_HLT_ADDR), 32'(`TRIG_WAVE_ADDR), 32'(`PS_SEED_VALID_ADDR), 32'(`PS_SEED_BASE_ADDR), 32'(`RST_ADDR)};
         logic[`ADDR_NUM-1:0][31:0] ids = {32'(`MEM_SIZE_ID), 32'(`RUN_PWL_ID), 32'(`PWL_PREP_ID), 32'(`DAC2_ID), 32'(`DAC1_ID), 32'(`SCALE_DAC_OUT_ID), 32'(`MAX_BURST_SIZE_ID), 32'(`ILA_BURST_SIZE_ID), 32'(`DAC_ILA_RESP_VALID_ID), 32'(`DAC_ILA_RESP_ID), 32'(`DAC_ILA_TRIG_ID), 32'(`DAC_HLT_ID), 32'(`TRIG_WAVE_ID), 32'(`PS_SEED_VALID_ID), 32'(`PS_SEED_BASE_ID), 32'(`RST_ID)};
