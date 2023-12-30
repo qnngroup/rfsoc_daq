@@ -2,7 +2,7 @@
 `timescale 1ns / 1ps
 
 module splice_tb();
-	logic clk,rst;
+  logic clk,rst;
     logic[255:0] data;
     logic[3:0] i;
     logic[15:0] spliced_data;

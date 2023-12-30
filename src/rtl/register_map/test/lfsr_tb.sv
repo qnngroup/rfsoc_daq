@@ -3,7 +3,7 @@
 import mem_layout_pkg::*;
 
 module lfsr_tb();
-	logic clk,rst;
+  logic clk,rst;
     logic[15:0] seed, sample_out; 
     LFSR #(.DATA_WIDTH(16)) 
     lfsr(.clk(clk), .rst(rst),
