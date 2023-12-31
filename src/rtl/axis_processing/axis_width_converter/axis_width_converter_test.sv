@@ -34,6 +34,8 @@ Axis_If #(.DWIDTH(DWIDTH_UP_IN)) upsizer_in ();
 Axis_If #(.DWIDTH(DWIDTH_UP_IN*UP)) upsizer_out ();
 Axis_If #(.DWIDTH(DWIDTH_COMB_IN)) comb_in ();
 Axis_If #(.DWIDTH((DWIDTH_COMB_IN*COMB_UP)/COMB_DOWN)) comb_out ();
+Axis_If #(.DWIDTH(DWIDTH_COMB_IN)) nochange_comb_in ();
+Axis_If #(.DWIDTH(DWIDTH_COMB_IN)) nochange_comb_out ();
 
 axis_downsizer #(
   .DWIDTH(DWIDTH_DOWN_IN),
@@ -66,57 +68,77 @@ axis_width_converter #(
   .data_out(comb_out)
 );
 
-logic [DWIDTH-1:0] sent [3][$];
-logic [DWIDTH-1:0] received [3][$];
-int last_sent [3][$]; // size of sent whenever last is present
-int last_received [3][$]; // size of received whenever last is present
+axis_width_converter #(
+  .DWIDTH_IN(DWIDTH_COMB_IN),
+  .UP(1),
+  .DOWN(1)
+) nochange_comb_dut_i (
+  .clk,
+  .reset,
+  .data_in(nochange_comb_in),
+  .data_out(nochange_comb_out)
+);
 
-logic [1:0][2:0][DWIDTH-1:0] data;
+logic [DWIDTH-1:0] sent [4][$];
+logic [DWIDTH-1:0] received [4][$];
+int last_sent [4][$]; // size of sent whenever last is present
+int last_received [4][$]; // size of received whenever last is present
+
+logic [1:0][3:0][DWIDTH-1:0] data;
 assign downsizer_in.data = data[0][0];
 assign upsizer_in.data = data[0][1];
 assign comb_in.data = data[0][2];
+assign nochange_comb_in.data = data[0][3];
 assign data[1][0] = downsizer_out.data;
 assign data[1][1] = upsizer_out.data;
 assign data[1][2] = comb_out.data;
+assign data[1][3] = nochange_comb_out.data;
 
-logic [1:0][2:0] ok;
+logic [1:0][3:0] ok;
 assign ok[0][0] = downsizer_in.ok;
 assign ok[0][1] = upsizer_in.ok;
 assign ok[0][2] = comb_in.ok;
+assign ok[0][3] = nochange_comb_in.ok;
 assign ok[1][0] = downsizer_out.ok;
 assign ok[1][1] = upsizer_out.ok;
 assign ok[1][2] = comb_out.ok;
+assign ok[1][3] = nochange_comb_out.ok;
 
-logic [2:0] out_ready;
+logic [3:0] out_ready;
 assign downsizer_out.ready = out_ready[0];
 assign upsizer_out.ready = out_ready[1];
 assign comb_out.ready = out_ready[2];
+assign nochange_comb_out.ready = out_ready[3];
 
-logic [2:0] in_valid;
+logic [3:0] in_valid;
 assign downsizer_in.valid = in_valid[0];
 assign upsizer_in.valid = in_valid[1];
 assign comb_in.valid = in_valid[2];
+assign nochange_comb_in.valid = in_valid[3];
 
-logic [1:0][2:0] last;
+logic [1:0][3:0] last;
 assign downsizer_in.last = last[0][0];
 assign upsizer_in.last = last[0][1];
 assign comb_in.last = last[0][2];
+assign nochange_comb_in.last = last[0][3];
 assign last[1][0] = downsizer_out.last;
 assign last[1][1] = upsizer_out.last;
 assign last[1][2] = comb_out.last;
+assign last[1][3] = nochange_comb_out.last;
 
-localparam [1:0][2:0][31:0] NUM_WORDS = '{
-  '{COMB_UP, UP, 1},      // output words
-  '{COMB_DOWN, 1, DOWN}   // input words
+localparam [1:0][3:0][31:0] NUM_WORDS = '{
+  '{1, COMB_UP, UP, 1},      // output words
+  '{1, COMB_DOWN, 1, DOWN}   // input words
 };
 
-localparam [2:0][31:0] WORD_SIZE = '{
+localparam [3:0][31:0] WORD_SIZE = '{
+  DWIDTH_COMB_IN,
   DWIDTH_COMB_IN/COMB_DOWN, // both
   DWIDTH_UP_IN,             // upsizer
   DWIDTH_DOWN_IN/DOWN       // downsizer
 };
 
-localparam MAX_WORD_SIZE = math.max(math.max(WORD_SIZE[0],WORD_SIZE[1]),WORD_SIZE[2]);
+localparam MAX_WORD_SIZE = math.max(math.max(math.max(WORD_SIZE[0],WORD_SIZE[1]),WORD_SIZE[2]),WORD_SIZE[3]);
 logic [MAX_WORD_SIZE-1:0] sent_word, received_word;
 
 // update data and track sent/received samples
@@ -124,7 +146,7 @@ always_ff @(posedge clk) begin
   if (reset) begin
     data[1] <= '0;
   end else begin
-    for (int dut = 0; dut < 3; dut++) begin // select which dut is active
+    for (int dut = 0; dut < 4; dut++) begin // select which dut is active
       // inputs
       if (ok[0][dut]) begin
         for (int word = 0; word < DWIDTH/8; word++) begin
@@ -158,13 +180,13 @@ always_ff @(posedge clk) begin
   end
 end
 
-logic [2:0][1:0] readout_mode; // 0 for always 0, 1 for always 1, 2-3 for randomly toggling output ready signal
+logic [3:0][1:0] readout_mode; // 0 for always 0, 1 for always 1, 2-3 for randomly toggling output ready signal
 
 always_ff @(posedge clk) begin
   if (reset) begin
     out_ready <= '0;
   end else begin
-    for (int dut = 0; dut < 3; dut++) begin
+    for (int dut = 0; dut < 4; dut++) begin
       unique case (readout_mode[dut])
         0: begin
           out_ready[dut] <= '0;
@@ -194,6 +216,10 @@ task check_dut(input int dut_select);
     2: begin
       debug.display("checking combination up:down", VERBOSE);
       max_extra_samples = COMB_UP*COMB_DOWN - 1;
+    end
+    3: begin
+      debug.display("checking nochange combination up:down (1:1)", VERBOSE);
+      max_extra_samples = 0;
     end
   endcase
   debug.display($sformatf(
@@ -286,11 +312,12 @@ initial begin
   repeat (50) @(posedge clk);
 
   // do test
-  for (int dut = 0; dut < 3; dut++) begin
+  for (int dut = 0; dut < 4; dut++) begin
     unique case (dut)
       0: debug.display("### testing axis downsizer ###", DEFAULT);
       1: debug.display("### testing axis upsizer ###", DEFAULT);
       2: debug.display("### testing axis combined upsizer/downsizer ###", DEFAULT);
+      3: debug.display("### testing axis combined upsizer/downsizer with no width change (i.e. 1:1) ###", DEFAULT);
     endcase
     repeat (50) begin
       for (int j = 1; j <= 2; j++) begin
@@ -314,6 +341,11 @@ initial begin
             comb_in.send_samples(clk, $urandom_range(3,100), 1'b1, 1'b1, 1'b0);
             comb_in.send_samples(clk, $urandom_range(3,100), 1'b0, 1'b1, 1'b0);
             comb_in.send_samples(clk, $urandom_range(3,100), 1'b1, 1'b1, 1'b0);
+          end
+          3: begin
+            nochange_comb_in.send_samples(clk, $urandom_range(3,100), 1'b1, 1'b1, 1'b0);
+            nochange_comb_in.send_samples(clk, $urandom_range(3,100), 1'b0, 1'b1, 1'b0);
+            nochange_comb_in.send_samples(clk, $urandom_range(3,100), 1'b1, 1'b1, 1'b0);
           end
         endcase
         last[0][dut] <= 1'b1;
