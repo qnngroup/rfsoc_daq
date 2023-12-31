@@ -8,8 +8,8 @@ import sim_util_pkg::*;
 `timescale 1ns / 1ps
 module axis_width_converter_test ();
 
-sim_util_pkg::generic #(int) util; // abs, max functions on ints
-sim_util_pkg::debug #(.VERBOSITY(DEFAULT)) dbg = new; // printing, error tracking
+sim_util_pkg::math #(int) math; // abs, max functions on ints
+sim_util_pkg::debug #(.VERBOSITY(DEFAULT)) debug = new; // printing, error tracking
 
 logic reset;
 logic clk = 0;
@@ -26,7 +26,7 @@ localparam int COMB_DOWN = 3;
 
 // choose a standard datawidth for all of the DUTs that can fit the largest
 // signal (input or output)
-localparam int DWIDTH = util.max(util.max(util.max(DWIDTH_DOWN_IN, DWIDTH_UP_IN*UP), (DWIDTH_COMB_IN*COMB_UP)/COMB_DOWN), DWIDTH_COMB_IN);
+localparam int DWIDTH = math.max(math.max(math.max(DWIDTH_DOWN_IN, DWIDTH_UP_IN*UP), (DWIDTH_COMB_IN*COMB_UP)/COMB_DOWN), DWIDTH_COMB_IN);
 
 Axis_If #(.DWIDTH(DWIDTH_DOWN_IN)) downsizer_in ();
 Axis_If #(.DWIDTH(DWIDTH_DOWN_IN/DOWN)) downsizer_out ();
@@ -116,7 +116,7 @@ localparam [2:0][31:0] WORD_SIZE = '{
   DWIDTH_DOWN_IN/DOWN       // downsizer
 };
 
-localparam MAX_WORD_SIZE = util.max(util.max(WORD_SIZE[0],WORD_SIZE[1]),WORD_SIZE[2]);
+localparam MAX_WORD_SIZE = math.max(math.max(WORD_SIZE[0],WORD_SIZE[1]),WORD_SIZE[2]);
 logic [MAX_WORD_SIZE-1:0] sent_word, received_word;
 
 // update data and track sent/received samples
@@ -184,44 +184,44 @@ task check_dut(input int dut_select);
   int max_extra_samples;
   unique case (dut_select)
     0: begin
-      dbg.display("checking downsizer", VERBOSE);
+      debug.display("checking downsizer", VERBOSE);
       max_extra_samples = 0;
     end
     1: begin
-      dbg.display("checking upsizer", VERBOSE);
+      debug.display("checking upsizer", VERBOSE);
       max_extra_samples = UP - 1;
     end
     2: begin
-      dbg.display("checking combination up:down", VERBOSE);
+      debug.display("checking combination up:down", VERBOSE);
       max_extra_samples = COMB_UP*COMB_DOWN - 1;
     end
   endcase
-  dbg.display($sformatf(
+  debug.display($sformatf(
     "sent[%0d].size() = %0d",
     dut_select,
     sent[dut_select].size()),
     DEBUG
   );
-  dbg.display($sformatf(
+  debug.display($sformatf(
     "received[%0d].size() = %0d",
     dut_select,
     received[dut_select].size()),
     DEBUG
   );
-  dbg.display($sformatf(
+  debug.display($sformatf(
     "last_sent[%0d].size() = %0d",
     dut_select,
     last_sent[dut_select].size()),
     DEBUG
   );
-  dbg.display($sformatf(
+  debug.display($sformatf(
     "last_received[%0d].size() = %0d",
     dut_select,
     last_received[dut_select].size()),
     DEBUG
   );
   while (last_sent[dut_select].size() > 0 && last_received[dut_select].size() > 0) begin
-    dbg.display($sformatf(
+    debug.display($sformatf(
       "last_sent, last_received: %0d, %0d",
       last_sent[dut_select][$],
       last_received[dut_select][$]),
@@ -232,14 +232,14 @@ task check_dut(input int dut_select);
   end
   // check we got the right amount of data
   if (received[dut_select].size() < sent[dut_select].size()) begin
-    dbg.error($sformatf(
+    debug.error($sformatf(
       "mismatch in number of received/sent words, received fewer words than sent (received %d, sent %d)",
       received[dut_select].size(),
       sent[dut_select].size())
     );
   end
   if (received[dut_select].size() - sent[dut_select].size() > max_extra_samples) begin
-    dbg.error($sformatf(
+    debug.error($sformatf(
       "mismatch in number of received/sent words, received %d more words than sent (received %d, sent %d)",
       received[dut_select].size() - sent[dut_select].size(),
       received[dut_select].size(),
@@ -257,7 +257,7 @@ task check_dut(input int dut_select);
   // check data
   while (sent[dut_select].size() > 0 && received[dut_select].size() > 0) begin
     if (sent[dut_select][$] != received[dut_select][$]) begin
-      dbg.error($sformatf(
+      debug.error($sformatf(
         "data mismatch error (received %x, sent %x)",
         received[dut_select][$],
         sent[dut_select][$])
@@ -288,9 +288,9 @@ initial begin
   // do test
   for (int dut = 0; dut < 3; dut++) begin
     unique case (dut)
-      0: dbg.display("### testing axis downsizer ###", DEFAULT);
-      1: dbg.display("### testing axis upsizer ###", DEFAULT);
-      2: dbg.display("### testing axis combined upsizer/downsizer ###", DEFAULT);
+      0: debug.display("### testing axis downsizer ###", DEFAULT);
+      1: debug.display("### testing axis upsizer ###", DEFAULT);
+      2: debug.display("### testing axis combined upsizer/downsizer ###", DEFAULT);
     endcase
     repeat (50) begin
       for (int j = 1; j <= 2; j++) begin
@@ -334,7 +334,7 @@ initial begin
     readout_mode[dut] <= '0;
   end
 
-  dbg.finish();
+  debug.finish();
 end
 
 endmodule

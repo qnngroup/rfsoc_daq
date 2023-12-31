@@ -30,8 +30,8 @@ localparam int SCALE_FRAC_BITS = 16;
 typedef logic signed [SAMPLE_WIDTH-1:0] int_t;
 typedef logic signed [SCALE_WIDTH-1:0] sc_int_t;
 
-sim_util_pkg::generic #(int_t) util; // abs, max functions on signed sample type
-sim_util_pkg::debug #(.VERBOSITY(DEFAULT)) dbg = new; // printing, error tracking
+sim_util_pkg::math #(int_t) math; // abs, max functions on signed sample type
+sim_util_pkg::debug #(.VERBOSITY(DEFAULT)) debug = new; // printing, error tracking
 
 Axis_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES)) data_out_if();
 Axis_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES)) data_in_if();
@@ -75,15 +75,15 @@ always @(posedge clk) begin
 end
 
 task check_results();
-  dbg.display($sformatf("received.size() = %0d", received.size()), VERBOSE);
-  dbg.display($sformatf("expected.size() = %0d", expected.size()), VERBOSE);
+  debug.display($sformatf("received.size() = %0d", received.size()), VERBOSE);
+  debug.display($sformatf("expected.size() = %0d", expected.size()), VERBOSE);
   if (received.size() != expected.size()) begin
-    dbg.error("mismatched sizes; got a different number of samples than expected");
+    debug.error("mismatched sizes; got a different number of samples than expected");
   end
   // check the values match
   // casting to uint_t seems to perform a rounding operation, so the test data may be slightly too large
   while (received.size() > 0 && expected.size() > 0) begin
-    dbg.display($sformatf(
+    debug.display($sformatf(
       "processing data, scale = %x, sent_data = %x, expected = %x, received = %x",
       sent_scale[$],
       sent_data[$],
@@ -91,8 +91,8 @@ task check_results();
       received[$]),
       DEBUG
     );
-    if (util.abs(expected[$] - received[$]) > 1) begin
-      dbg.error($sformatf(
+    if (math.abs(expected[$] - received[$]) > 1) begin
+      debug.error($sformatf(
         "mismatch: got %x, expected %x",
         received[$],
         expected[$])
@@ -120,7 +120,7 @@ dac_prescaler #(
 );
 
 initial begin
-  dbg.display("### running test for dac_prescaler ###", DEFAULT);
+  debug.display("### running test for dac_prescaler ###", DEFAULT);
   reset <= 1'b1;
   data_in_if.data <= '0;
   data_in_if.valid <= 1'b0;
@@ -131,7 +131,7 @@ initial begin
   repeat(5) @(posedge clk);
 
   // send a bunch of data with no backpressure
-  dbg.display("testing without backpressure and random data valid", VERBOSE);
+  debug.display("testing without backpressure and random data valid", VERBOSE);
   data_out_if.ready <= 1'b1;
   repeat (5) begin
     // don't send any data while we're changing scale factor
@@ -150,7 +150,7 @@ initial begin
   check_results();
 
   // apply backpressure with input data always valid
-  dbg.display("testing with backpressure and continuous data valid", VERBOSE);
+  debug.display("testing with backpressure and continuous data valid", VERBOSE);
   repeat (5) begin
     data_in_if.valid <= 1'b0;
     data_out_if.ready <= 1'b1;
@@ -170,7 +170,7 @@ initial begin
 
 
   // apply backpressure and toggle input data valid
-  dbg.display("testing with backpressure and random data valid", VERBOSE);
+  debug.display("testing with backpressure and random data valid", VERBOSE);
   repeat (5) begin
     data_in_if.valid <= 1'b0;
     data_out_if.ready <= 1'b1;
@@ -188,7 +188,7 @@ initial begin
   repeat (10) @(posedge clk);
   check_results();
 
-  dbg.finish();
+  debug.finish();
 end
 
 endmodule

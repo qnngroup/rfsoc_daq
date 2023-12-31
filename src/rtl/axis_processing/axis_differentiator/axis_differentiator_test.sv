@@ -12,8 +12,8 @@ localparam int SAMPLE_WIDTH = 16;
 localparam int PARALLEL_SAMPLES = 2;
 
 typedef logic signed [SAMPLE_WIDTH-1:0] int_t; // type for signed samples (needed to check subtraction is working properly)
-sim_util_pkg::generic #(int_t) util; // abs, max functions on int_t
-sim_util_pkg::debug #(.VERBOSITY(DEFAULT)) dbg = new; // printing, error tracking
+sim_util_pkg::math #(int_t) math; // abs, max functions on int_t
+sim_util_pkg::debug #(.VERBOSITY(DEFAULT)) debug = new; // printing, error tracking
 
 logic reset;
 logic clk = 0;
@@ -64,17 +64,17 @@ always @(posedge clk) begin
 end
 
 task check_results();
-  dbg.display($sformatf("received.size() = %0d", received.size()), VERBOSE);
-  dbg.display($sformatf("expected.size() = %0d", expected.size()), VERBOSE);
+  debug.display($sformatf("received.size() = %0d", received.size()), VERBOSE);
+  debug.display($sformatf("expected.size() = %0d", expected.size()), VERBOSE);
   if (received.size() != expected.size()) begin
-    dbg.error("mismatched sizes; got a different number of samples than expected");
+    debug.error("mismatched sizes; got a different number of samples than expected");
   end
   // check the values match, like with axis_x2_test, the rounding during
   // type-casting could lead to an off-by-one error, so just make sure that
   // we're within 1 LSB of the expected result
   while (received.size() > 0 && expected.size() > 0) begin
-    if (util.abs(expected[$] - received[$]) > 1) begin
-      dbg.error($sformatf("mismatch: got %x, expected %x", received[$], expected[$]));
+    if (math.abs(expected[$] - received[$]) > 1) begin
+      debug.error($sformatf("mismatch: got %x, expected %x", received[$], expected[$]));
     end
     received.pop_back();
     expected.pop_back();
@@ -92,7 +92,7 @@ axis_differentiator #(
 );
 
 initial begin
-  dbg.display("### testing axis differentiator ###", DEFAULT);
+  debug.display("### testing axis differentiator ###", DEFAULT);
   reset <= 1'b1;
   data_in_if.valid <= 1'b0;
   data_out_if.ready <= 1'b1;
@@ -109,6 +109,6 @@ initial begin
   data_in_if.valid <= 1'b0;
   repeat (10) @(posedge clk);
   check_results();
-  dbg.finish();
+  debug.finish();
 end
 endmodule

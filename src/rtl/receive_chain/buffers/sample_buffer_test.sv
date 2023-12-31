@@ -18,7 +18,7 @@ import sim_util_pkg::*;
 `timescale 1ns / 1ps
 module sample_buffer_test ();
 
-sim_util_pkg::debug #(.VERBOSITY(DEFAULT)) dbg = new; // printing, error tracking
+sim_util_pkg::debug #(.VERBOSITY(DEFAULT)) debug = new; // printing, error tracking
 
 logic clk = 0;
 localparam CLK_RATE_HZ = 100_000_000;
@@ -85,14 +85,14 @@ task check_results(input int banking_mode, input bit missing_ok);
   logic [SAMPLE_WIDTH*PARALLEL_SAMPLES:0] temp_sample;
   int current_channel, n_samples;
   for (int i = 0; i < N_CHANNELS; i++) begin
-    dbg.display($sformatf(
+    debug.display($sformatf(
       "data_sent[%0d].size() = %0d",
       i,
       data_sent[i].size()),
       VERBOSE
     );
   end
-  dbg.display($sformatf(
+  debug.display($sformatf(
     "data_received.size() = %0d",
     data_received.size()),
     VERBOSE
@@ -100,7 +100,7 @@ task check_results(input int banking_mode, input bit missing_ok);
   while (data_received.size() > 0) begin
     current_channel = data_received.pop_back();
     n_samples = data_received.pop_back();
-    dbg.display($sformatf(
+    debug.display($sformatf(
       "processing new bank with %0d samples from channel %0d",
       n_samples,
       current_channel),
@@ -108,7 +108,7 @@ task check_results(input int banking_mode, input bit missing_ok);
     );
     for (int i = 0; i < n_samples; i++) begin
       if (data_sent[current_channel][$] != data_received[$]) begin
-        dbg.error($sformatf(
+        debug.error($sformatf(
           "data mismatch error (channel = %0d, sample = %0d, received %x, sent %x)",
           current_channel,
           i,
@@ -126,7 +126,7 @@ task check_results(input int banking_mode, input bit missing_ok);
     // caveat: if one of the channels filled up, then it's okay for there to
     // be missing samples in the other channels
     if ((data_sent[i].size() > 0) & (!missing_ok)) begin
-      dbg.error($sformatf(
+      debug.error($sformatf(
         "leftover samples in data_sent[%0d]: %0d",
         i,
         data_sent[i].size())
@@ -136,7 +136,7 @@ task check_results(input int banking_mode, input bit missing_ok);
   end
   for (int i = (1 << banking_mode); i < N_CHANNELS; i++) begin
     // flush out any remaining samples in data_sent queue
-    dbg.display($sformatf(
+    debug.display($sformatf(
       "removing %0d samples from data_sent[%0d]",
       data_sent[i].size(),
       i),
@@ -168,7 +168,7 @@ endtask
 int samples_to_send;
 
 initial begin
-  dbg.display("### testing sample_buffer ###", DEFAULT);
+  debug.display("### testing sample_buffer ###", DEFAULT);
   reset <= 1'b1;
   start <= 1'b0;
   stop <= 1'b0;
@@ -191,9 +191,9 @@ initial begin
         repeat (10) @(posedge clk);
         stop_acq();
         data_out.do_readout(clk, 1'b1, 100000);
-        dbg.display($sformatf("checking results n_samples   = %d", samples_to_send), VERBOSE);
-        dbg.display($sformatf("banking mode                 = %d", bank_mode), VERBOSE);
-        dbg.display($sformatf("samples sent with rand_valid = %d", in_valid_rand), VERBOSE);
+        debug.display($sformatf("checking results n_samples   = %d", samples_to_send), VERBOSE);
+        debug.display($sformatf("banking mode                 = %d", bank_mode), VERBOSE);
+        debug.display($sformatf("samples sent with rand_valid = %d", in_valid_rand), VERBOSE);
         // The second argument of check_results is if it's okay for there to
         // be missing samples that weren't stored.
         // When data_in.valid is randomly toggled on and off and enough samples
@@ -206,7 +206,7 @@ initial begin
     end
   end
 
-  dbg.finish();
+  debug.finish();
 end
 
 endmodule
@@ -215,7 +215,7 @@ endmodule
 `timescale 1ns / 1ps
 module sample_buffer_bank_test ();
 
-sim_util_pkg::debug #(.VERBOSITY(DEFAULT)) dbg = new; // printing, error tracking
+sim_util_pkg::debug #(.VERBOSITY(DEFAULT)) debug = new; // printing, error tracking
 
 logic clk = 0;
 localparam CLK_RATE_HZ = 100_000_000;
@@ -274,17 +274,17 @@ task check_results();
   // pop first sample received since it is intended to be overwritten in
   // multibank buffer
   data_received.pop_back();
-  dbg.display($sformatf("data_sent.size() = %0d", data_sent.size()), VERBOSE);
-  dbg.display($sformatf("data_received.size() = %0d", data_received.size()), VERBOSE);
+  debug.display($sformatf("data_sent.size() = %0d", data_sent.size()), VERBOSE);
+  debug.display($sformatf("data_received.size() = %0d", data_received.size()), VERBOSE);
   if ((data_sent.size() + 1) != data_received.size()) begin
-    dbg.error($sformatf(
+    debug.error($sformatf(
       "mismatch in amount of sent/received data (sent %0d, received %0d)",
       data_sent.size() + 1,
       data_received.size())
     );
   end
   if (data_received[$] != data_sent.size()) begin
-    dbg.error($sformatf(
+    debug.error($sformatf(
       "incorrect sample count reported by buffer (sent %0d, reported %0d)",
       data_sent.size(),
       data_received[$])
@@ -294,7 +294,7 @@ task check_results();
   while (data_sent.size() > 0 && data_received.size() > 0) begin
     // data from channel 0 can be reordered with data from channel 2
     if (data_sent[$] != data_received[$]) begin
-      dbg.error($sformatf(
+      debug.error($sformatf(
         "data mismatch error (received %x, sent %x)",
         data_received[$],
         data_sent[$])
@@ -306,7 +306,7 @@ task check_results();
 endtask
 
 initial begin
-  dbg.display("### testing sample_buffer_bank ###", DEFAULT);
+  debug.display("### testing sample_buffer_bank ###", DEFAULT);
   reset <= 1'b1;
   start <= 1'b0;
   stop <= 1'b0;
@@ -328,7 +328,7 @@ initial begin
   @(posedge clk);
   stop <= 1'b0;
   data_out.do_readout(clk, 1'b1, 100000);
-  dbg.display("checking results for test with a few samples", VERBOSE);
+  debug.display("checking results for test with a few samples", VERBOSE);
   check_results();
   // do more tests
 
@@ -345,7 +345,7 @@ initial begin
   @(posedge clk);
   stop <= 1'b0;
   data_out.do_readout(clk, 1'b1, 1000);
-  dbg.display("checking results for test with one sample", VERBOSE);
+  debug.display("checking results for test with one sample", VERBOSE);
   check_results();
 
   // test with no samples
@@ -360,7 +360,7 @@ initial begin
   @(posedge clk);
   stop <= 1'b0;
   data_out.do_readout(clk, 1'b1, 1000);
-  dbg.display("checking results for test with no samples", VERBOSE);
+  debug.display("checking results for test with no samples", VERBOSE);
   check_results();
 
   // fill up buffer
@@ -378,10 +378,10 @@ initial begin
   @(posedge clk);
   stop <= 1'b0;
   data_out.do_readout(clk, 1'b1, 100000);
-  dbg.display("checking results for test with 1024 samples (full buffer)", VERBOSE);
+  debug.display("checking results for test with 1024 samples (full buffer)", VERBOSE);
   check_results();
   repeat (500) @(posedge clk);
-  dbg.finish();
+  debug.finish();
 end
 
 endmodule

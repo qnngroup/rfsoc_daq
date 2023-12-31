@@ -8,7 +8,7 @@ import sim_util_pkg::*;
 `timescale 1ns / 1ps
 module axis_channel_mux_test ();
 
-sim_util_pkg::debug #(.VERBOSITY(DEFAULT)) dbg = new; // printing, error tracking
+sim_util_pkg::debug #(.VERBOSITY(DEFAULT)) debug = new; // printing, error tracking
 
 logic clk = 0;
 localparam CLK_RATE_HZ = 100_000_000;
@@ -76,25 +76,25 @@ end
 
 task check_results();
   for (int out_channel = 0; out_channel < CHANNELS; out_channel++) begin
-    dbg.display($sformatf(
+    debug.display($sformatf(
       "checking results for channel %d",
       out_channel),
       VERBOSE
     );
-    dbg.display($sformatf(
+    debug.display($sformatf(
       "received[%0d].size() = %0d",
       out_channel,
       received[out_channel].size()),
       VERBOSE
     );
-    dbg.display($sformatf(
+    debug.display($sformatf(
       "expected[%0d].size() = %0d",
       out_channel,
       expected[out_channel].size()),
       VERBOSE
     );
     if (received[out_channel].size() != expected[out_channel].size()) begin
-      dbg.error($sformatf(
+      debug.error($sformatf(
         "mismatched sizes for channel %0d; got %0d samples, expected %0d samples",
         out_channel,
         received[out_channel].size(),
@@ -103,7 +103,7 @@ task check_results();
     end
     while (received[out_channel].size() > 0 && expected[out_channel].size() > 0) begin
       if (expected[out_channel][$] !== received[out_channel][$]) begin
-        dbg.error($sformatf(
+        debug.error($sformatf(
           "mismatch: got %x, expected %x",
           received[out_channel][$],
           expected[out_channel][$])
@@ -116,7 +116,7 @@ task check_results();
 endtask
 
 initial begin
-  dbg.display("### testing axis_channel_mux ###", DEFAULT);
+  debug.display("### testing axis_channel_mux ###", DEFAULT);
   reset <= 1'b1;
   config_in.data <= '0;
   config_in.valid <= 1'b0;
@@ -140,7 +140,7 @@ initial begin
     repeat (5) @(posedge clk);
     check_results();
   end
-  dbg.finish();
+  debug.finish();
 end
 
 endmodule

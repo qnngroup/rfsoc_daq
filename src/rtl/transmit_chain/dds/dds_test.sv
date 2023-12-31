@@ -24,8 +24,8 @@ localparam LUT_DEPTH = 2**LUT_ADDR_BITS;
 typedef logic signed [OUTPUT_WIDTH-1:0] sample_t;
 typedef logic [PHASE_BITS-1:0] phase_t;
 
-sim_util_pkg::generic #(sample_t) util; // abs, max functions on sample_t
-sim_util_pkg::debug #(.VERBOSITY(DEFAULT)) dbg = new; // printing, error tracking
+sim_util_pkg::math #(sample_t) math; // abs, max functions on sample_t
+sim_util_pkg::debug #(.VERBOSITY(DEFAULT)) debug = new; // printing, error tracking
 
 logic reset;
 logic clk = 0;
@@ -82,7 +82,7 @@ task automatic check_output(inout phase_t phase, input phase_t phase_inc, input 
   sample_t expected;
   int count;
   count = 0;
-  dbg.display($sformatf(
+  debug.display($sformatf(
     "checking output with initial phase %x, phase_inc %x, phase_inc_prev %x",
     phase,
     phase_inc,
@@ -91,15 +91,15 @@ task automatic check_output(inout phase_t phase, input phase_t phase_inc, input 
   );
   while (received.size() > 0) begin
     expected = sample_t'($floor((2**(OUTPUT_WIDTH-1) - 0.5)*$cos(2*PI/real'(2**PHASE_BITS)*real'(phase))-0.5));
-    if (util.abs(received[$] - expected) > 4'hf) begin
-      dbg.error($sformatf(
+    if (math.abs(received[$] - expected) > 4'hf) begin
+      debug.error($sformatf(
         "mismatched sample value for phase = %x: expected %x got %x",
         phase,
         expected,
         received[$])
       );
     end
-    dbg.display($sformatf(
+    debug.display($sformatf(
       "got phase/sample pair: %x, %x",
       phase,
       received[$]),
@@ -118,7 +118,7 @@ task automatic check_output(inout phase_t phase, input phase_t phase_inc, input 
 endtask
 
 initial begin
-  dbg.display("### testing dds signal generator ###", DEFAULT);
+  debug.display("### testing dds signal generator ###", DEFAULT);
   reset <= 1'b1;
   cos_out.ready <= 1'b0;
   phase <= '0;
@@ -147,7 +147,7 @@ initial begin
     repeat (100) @(posedge clk);
     cos_out.ready <= 1'b0;
     repeat (100) @(posedge clk);
-    dbg.display($sformatf(
+    debug.display($sformatf(
       "checking behavior for freq = %0d Hz",
       freqs[i]),
       VERBOSE
@@ -155,7 +155,7 @@ initial begin
     check_output(phase, phase_inc, phase_inc_prev);
     phase_inc_prev <= phase_inc;
   end
-  dbg.finish();
+  debug.finish();
 end
 
 endmodule

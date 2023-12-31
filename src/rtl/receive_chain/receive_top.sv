@@ -12,20 +12,51 @@ module receive_top #(
   parameter int APPROX_CLOCK_WIDTH = 48 // requested width of timestamp
 ) (
   // signals in RFADC clock domain (256MHz)
-  input wire adc_clk, adc_reset,
+  input wire clk, reset,
   // data pipeline
   Axis_Parallel_If.Slave_Realtime adc_data_in,
-
-  // clock domain for DMA interface and register map
-  input wire ps_clk, ps_reset,
-  // data pipeline
   Axis_If.Master_Full dma_data_out,
   // configuration registers
   Axis_If.Slave_Realtime sample_discriminator_config,
   Axis_If.Slave_Realtime buffer_config,
   Axis_If.Slave_Realtime channel_mux_config,
-  Axis_If.Slave_Realtime lmh6401_gain_config
+  // output register
+  Axis_If.Master_Realtime buffer_timestamp_width
 );
+
+// multiplexer takes in physical ADC channels + differentiator outputs and
+// produces
+Axis_Parallel_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES), .CHANNELS(CHANNELS)) mux_input ();
+
+genvar channel;
+generate
+  for (channel = 0; channel < CHANNELS; channel++) begin
+    // connect ADC outputs to lower CHANNELS inputs of channel mux
+    assign mux_input.data[channel] = adc_data_in.data[channel];
+    assign mux_input.valid[channel] = adc_data_in.valid[channel];
+
+    // instantiate and connect differentiator
+    Axis_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES)) differentiator_input ();
+    Axis_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES)) differentiator_output ();
+
+    assign differentiator_input.data = adc_data_in.data[channel];
+    assign differentiator_input.valid = adc_data_in.valid[channel];
+    // differentiator_input.ready is ignored, since we're not applying backpressure
+    assign mux_input.data[CHANNELS + channel] = differentiator_output.data;
+    assign mux_input.valid[CHANNELS + channel] = differentiator_output.valid;
+    assign differentiator_output.ready = 1'b1;
+
+    axis_differentiator #(
+      .SAMPLE_WIDTH(SAMPLE_WIDTH),
+      .PARALLEL_SAMPLES(PARALLEL_SAMPLES)
+    ) differentiator_i (
+      .clk,
+      .reset,
+      .data_in(differentiator_input),
+      .data_out(differentiator_output)
+    );
+  end
+endgenerate
 
 axis_channel_mux #(
   .PARALLEL_SAMPLES(PARALLEL_SAMPLES),
@@ -33,13 +64,33 @@ axis_channel_mux #(
   .CHANNELS(CHANNELS),
   .FUNCTIONS_PER_CHANNEL(1)
 ) channel_mux_i (
-  .clk(adc_clk),
-  .reset(adc_reset),
+  .clk,
+  .reset,
   .data_in(adc_data_in),
-  .config_in(sync_channel_mux_config)
+  .data_out(logical_channels),
+  .config_in(channel_mux_config)
 );
 
-// synchronize configuration registers
+logic [31:0] timestamp_width;
+assign buffer_timestamp_width.data = timestamp_width;
+assign buffer_timestamp_width.valid = 1'b1;
 
+sparse_sample_buffer #(
+  .CHANNELS(CHANNELS),
+  .TSTAMP_BUFFER_DEPTH(TSTAMP_BUFFER_DEPTH),
+  .DATA_BUFFER_DEPTH(DATA_BUFFER_DEPTH),
+  .AXI_MM_WIDTH(AXI_MM_WIDTH),
+  .PARALLEL_SAMPLES(PARALLEL_SAMPLES),
+  .SAMPLE_WIDTH(SAMPLE_WIDTH),
+  .APPROX_CLOCK_WIDTH(APPROX_CLOCK_WIDTH)
+) buffer_i (
+  .clk,
+  .reset,
+  .timestamp_width,
+  .data_in(logical_channels),
+  .data_out(dma_data_out),
+  .discriminator_config_in(sample_discriminator_config),
+  .buffer_config_in(buffer_config)
+);
 
 endmodule

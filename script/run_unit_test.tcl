@@ -22,8 +22,8 @@ foreach module $argv {
     lappend failing_modules $module
   } else {
     run all
-    if {[get_value -radix unsigned /$module/dbg.error_count]} {
-      incr error_count [get_value -radix unsigned /$module/dbg.error_count]
+    if {[get_value -radix unsigned /$module/debug.error_count]} {
+      incr error_count [get_value -radix unsigned /$module/debug.error_count]
       lappend failing_modules $module
     }
   }

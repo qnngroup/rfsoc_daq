@@ -9,7 +9,7 @@ import sim_util_pkg::*;
 `timescale 1ns / 1ps
 module lmh6401_spi_test();
 
-sim_util_pkg::debug #(.VERBOSITY(DEFAULT)) dbg = new; // printing, error tracking
+sim_util_pkg::debug #(.VERBOSITY(DEFAULT)) debug = new; // printing, error tracking
 
 logic clk = 0;
 localparam CLK_RATE_HZ = 100_000_000;
@@ -20,13 +20,12 @@ logic reset;
 localparam NUM_CHANNELS = 4;
 
 Axis_If #(.DWIDTH($clog2(NUM_CHANNELS) + 16)) command_in ();
+SPI_Parallel_If #(.CHANNELS(NUM_CHANNELS)) spi ();
 
 logic [$clog2(NUM_CHANNELS)-1:0] addr_in;
 logic [15:0] data_in;
 assign command_in.data = {addr_in, data_in};
-logic [NUM_CHANNELS-1:0] cs_n;
-logic sck, sck_d;
-logic sdi;
+logic sck_d;
 
 bit sent [NUM_CHANNELS][$];
 bit received [NUM_CHANNELS][$];
@@ -35,11 +34,11 @@ task automatic check_single_cs_active();
   bit active;
   active = 0;
   for (int channel = 0; channel < NUM_CHANNELS; channel++) begin
-    if (cs_n[channel] === 0) begin
+    if (spi.cs_n[channel] === 0) begin
       if (active) begin
-        dbg.error($sformatf(
+        debug.error($sformatf(
           "multiple CS_N active at the same time: cs_n = %b",
-          cs_n)
+          spi.cs_n)
         );
       end else begin
         active = 1;
@@ -49,7 +48,7 @@ task automatic check_single_cs_active();
 endtask
 
 always @(posedge clk) begin
-  sck_d <= sck;
+  sck_d <= spi.sck;
   if (reset) begin
     {addr_in, data_in} <= '0;
   end else begin
@@ -64,10 +63,10 @@ always @(posedge clk) begin
       end
     end
     for (int channel = 0; channel < NUM_CHANNELS; channel++) begin
-      if (cs_n[channel] === 0) begin
-        if (sck & (~sck_d)) begin
+      if (spi.cs_n[channel] === 0) begin
+        if (spi.sck & (~sck_d)) begin
           // only save data on rising clock edge
-          received[channel].push_front(sdi);
+          received[channel].push_front(spi.sdi);
         end
       end
     end
@@ -78,20 +77,20 @@ end
 
 task check_results();
   for (int channel = 0; channel < NUM_CHANNELS; channel++) begin
-    dbg.display($sformatf(
+    debug.display($sformatf(
       "received[%0d].size() = %0d",
       channel,
       received[channel].size()),
       VERBOSE
     );
-    dbg.display($sformatf(
+    debug.display($sformatf(
       "sent[%0d].size() = %0d",
       channel,
       sent[channel].size()),
       VERBOSE
     );
     if (received[channel].size() != sent[channel].size()) begin
-      dbg.error($sformatf(
+      debug.error($sformatf(
         "mismatched sizes for channel %0d; got %0d samples, expected %0d",
         channel,
         received[channel].size(),
@@ -100,7 +99,7 @@ task check_results();
     end
     while (received[channel].size() > 0 && sent[channel].size() > 0) begin
       if (sent[channel][$] !== received[channel][$]) begin
-        dbg.error($sformatf(
+        debug.error($sformatf(
           "mismatch on channel %0d: got %x, expected %x",
           channel,
           received[channel][$],
@@ -120,13 +119,11 @@ lmh6401_spi #(
 ) dut_i (
   .clk, .reset,
   .command_in,
-  .cs_n,
-  .sck,
-  .sdi
+  .spi
 );
 
 initial begin
-  dbg.display("### running test for lmh6401_spi ###", DEFAULT);
+  debug.display("### running test for lmh6401_spi ###", DEFAULT);
   reset <= 1'b1;
   command_in.valid <= '0;
   repeat (500) @(posedge clk);
@@ -138,16 +135,16 @@ initial begin
     @(posedge clk);
     if (command_in.ok) begin
       // wait 16 cycles of SCK
-      repeat (16) @(negedge sck);
+      repeat (16) @(negedge spi.sck);
     end
     while (!command_in.ready) @(posedge clk);
   end
   command_in.valid <= 1'b0;
-  repeat (16) @(negedge sck);
+  repeat (16) @(negedge spi.sck);
   while (!command_in.ready) @(posedge clk);
   repeat (100) @(posedge clk);
   check_results();
-  dbg.finish();
+  debug.finish();
 end
 
 endmodule

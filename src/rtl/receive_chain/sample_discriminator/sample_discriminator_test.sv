@@ -14,7 +14,7 @@ import sim_util_pkg::*;
 `timescale 1ns / 1ps
 module sample_discriminator_test();
 
-sim_util_pkg::debug #(.VERBOSITY(DEFAULT)) dbg = new; // printing, error tracking
+sim_util_pkg::debug #(.VERBOSITY(DEFAULT)) debug = new; // printing, error tracking
 
 logic clk = 0;
 localparam CLK_RATE_HZ = 100_000_000;
@@ -97,26 +97,26 @@ task check_results (
 );
   for (int i = 0; i < N_CHANNELS; i++) begin
     // process each channel, first check that we received an appropriate amount of data
-    dbg.display($sformatf(
+    debug.display($sformatf(
       "data_sent[%0d].size() = %0d",
       i,
       data_sent[i].size()),
       VERBOSE 
     );
-    dbg.display($sformatf(
+    debug.display($sformatf(
       "data_received[%0d].size() = %0d",
       i,
       data_received[i].size()),
       VERBOSE
     );
-    dbg.display($sformatf(
+    debug.display($sformatf(
       "timestamps_received[%0d].size() = %0d",
       i,
       timestamps_received[i].size()),
       VERBOSE
     );
     if (data_sent[i].size() < data_received[i].size()) begin
-      dbg.error("more data received than sent. this is not possible");
+      debug.error("more data received than sent. this is not possible");
     end
 
     // now process the sent/received data to check the timestamps and check for any mismatched data
@@ -126,7 +126,7 @@ task check_results (
           // new high, we should get a timestamp
           if (timestamps_received[i].size() > 0) begin
             if (timestamps_received[i][$] != {timer[i], sample_index[i]}) begin
-              dbg.error($sformatf(
+              debug.error($sformatf(
                 "mismatched timestamp: got %x, expected %x",
                 timestamps_received[i][$],
                 {timer[i], sample_index[i]})
@@ -134,7 +134,7 @@ task check_results (
             end
             timestamps_received[i].pop_back();
           end else begin
-            dbg.error($sformatf(
+            debug.error($sformatf(
               "expected a timestamp (with value %x), but no more timestamps left",
               {timer[i], sample_index[i]})
             );
@@ -146,7 +146,7 @@ task check_results (
       end
       if (is_high[i]) begin
         if (data_sent[i][$] != data_received[i][$]) begin
-          dbg.error($sformatf(
+          debug.error($sformatf(
             "mismatched data: got %x, expected %x",
             data_received[i][$],
             data_sent[i][$])
@@ -158,20 +158,20 @@ task check_results (
       data_sent[i].pop_back();
       timer[i] = timer[i] + 1'b1;
     end
-    dbg.display("after processing:", VERBOSE);
-    dbg.display($sformatf(
+    debug.display("after processing:", VERBOSE);
+    debug.display($sformatf(
       "data_sent[%0d].size() = %0d",
       i,
       data_sent[i].size()),
       VERBOSE
     );
-    dbg.display($sformatf(
+    debug.display($sformatf(
       "data_received[%0d].size() = %0d",
       i,
       data_received[i].size()),
       VERBOSE
     );
-    dbg.display($sformatf(
+    debug.display($sformatf(
       "timestamps_received[%0d].size() = %0d",
       i,
       timestamps_received[i].size()),
@@ -185,7 +185,7 @@ logic [N_CHANNELS-1:0][SAMPLE_INDEX_WIDTH-1:0] sample_index;
 logic [N_CHANNELS-1:0] is_high;
 
 initial begin
-  dbg.display("### testing sample discriminator ###", DEFAULT);
+  debug.display("### testing sample discriminator ###", DEFAULT);
   reset <= 1'b1;
   for (int i = 0; i < N_CHANNELS; i++) begin
     data_range_low[i] <= '0;
@@ -218,8 +218,8 @@ initial begin
     repeat (50) @(posedge clk);
     data_in.send_samples(clk, 10, 1'b0, 1'b1, 1'b1);
     repeat (50) @(posedge clk);
-    dbg.display("testing run with all data above thresholds", VERBOSE);
-    dbg.display("first sample will be zero", VERBOSE);
+    debug.display("testing run with all data above thresholds", VERBOSE);
+    debug.display("first sample will be zero", VERBOSE);
     check_results(threshold_low, threshold_high, timer, sample_index, is_high);
     
     // send a bunch of data, some below and some above the threshold on channel 0
@@ -236,8 +236,8 @@ initial begin
     repeat (50) @(posedge clk);
     data_in.send_samples(clk, 100, 1'b0, 1'b1, 1'b1);
     repeat (50) @(posedge clk);
-    dbg.display("testing run with channel 0 straddling thresholds", VERBOSE);
-    dbg.display("and channel 1 above thresholds", VERBOSE);
+    debug.display("testing run with channel 0 straddling thresholds", VERBOSE);
+    debug.display("and channel 1 above thresholds", VERBOSE);
     check_results(threshold_low, threshold_high, timer, sample_index, is_high);
 
     // send a bunch of data below the threshold
@@ -255,7 +255,7 @@ initial begin
     repeat (50) @(posedge clk);
     data_in.send_samples(clk, 400, 1'b0, 1'b1, 1'b1);
     repeat (50) @(posedge clk);
-    dbg.display("testing run with all data below thresholds", VERBOSE);
+    debug.display("testing run with all data below thresholds", VERBOSE);
     check_results(threshold_low, threshold_high, timer, sample_index, is_high);
 
     // send a bunch of data close to the threshold
@@ -273,7 +273,7 @@ initial begin
     repeat (50) @(posedge clk);
     data_in.send_samples(clk, 400, 1'b0, 1'b1, 1'b1);
     repeat (50) @(posedge clk);
-    dbg.display("testing run with both channels straddling thresholds", VERBOSE);
+    debug.display("testing run with both channels straddling thresholds", VERBOSE);
     check_results(threshold_low, threshold_high, timer, sample_index, is_high);
 
     // reset state of counter and is_high
@@ -287,7 +287,7 @@ initial begin
     repeat (10) @(posedge clk);
   end
 
-  dbg.finish();
+  debug.finish();
 
 end
 
