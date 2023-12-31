@@ -14,7 +14,7 @@ package sample_discriminator_pkg;
     // helper function to check if any of the parallel samples are above the high threshold
     // needed to replicate the behavior of the sample discriminator which starts saving
     // samples as soon as a sample arrives which is above the high threshold
-    function logic any_above_high (
+    static function logic any_above_high (
       input logic [SAMPLE_WIDTH*PARALLEL_SAMPLES-1:0] samples_in,
       input logic [SAMPLE_WIDTH-1:0] threshold_high
     );
@@ -30,7 +30,7 @@ package sample_discriminator_pkg;
     // needed to replicate the behavior of the sample discriminator which stops saving
     // samples once all the samples it receives in a single clock cycle are below
     // the low threshold
-    function logic all_below_low (
+    static function logic all_below_low (
       input logic [SAMPLE_WIDTH*PARALLEL_SAMPLES-1:0] samples_in,
       input logic [SAMPLE_WIDTH-1:0] threshold_low
     );

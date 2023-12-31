@@ -1,15 +1,28 @@
 // sparse_sample_buffer_pkg.sv - Reed Foster
 // package with a class for parsing the sparse sample buffer output
 
+import sim_util_pkg::*;
+import sample_discriminator_pkg::*;
 
 package sparse_sample_buffer_pkg;
 
   class util #(
     parameter int AXI_MM_WIDTH = 128,
     parameter int TIMESTAMP_WIDTH = 64,
-    parameter int DATA_WIDTH = 256,
+    parameter int SAMPLE_WIDTH = 16,
+    parameter int PARALLEL_SAMPLES = 16,
+    parameter int DATA_BUFFER_DEPTH = 1024,
     parameter int CHANNELS = 8
   );
+
+    localparam int SAMPLE_INDEX_WIDTH = $clog2(DATA_BUFFER_DEPTH*CHANNELS);
+    localparam int DATA_WIDTH = SAMPLE_WIDTH*PARALLEL_SAMPLES;
+
+    // util for functions any_above_high and all_below_low for comparing data to thresholds
+    sample_discriminator_pkg::util #(
+      .SAMPLE_WIDTH(SAMPLE_WIDTH),
+      .PARALLEL_SAMPLES(PARALLEL_SAMPLES)
+    ) disc_util;
 
     task automatic parse_buffer_output (
       inout logic [AXI_MM_WIDTH-1:0] buffer_output [$],
@@ -102,6 +115,181 @@ package sparse_sample_buffer_pkg;
         end
       end
 
+    endtask
+
+    task automatic check_timestamps_and_data (
+      inout sim_util_pkg::debug debug,
+      input int banking_mode,
+      input logic [CHANNELS-1:0][SAMPLE_WIDTH-1:0] threshold_high,
+      input logic [CHANNELS-1:0][SAMPLE_WIDTH-1:0] threshold_low,
+      inout logic [CHANNELS-1:0][TIMESTAMP_WIDTH-SAMPLE_INDEX_WIDTH-1:0] timer,
+      inout logic [TIMESTAMP_WIDTH-1:0] timestamps [CHANNELS][$],
+      inout logic [DATA_WIDTH-1:0] samples [CHANNELS][$],
+      inout logic [DATA_WIDTH-1:0] data_sent [CHANNELS][$]
+    );
+      // signals for checking correct operation of the DUT
+      logic is_high;
+      logic [SAMPLE_INDEX_WIDTH-1:0] sample_index;
+     
+      // Make sure the correct number of samples and timestamps were received, and
+      // that the hysteresis tracking worked correctly (i.e. no samples above the
+      // high threshold were missed, and no samples below the low threshold passed
+      // through, as well as no missing samples that were above the low threshold
+      // and appeared after a sample that was above the high threshold).
+
+      // first check that we didn't get any extra samples or timestamps
+      for (int channel = 1 << banking_mode; channel < CHANNELS; channel++) begin
+        if (timestamps[channel].size() > 0) begin
+          debug.error($sformatf(
+            "received too many timestamps for channel %0d with banking mode %0d (got %0d, expected 0)",
+            channel,
+            banking_mode,
+            timestamps[channel].size()
+          ));
+        end
+        while (timestamps[channel].size() > 0) timestamps[channel].pop_back();
+        if (samples[channel].size() > 0) begin
+          debug.error($sformatf(
+            "received too many samples for channel %0d with banking mode %0d (got %0d, expected 0)",
+            channel,
+            banking_mode,
+            samples[channel].size()
+          ));
+        end
+        while (samples[channel].size() > 0) samples[channel].pop_back();
+        // clean up data sent
+        debug.display($sformatf(
+          "removing %0d samples from data_sent[%0d]",
+          data_sent[channel].size(),
+          channel
+        ), sim_util_pkg::VERBOSE);
+        while (data_sent[channel].size() > 0) begin
+          data_sent[channel].pop_back();
+          timer[channel] = timer[channel] + 1'b1;
+        end
+      end
+
+      for (int channel = 0; channel < (1 << banking_mode); channel++) begin
+        // report timestamp/sample queue sizes
+        debug.display($sformatf(
+          "timestamps[%0d].size() = %0d",
+          channel,
+          timestamps[channel].size()
+        ), sim_util_pkg::VERBOSE);
+        debug.display($sformatf(
+          "samples[%0d].size() = %0d",
+          channel,
+          samples[channel].size()
+        ), sim_util_pkg::VERBOSE);
+        if (samples[channel].size() > data_sent[channel].size()) begin
+          debug.error($sformatf(
+            "too many samples for channel %0d with banking mode %0d: got %0d, expected at most %0d",
+            channel,
+            banking_mode,
+            samples[channel].size(),
+            data_sent[channel].size()
+          ));
+        end
+        /////////////////////////////
+        // check all the samples
+        /////////////////////////////
+        // The sample counter and hysteresis tracking of the sample discriminator
+        // are reset before each trial. Therefore is_high is reset.
+        is_high = 0;
+        sample_index = 0; // index of sample in received samples buffer
+        while (data_sent[channel].size() > 0) begin
+          debug.display($sformatf(
+            "processing sample %0d from channel %0d: samp = %0x, timer = %0x",
+            data_sent[channel].size(),
+            channel,
+            data_sent[channel][$],
+            timer[channel]
+          ), sim_util_pkg::DEBUG);
+          if (disc_util.any_above_high(data_sent[channel][$], threshold_high[channel])) begin
+            debug.display($sformatf(
+              "%x contains a sample greater than %x",
+              data_sent[channel][$],
+              threshold_high[channel]
+            ), sim_util_pkg::DEBUG);
+            if (!is_high) begin
+              // new sample, should get a timestamp
+              if (timestamps[channel].size() > 0) begin
+                if (timestamps[channel][$] !== {timer[channel], sample_index}) begin
+                  debug.error($sformatf(
+                    "mismatched timestamp: got %x, expected %x",
+                    timestamps[channel][$],
+                    {timer[channel], sample_index}
+                  ));
+                end
+                timestamps[channel].pop_back();
+              end else begin
+                debug.error($sformatf(
+                  "expected a timestamp (with value %x), but no more timestamps left",
+                  {timer[channel], sample_index}
+                ));
+              end
+            end
+            is_high = 1'b1;
+          end else if (disc_util.all_below_low(data_sent[channel][$], threshold_low[channel])) begin
+            is_high = 1'b0;
+          end
+          if (is_high) begin
+            if (data_sent[channel][$] !== samples[channel][$]) begin
+              debug.error($sformatf(
+                "mismatched data: got %x, expected %x",
+                samples[channel][$],
+                data_sent[channel][$]
+              ));
+            end
+            samples[channel].pop_back();
+            sample_index = sample_index + 1'b1;
+          end
+          data_sent[channel].pop_back();
+          timer[channel] = timer[channel] + 1'b1;
+        end
+        // check to make sure we didn't miss any data
+        if (timestamps[channel].size() > 0) begin
+          debug.error($sformatf(
+            "too many timestamps leftover for channel %0d with banking mode %0d (got %0d, expected 0)",
+            channel,
+            banking_mode,
+            timestamps[channel].size()
+          ));
+        end
+        // flush out remaining timestamps
+        while (timestamps[channel].size() > 0) begin
+          debug.display($sformatf(
+            "extra timestamp %x",
+            timestamps[channel].pop_back()
+          ), sim_util_pkg::DEBUG);
+        end
+        if (samples[channel].size() > 0) begin
+          debug.error($sformatf(
+            "too many samples leftover for channel %0d with banking mode %0d (got %0d, expected 0)",
+            channel,
+            banking_mode,
+            samples[channel].size()
+          ));
+        end
+        // flush out remaining samples
+        while (samples[channel].size() > 0) begin
+          debug.display($sformatf(
+            "extra sample %x",
+            samples[channel].pop_back()
+          ), sim_util_pkg::DEBUG);
+        end
+        // should not be any leftover data_sent samples, since the while loop
+        // won't terminate until data_sent[channel] is empty. therefore don't
+        // bother checking
+      end
+      for (int channel = 0; channel < CHANNELS; channel++) begin
+        debug.display($sformatf(
+          "timer[%0d] = %0d (0x%x)",
+          channel,
+          timer[channel],
+          timer[channel]
+        ), sim_util_pkg::DEBUG);
+      end
     endtask
   endclass
 
