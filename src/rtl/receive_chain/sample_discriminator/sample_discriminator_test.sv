@@ -10,6 +10,7 @@
 // saved; i.e. it tests for the correct hysteresis behavior).
 
 import sim_util_pkg::*;
+import sample_discriminator_pkg::*;
 
 `timescale 1ns / 1ps
 module sample_discriminator_test();
@@ -28,7 +29,7 @@ localparam int PARALLEL_SAMPLES = 4;
 localparam int SAMPLE_INDEX_WIDTH = 14;
 localparam int CLOCK_WIDTH = 50;
 
-sim_util_pkg::sample_discriminator_util #(.SAMPLE_WIDTH(SAMPLE_WIDTH), .PARALLEL_SAMPLES(PARALLEL_SAMPLES)) util;
+sample_discriminator_pkg::util #(.SAMPLE_WIDTH(SAMPLE_WIDTH), .PARALLEL_SAMPLES(PARALLEL_SAMPLES)) util;
 
 Axis_If #(.DWIDTH(N_CHANNELS*SAMPLE_WIDTH*2)) config_in();
 Axis_Parallel_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES), .CHANNELS(N_CHANNELS)) data_in();
