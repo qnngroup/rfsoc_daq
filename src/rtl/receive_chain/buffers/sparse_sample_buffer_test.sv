@@ -11,7 +11,7 @@ import sample_discriminator_pkg::*;
 module sparse_sample_buffer_test ();
 
 sim_util_pkg::math #(int) math; // abs, max functions on integers
-sim_util_pkg::debug #(.VERBOSITY(DEFAULT)) debug = new; // printing, error tracking
+sim_util_pkg::debug debug = new(DEFAULT); // printing, error tracking
 
 logic clk = 0;
 localparam CLK_RATE_HZ = 100_000_000;

@@ -20,15 +20,19 @@ package sim_util_pkg;
 
   typedef enum {DEFAULT=0, VERBOSE=1, DEBUG=2} verbosity_t;
 
-  class debug #(
-    parameter verbosity_t VERBOSITY = DEFAULT
-  );
-    
-    int error_count = 0;
+  class debug;
 
-    task display(input string message, input verbosity_t verbosity);
-      if (VERBOSITY >= verbosity) begin
-        unique case (verbosity)
+    verbosity_t verbosity;
+    int error_count;
+
+    function new (verbosity_t v);
+      verbosity = v;
+      error_count = 0;
+    endfunction
+
+    task display(input string message, input verbosity_t message_verbosity);
+      if (verbosity >= message_verbosity) begin
+        unique case (message_verbosity)
           DEFAULT:  $display("%s", message);
           VERBOSE:  $display("  %s", message);
           DEBUG:    $display("    %s", message);

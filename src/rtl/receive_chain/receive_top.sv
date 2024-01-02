@@ -26,7 +26,7 @@ module receive_top #(
 
 // multiplexer takes in physical ADC channels + differentiator outputs and
 // produces logical channels
-Axis_Parallel_If #(.DWIDTH(2*SAMPLE_WIDTH*PARALLEL_SAMPLES), .CHANNELS(CHANNELS)) mux_input ();
+Axis_Parallel_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES), .CHANNELS(2*CHANNELS)) mux_input ();
 Axis_Parallel_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES), .CHANNELS(CHANNELS)) logical_channels ();
 
 genvar channel;

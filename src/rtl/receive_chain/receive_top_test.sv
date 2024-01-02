@@ -5,9 +5,9 @@ import sim_util_pkg::*;
 import sample_discriminator_pkg::*;
 
 `timescale 1ns / 1ps
-module sparse_sample_buffer_test ();
+module receive_top_test ();
 
-sim_util_pkg::debug #(.VERBOSITY(DEFAULT)) debug = new; // printing, error tracking
+sim_util_pkg::debug debug = new(VERBOSE); // printing, error tracking
 
 logic clk = 0;
 localparam CLK_RATE_HZ = 100_000_000;
@@ -20,7 +20,7 @@ localparam int CHANNELS = 8;
 localparam int TSTAMP_BUFFER_DEPTH = 128;
 localparam int DATA_BUFFER_DEPTH = 1024;
 localparam int AXI_MM_WIDTH = 128;
-localparam int PARALLEL_SAMPLES = 16;
+localparam int PARALLEL_SAMPLES = 4;
 localparam int SAMPLE_WIDTH = 16;
 localparam int APPROX_CLOCK_WIDTH = 48;
 
@@ -34,9 +34,18 @@ localparam int MUX_SELECT_BITS = $clog2((1+FUNCTIONS_PER_CHANNEL)*CHANNELS);
 typedef logic signed [SAMPLE_WIDTH-1:0] int_t; // type for signed samples (needed to check subtraction is working properly)
 
 // util for functions any_above_high and all_below_low for comparing data to thresholds
-sample_discriminator_pkg::util #(.SAMPLE_WIDTH(SAMPLE_WIDTH), .PARALLEL_SAMPLES(PARALLEL_SAMPLES)) disc_util;
+sample_discriminator_pkg::util #(
+  .SAMPLE_WIDTH(SAMPLE_WIDTH),
+  .PARALLEL_SAMPLES(PARALLEL_SAMPLES)
+) disc_util;
 // util for parsing timestamp/sample data from buffer output
-sparse_sample_buffer_pkg::util #(.AXI_MM_WIDTH(AXI_MM_WIDTH), .TIMESTAMP_WIDTH(TIMESTAMP_WIDTH), .DATA_WIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(CHANNELS)) buf_util;
+sparse_sample_buffer_pkg::util #(
+  .AXI_MM_WIDTH(AXI_MM_WIDTH),
+  .TIMESTAMP_WIDTH(TIMESTAMP_WIDTH),
+  .SAMPLE_WIDTH(SAMPLE_WIDTH),
+  .PARALLEL_SAMPLES(PARALLEL_SAMPLES),
+  .CHANNELS(CHANNELS)
+) buf_util;
 
 // DUT data interfaces
 Axis_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(CHANNELS)) adc_data_in ();
@@ -98,22 +107,19 @@ always @(posedge clk) begin
     if (reset) begin
       adc_data_in.data[channel] <= '0;
     end else begin
-      if (data_in.valid[channel]) begin
+      if (adc_data_in.valid[channel]) begin
         // save data that was sent
-        raw_samples[channel].push_front(data_in.data[channel]);
+        raw_samples[channel].push_front(adc_data_in.data[channel]);
         for (int sample = 0; sample < PARALLEL_SAMPLES; sample++) begin
-          if ((raw_samples[channel].size() == 1) && (sample == 0)) begin
-            diff_temp[SAMPLE_WIDTH-1:0] = raw_samples[channel][0][SAMPLE_WIDTH-1:0];
-          end else begin
           if (sample == 0) begin
             if (raw_samples[channel].size() == 1) begin
+              diff_temp[SAMPLE_WIDTH-1:0] = int_t'(raw_samples[channel][0][SAMPLE_WIDTH-1:0] / 2);
             end else begin
-              diff_temp[SAMPLE_WIDTH-1:0] = int_t'(raw_samples[channel][0][SAMPLE_WIDTH-1:0]
+              diff_temp[SAMPLE_WIDTH-1:0] = int_t'((raw_samples[channel][0][SAMPLE_WIDTH-1:0] - raw_samples[channel][1][PARALLEL_SAMPLES*SAMPLE_WIDTH-1-:SAMPLE_WIDTH]) / 2);
             end
           end else begin
-            diff_temp[sample*SAMPLE_WIDTH+:SAMPLE_WIDTH] = raw_samples[channel][0]
+            diff_temp[sample*SAMPLE_WIDTH+:SAMPLE_WIDTH] = int_t'((raw_samples[channel][0][sample*SAMPLE_WIDTH+:SAMPLE_WIDTH] - raw_samples[channel][0][(sample-1)*SAMPLE_WIDTH+:SAMPLE_WIDTH]) / 2);
           end
-          differentiated_samples[channel].push_front(raw_samples[channel][0][
         end
       end
       if (adc_data_in.valid[channel] || update_input_data) begin
@@ -149,9 +155,65 @@ task stop_acq();
   capture_stop <= 1'b0;
 endtask
 
+task check_results(
+  inout logic [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0] expected [CHANNELS][$],
+  input int banking_mode,
+  input logic [CHANNELS-1:0][SAMPLE_WIDTH-1:0] threshold_high,
+  input logic [CHANNELS-1:0][SAMPLE_WIDTH-1:0] threshold_low,
+  inout logic [CHANNELS-1:0][TIMESTAMP_WIDTH-SAMPLE_INDEX_WIDTH-1:0] timer
+);
+  // checks that:
+  // - timestamps line up with when samples were sent
+  // - all inputs > threshold_high were saved and all inputs < threshold_low
+  //    were not
+  // - all samples < threshold_high that were saved arrived in sequence after
+  //    a sample > threshold_high
+
+  // data structures for organizing DMA output
+  logic [TIMESTAMP_WIDTH-1:0] timestamps [CHANNELS][$];
+  logic [SAMPLE_WIDTH*PARALLEL_SAMPLES-1:0] samples [CHANNELS][$];
+
+  // first report the size of the buffers
+  for (int i = 0; i < CHANNELS; i++) begin
+    debug.display($sformatf("expected[%0d].size() = %0d", i, expected[i].size()), VERBOSE);
+  end
+  debug.display($sformatf("data_received.size() = %0d", data_received.size()), VERBOSE);
+
+  ///////////////////////////////////////////////////////////////////
+  // organize DMA output into data structures for easier analysis
+  ///////////////////////////////////////////////////////////////////
+  buf_util.parse_buffer_output(data_received, timestamps, samples);
+  debug.display("parsed data_received:", VERBOSE);
+  for (int i = 0; i < CHANNELS; i++) begin
+    debug.display($sformatf("timestamps[%0d].size() = %0d", i, timestamps[i].size()), VERBOSE);
+    debug.display($sformatf("samples[%0d].size() = %0d", i, samples[i].size()), VERBOSE);
+  end
+
+  //////////////////////////////////////
+  // process data "like normal"
+  //////////////////////////////////////
+  buf_util.check_timestamps_and_data(
+    debug,
+    banking_mode,
+    threshold_high,
+    threshold_low,
+    timer,
+    timestamps,
+    samples,
+    expected
+  );
+
+endtask
+
+
+
 initial begin
   debug.display("### running test for receive_top ###", DEFAULT);
   reset <= 1'b1;
+  capture_start <= 1'b0;
+  capture_stop <= 1'b0;
+  banking_mode <= '0; // reset banking mode (only enable channel 0 to start)
+  timer <= '0; // reset timer for all samples
   adc_data_in.valid <= '0;
   dma_data_out.ready <= 1'b0;
   sample_discriminator_config.valid <= 1'b0;
@@ -173,47 +235,47 @@ initial begin
           unique case (amplitude_mode)
             0: begin
               // save everything
-              for (int i = 0; i < CHANNELS; i++) begin
-                data_range_low[i] <= 16'h03c0;
-                data_range_high[i] <= 16'h04ff;
-                threshold_low[i] <= 16'h0000;
-                threshold_high[i] <= 16'h0100;
+              for (int channel = 0; channel < CHANNELS; channel++) begin
+                data_range_low[channel] <= 16'h03c0;
+                data_range_high[channel] <= 16'h04ff;
+                threshold_low[channel] <= 16'h0000;
+                threshold_high[channel] <= 16'h0100;
               end
             end
             1: begin
               // send stuff straddling the threshold with strong hysteresis
-              for (int i = 0; i < CHANNELS; i++) begin
-                data_range_low[i] <= 16'h00ff;
-                data_range_high[i] <= 16'h04ff;
-                threshold_low[i] <= 16'h01c0;
-                threshold_high[i] <= 16'h0400;
+              for (int channel = 0; channel < CHANNELS; channel++) begin
+                data_range_low[channel] <= 16'h00ff;
+                data_range_high[channel] <= 16'h04ff;
+                threshold_low[channel] <= 16'h01c0;
+                threshold_high[channel] <= 16'h0400;
               end
             end
             2: begin
               // send stuff below the threshold
-              for (int i = 0; i < CHANNELS; i++) begin
-                data_range_low[i] <= 16'h0000;
-                data_range_high[i] <= 16'h01ff;
-                threshold_low[i] <= 16'h0200;
-                threshold_high[i] <= 16'h0200;
+              for (int channel = 0; channel < CHANNELS; channel++) begin
+                data_range_low[channel] <= 16'h0000;
+                data_range_high[channel] <= 16'h01ff;
+                threshold_low[channel] <= 16'h0200;
+                threshold_high[channel] <= 16'h0200;
               end
             end
             3: begin
               // send stuff straddling the threshold with weak hysteresis
-              for (int i = 0; i < CHANNELS; i++) begin
-                data_range_low[i] <= 16'h0000;
-                data_range_high[i] <= 16'h04ff;
-                threshold_low[i] <= 16'h03c0;
-                threshold_high[i] <= 16'h0400;
+              for (int channel = 0; channel < CHANNELS; channel++) begin
+                data_range_low[channel] <= 16'h0000;
+                data_range_high[channel] <= 16'h04ff;
+                threshold_low[channel] <= 16'h03c0;
+                threshold_high[channel] <= 16'h0400;
               end
             end
             4: begin
               // send stuff that mostly gets filtered out
-              for (int i = 0; i < CHANNELS; i++) begin
-                data_range_low[i] <= 16'h0000;
-                data_range_high[i] <= 16'h04ff;
-                threshold_low[i] <= 16'h03c0;
-                threshold_high[i] <= 16'h0400;
+              for (int channel = 0; channel < CHANNELS; channel++) begin
+                data_range_low[channel] <= 16'h0000;
+                data_range_high[channel] <= 16'h04ff;
+                threshold_low[channel] <= 16'h03c0;
+                threshold_high[channel] <= 16'h0400;
               end
             end
           endcase
@@ -242,9 +304,16 @@ initial begin
           debug.display($sformatf("mux_select_mode                 = %0d", mux_select_mode), VERBOSE);
           if (mux_select_mode == 0) begin
             // check with raw_samples
-            check_results(bank_mode, threshold_high, threshold_low, timer);
+            check_results(raw_samples, bank_mode, threshold_high, threshold_low, timer);
+            for (int channel = 0; channel < CHANNELS; channel++) begin
+              while (differentiated_samples[channel].size() > 0) differentiated_samples[channel].pop_back();
+            end
           end else begin
             // check with differentiated_samples
+            check_results(differentiated_samples, bank_mode, threshold_high, threshold_low, timer);
+            for (int channel = 0; channel < CHANNELS; channel++) begin
+              while (raw_samples[channel].size() > 0) raw_samples[channel].pop_back();
+            end
           end
         end
       end
