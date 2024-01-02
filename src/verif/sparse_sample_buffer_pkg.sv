@@ -125,7 +125,7 @@ package sparse_sample_buffer_pkg;
       inout logic [CHANNELS-1:0][TIMESTAMP_WIDTH-SAMPLE_INDEX_WIDTH-1:0] timer,
       inout logic [TIMESTAMP_WIDTH-1:0] timestamps [CHANNELS][$],
       inout logic [DATA_WIDTH-1:0] samples [CHANNELS][$],
-      inout logic [DATA_WIDTH-1:0] data_sent [CHANNELS][$]
+      inout logic [DATA_WIDTH-1:0] expected_samples [CHANNELS][$]
     );
       // signals for checking correct operation of the DUT
       logic is_high;
@@ -159,12 +159,12 @@ package sparse_sample_buffer_pkg;
         while (samples[channel].size() > 0) samples[channel].pop_back();
         // clean up data sent
         debug.display($sformatf(
-          "removing %0d samples from data_sent[%0d]",
-          data_sent[channel].size(),
+          "removing %0d samples from expected_samples [%0d]",
+          expected_samples[channel].size(),
           channel
         ), sim_util_pkg::VERBOSE);
-        while (data_sent[channel].size() > 0) begin
-          data_sent[channel].pop_back();
+        while (expected_samples[channel].size() > 0) begin
+          expected_samples[channel].pop_back();
           timer[channel] = timer[channel] + 1'b1;
         end
       end
@@ -181,13 +181,13 @@ package sparse_sample_buffer_pkg;
           channel,
           samples[channel].size()
         ), sim_util_pkg::VERBOSE);
-        if (samples[channel].size() > data_sent[channel].size()) begin
+        if (samples[channel].size() > expected_samples[channel].size()) begin
           debug.error($sformatf(
             "too many samples for channel %0d with banking mode %0d: got %0d, expected at most %0d",
             channel,
             banking_mode,
             samples[channel].size(),
-            data_sent[channel].size()
+            expected_samples[channel].size()
           ));
         end
         /////////////////////////////
@@ -197,18 +197,18 @@ package sparse_sample_buffer_pkg;
         // are reset before each trial. Therefore is_high is reset.
         is_high = 0;
         sample_index = 0; // index of sample in received samples buffer
-        while (data_sent[channel].size() > 0) begin
+        while (expected_samples[channel].size() > 0) begin
           debug.display($sformatf(
             "processing sample %0d from channel %0d: samp = %0x, timer = %0x",
-            data_sent[channel].size(),
+            expected_samples[channel].size(),
             channel,
-            data_sent[channel][$],
+            expected_samples[channel][$],
             timer[channel]
           ), sim_util_pkg::DEBUG);
-          if (disc_util.any_above_high(data_sent[channel][$], threshold_high[channel])) begin
+          if (disc_util.any_above_high(expected_samples[channel][$], threshold_high[channel])) begin
             debug.display($sformatf(
               "%x contains a sample greater than %x",
-              data_sent[channel][$],
+              expected_samples[channel][$],
               threshold_high[channel]
             ), sim_util_pkg::DEBUG);
             if (!is_high) begin
@@ -230,21 +230,21 @@ package sparse_sample_buffer_pkg;
               end
             end
             is_high = 1'b1;
-          end else if (disc_util.all_below_low(data_sent[channel][$], threshold_low[channel])) begin
+          end else if (disc_util.all_below_low(expected_samples[channel][$], threshold_low[channel])) begin
             is_high = 1'b0;
           end
           if (is_high) begin
-            if (data_sent[channel][$] !== samples[channel][$]) begin
+            if (expected_samples[channel][$] !== samples[channel][$]) begin
               debug.error($sformatf(
                 "mismatched data: got %x, expected %x",
                 samples[channel][$],
-                data_sent[channel][$]
+                expected_samples[channel][$]
               ));
             end
             samples[channel].pop_back();
             sample_index = sample_index + 1'b1;
           end
-          data_sent[channel].pop_back();
+          expected_samples[channel].pop_back();
           timer[channel] = timer[channel] + 1'b1;
         end
         // check to make sure we didn't miss any data
@@ -278,8 +278,8 @@ package sparse_sample_buffer_pkg;
             samples[channel].pop_back()
           ), sim_util_pkg::DEBUG);
         end
-        // should not be any leftover data_sent samples, since the while loop
-        // won't terminate until data_sent[channel] is empty. therefore don't
+        // should not be any leftover expected_samples samples, since the while loop
+        // won't terminate until expected_samples[channel] is empty. therefore don't
         // bother checking
       end
       for (int channel = 0; channel < CHANNELS; channel++) begin

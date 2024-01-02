@@ -76,6 +76,8 @@ sparse_sample_buffer #(
   .buffer_config_in
 );
 
+// allow the data to be manually updated when we change the range so the first sample for a new range isn't stale
+// this simplifies the testing
 logic update_input_data;
 logic [CHANNELS-1:0][SAMPLE_WIDTH-1:0] data_range_low, data_range_high;
 logic [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0] data_sent [CHANNELS][$];
@@ -84,18 +86,18 @@ logic [CHANNELS-1:0][TIMESTAMP_WIDTH-SAMPLE_INDEX_WIDTH-1:0] timer;
 
 // send data to DUT and save sent/received data
 always @(posedge clk) begin
-  for (int i = 0; i < CHANNELS; i++) begin
+  for (int channel = 0; channel < CHANNELS; channel++) begin
     if (reset) begin
-      data_in.data[i] <= '0;
+      data_in.data[channel] <= '0;
     end else begin
-      if (data_in.valid[i]) begin
+      if (data_in.valid[channel]) begin
         // save data that was sent
-        data_sent[i].push_front(data_in.data[i]);
+        data_sent[channel].push_front(data_in.data[channel]);
       end
-      if (data_in.valid[i] || update_input_data) begin
+      if (data_in.valid[channel] || update_input_data) begin
         // send new data
-        for (int j = 0; j < PARALLEL_SAMPLES; j++) begin
-          data_in.data[i][j*SAMPLE_WIDTH+:SAMPLE_WIDTH] <= $urandom_range(data_range_low[i], data_range_high[i]);
+        for (int sample = 0; sample < PARALLEL_SAMPLES; sample++) begin
+          data_in.data[channel][sample*SAMPLE_WIDTH+:SAMPLE_WIDTH] <= $urandom_range(data_range_low[channel], data_range_high[channel]);
         end
       end
     end

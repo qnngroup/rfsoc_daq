@@ -17,25 +17,30 @@ module receive_top #(
   Axis_Parallel_If.Slave_Realtime adc_data_in,
   Axis_If.Master_Full dma_data_out,
   // configuration registers
-  Axis_If.Slave_Realtime sample_discriminator_config,
-  Axis_If.Slave_Realtime buffer_config,
-  Axis_If.Slave_Realtime channel_mux_config,
+  Axis_If.Slave_Realtime sample_discriminator_config, // 2*CHANNELS*SAMPLE_WIDTH bits
+  Axis_If.Slave_Realtime buffer_config, // 2 + $clog2($clog2(CHANNELS) + 1) bits
+  Axis_If.Slave_Realtime channel_mux_config, // $clog2((1+FUNCTIONS_PER_CHANNEL)*CHANNELS)*CHANNELS bits
   // output register
-  Axis_If.Master_Realtime buffer_timestamp_width
+  Axis_If.Master_Realtime buffer_timestamp_width // 32 bits
 );
 
 // multiplexer takes in physical ADC channels + differentiator outputs and
-// produces
-Axis_Parallel_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES), .CHANNELS(CHANNELS)) mux_input ();
+// produces logical channels
+Axis_Parallel_If #(.DWIDTH(2*SAMPLE_WIDTH*PARALLEL_SAMPLES), .CHANNELS(CHANNELS)) mux_input ();
+Axis_Parallel_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES), .CHANNELS(CHANNELS)) logical_channels ();
 
 genvar channel;
 generate
   for (channel = 0; channel < CHANNELS; channel++) begin
+    //////////////////////////////////////////////////////////////////
     // connect ADC outputs to lower CHANNELS inputs of channel mux
+    //////////////////////////////////////////////////////////////////
     assign mux_input.data[channel] = adc_data_in.data[channel];
     assign mux_input.valid[channel] = adc_data_in.valid[channel];
 
+    //////////////////////////////////////////////////////////////////
     // instantiate and connect differentiator
+    //////////////////////////////////////////////////////////////////
     Axis_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES)) differentiator_input ();
     Axis_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES)) differentiator_output ();
 
@@ -55,6 +60,10 @@ generate
       .data_in(differentiator_input),
       .data_out(differentiator_output)
     );
+
+    //////////////////////////////////////////////////////////////////
+    // insert more math/filter blocks below for additional functions
+    //////////////////////////////////////////////////////////////////
   end
 endgenerate
 
