@@ -241,14 +241,14 @@ module sample_buffer_bank #(
   output logic full, first
 );
 
-enum {IDLE, CAPTURE, POSTCAPTURE, PRETRANSFER, TRANSFER} state;
+enum {IDLE, CAPTURE, SEND_ID, SEND_NUM_SAMPLES, SEND_SAMPLES} state;
 // IDLE: wait for start (either from user or from previous bank filling up in
 // a high-memory, low-channel count banking mode)
 // CAPTURE: save samples until full or until stop is supplied
-// POSTCAPTURE: output an empty sample (to be overwritten by
+// SEND_ID: output an empty sample (to be overwritten by
 // sample_buffer with the channel index)
-// PRETRANSFER: output number of captured samples
-// TRANSFER: output samples
+// SEND_NUM_SAMPLES: output number of captured samples
+// SEND_SAMPLES: output samples
 
 assign data_in.ready = state == CAPTURE;
 
@@ -271,22 +271,22 @@ always_ff @(posedge clk) begin
     unique case (state)
       IDLE: if (start) state <= CAPTURE;
       // transition out of capture mode either when a manual stop is received or the buffer fills
-      CAPTURE: if (stop || (data_in.ok && (write_addr == BUFFER_DEPTH - 1))) state <= POSTCAPTURE;
-      // POSTCAPTURE and PRETRANSFER are additional "wait" states used to send
+      CAPTURE: if (stop || (data_in.ok && (write_addr == BUFFER_DEPTH - 1))) state <= SEND_ID;
+      // SEND_ID and SEND_NUM_SAMPLES are additional "wait" states used to send
       // out information about the contents captured in the buffer:
       //   - which channel the conents belong to
       //   - how many samples were saved
-      POSTCAPTURE: if (data_out.ok) state <= PRETRANSFER;
+      SEND_ID: if (data_out.ok) state <= SEND_NUM_SAMPLES;
       // only transition after successfully sending out number of captured samples:
-      PRETRANSFER: if (data_out.ok) begin
+      SEND_NUM_SAMPLES: if (data_out.ok) begin
         if (data_out.last) begin
           // no data was saved, so there's nothing to send
           state <= IDLE;
         end else begin
-          state <= TRANSFER;
+          state <= SEND_SAMPLES;
         end
       end
-      TRANSFER: if (data_out.last && data_out.ready && data_out.valid) state <= IDLE;
+      SEND_SAMPLES: if (data_out.last && data_out.ready && data_out.valid) state <= IDLE;
     endcase
   end
 end
@@ -328,7 +328,7 @@ always_ff @(posedge clk) begin
           end
         end
       end
-      POSTCAPTURE: begin
+      SEND_ID: begin
         // output a separate signal to indicate when the first sample is being
         // sent out. This allows the sample_buffer to mux the output of the
         // sample_buffer_bank with the ID of the channel whose data is stored
@@ -341,7 +341,7 @@ always_ff @(posedge clk) begin
           data_out_valid[3] <= 1'b1;
         end
       end
-      PRETRANSFER: begin
+      SEND_NUM_SAMPLES: begin
         first <= '0;
         if (write_addr > 0) begin
           data_out_d[3] <= write_addr;
@@ -363,13 +363,13 @@ always_ff @(posedge clk) begin
           data_out_valid[3] <= 1'b1;
         end
       end
-      TRANSFER: begin
+      SEND_SAMPLES: begin
         first <= '0;
         if (data_out.ok || (!data_out.valid)) begin
           // in case the entire buffer was filled, we would never read anything out if we don't add
           // the option to increment the address when readout hasn't been begun but the read/write
           // addresses are both zero
-          // it is not possible to enter the TRANSFER state with an empty buffer, so we know if both are zero,
+          // it is not possible to enter the SEND_SAMPLES state with an empty buffer, so we know if both are zero,
           // then the buffer must be full
           if ((read_addr != write_addr) || (!readout_begun)) begin
             readout_begun <= 1'b1;
