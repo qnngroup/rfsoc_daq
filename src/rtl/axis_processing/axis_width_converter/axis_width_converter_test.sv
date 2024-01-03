@@ -9,7 +9,7 @@ import sim_util_pkg::*;
 module axis_width_converter_test ();
 
 sim_util_pkg::math #(int) math; // abs, max functions on ints
-sim_util_pkg::debug #(.VERBOSITY(DEFAULT)) debug = new; // printing, error tracking
+sim_util_pkg::debug debug = new(DEFAULT); // printing, error tracking
 
 logic reset;
 logic clk = 0;

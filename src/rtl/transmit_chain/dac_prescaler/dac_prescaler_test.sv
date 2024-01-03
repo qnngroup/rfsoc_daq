@@ -31,7 +31,7 @@ typedef logic signed [SAMPLE_WIDTH-1:0] int_t;
 typedef logic signed [SCALE_WIDTH-1:0] sc_int_t;
 
 sim_util_pkg::math #(int_t) math; // abs, max functions on signed sample type
-sim_util_pkg::debug #(.VERBOSITY(DEFAULT)) debug = new; // printing, error tracking
+sim_util_pkg::debug debug = new(DEFAULT); // printing, error tracking
 
 Axis_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES)) data_out_if();
 Axis_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES)) data_in_if();

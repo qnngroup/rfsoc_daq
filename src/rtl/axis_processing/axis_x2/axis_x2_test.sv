@@ -12,7 +12,7 @@ module axis_x2_test ();
 
 typedef logic signed [SAMPLE_WIDTH-1:0] int_t;
 sim_util_pkg::math #(int_t) math; // abs, max functions on signed sample type
-sim_util_pkg::debug #(.VERBOSITY(DEFAULT)) debug = new; // printing, error tracking
+sim_util_pkg::debug debug = new(DEFAULT); // printing, error tracking
 
 logic reset;
 logic clk = 0;
