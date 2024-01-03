@@ -19,7 +19,7 @@ modport Master_Full (
   output  valid,
   output  data,
   output  last,
-  output  ok
+  input   ok
 );
 
 modport Slave_Full (
@@ -27,7 +27,7 @@ modport Slave_Full (
   input   valid,
   input   data,
   input   last,
-  output  ok
+  input   ok
 );
 
 // master/slave stream with backpressure
@@ -35,14 +35,14 @@ modport Master_Stream (
   input   ready,
   output  valid,
   output  data,
-  output  ok
+  input   ok
 );
 
 modport Slave_Stream (
   output  ready,
   input   valid,
   input   data,
-  output  ok
+  input   ok
 );
 
 // master/slave stream with no backpressure
