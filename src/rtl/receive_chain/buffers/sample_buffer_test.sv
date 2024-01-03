@@ -18,7 +18,7 @@ import sim_util_pkg::*;
 `timescale 1ns / 1ps
 module sample_buffer_test ();
 
-sim_util_pkg::debug #(.VERBOSITY(DEFAULT)) debug = new; // printing, error tracking
+sim_util_pkg::debug debug = new(DEFAULT); // printing, error tracking
 
 logic clk = 0;
 localparam CLK_RATE_HZ = 100_000_000;
@@ -27,7 +27,7 @@ always #(0.5s/CLK_RATE_HZ) clk = ~clk;
 logic reset;
 
 localparam int BUFFER_DEPTH = 1024;
-localparam int N_CHANNELS = 8;
+localparam int CHANNELS = 8;
 localparam int PARALLEL_SAMPLES = 1;
 localparam int SAMPLE_WIDTH = 16;
 
@@ -36,12 +36,12 @@ logic [2:0] banking_mode;
 
 assign config_in.data = {banking_mode, start, stop};
 
-Axis_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(N_CHANNELS)) data_in ();
+Axis_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(CHANNELS)) data_in ();
 Axis_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH)) data_out ();
-Axis_If #(.DWIDTH(2+$clog2($clog2(N_CHANNELS)+1))) config_in ();
+Axis_If #(.DWIDTH(2+$clog2($clog2(CHANNELS)+1))) config_in ();
 
 sample_buffer #(
-  .N_CHANNELS(N_CHANNELS),
+  .CHANNELS(CHANNELS),
   .BUFFER_DEPTH(BUFFER_DEPTH),
   .PARALLEL_SAMPLES(PARALLEL_SAMPLES),
   .SAMPLE_WIDTH(SAMPLE_WIDTH)
@@ -53,13 +53,13 @@ sample_buffer #(
   .config_in
 );
 
-int sample_count [N_CHANNELS];
-logic [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0] data_sent [N_CHANNELS][$];
+int sample_count [CHANNELS];
+logic [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0] data_sent [CHANNELS][$];
 logic [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0] data_received [$];
 
 // send data to DUT and save sent/received data
 always @(posedge clk) begin
-  for (int i = 0; i < N_CHANNELS; i++) begin
+  for (int i = 0; i < CHANNELS; i++) begin
     if (reset) begin
       sample_count[i] <= 0;
       data_in.data[i] <= '0;
@@ -84,7 +84,7 @@ end
 task check_results(input int banking_mode, input bit missing_ok);
   logic [SAMPLE_WIDTH*PARALLEL_SAMPLES:0] temp_sample;
   int current_channel, n_samples;
-  for (int i = 0; i < N_CHANNELS; i++) begin
+  for (int i = 0; i < CHANNELS; i++) begin
     debug.display($sformatf(
       "data_sent[%0d].size() = %0d",
       i,
@@ -134,7 +134,7 @@ task check_results(input int banking_mode, input bit missing_ok);
     end
     while (data_sent[i].size() > 0) data_sent[i].pop_back();
   end
-  for (int i = (1 << banking_mode); i < N_CHANNELS; i++) begin
+  for (int i = (1 << banking_mode); i < CHANNELS; i++) begin
     // flush out any remaining samples in data_sent queue
     debug.display($sformatf(
       "removing %0d samples from data_sent[%0d]",
@@ -184,8 +184,8 @@ initial begin
         start_acq_with_banking_mode(bank_mode);
         unique case (samp_count)
           0: samples_to_send = $urandom_range(4, 10); // a few samples
-          1: samples_to_send = ((BUFFER_DEPTH - $urandom_range(2,10)) / (1 << bank_mode))*N_CHANNELS;
-          2: samples_to_send = (BUFFER_DEPTH / (1 << bank_mode))*N_CHANNELS; // fill all buffers
+          1: samples_to_send = ((BUFFER_DEPTH - $urandom_range(2,10)) / (1 << bank_mode))*CHANNELS;
+          2: samples_to_send = (BUFFER_DEPTH / (1 << bank_mode))*CHANNELS; // fill all buffers
         endcase
         data_in.send_samples(clk, samples_to_send, in_valid_rand & 1'b1, 1'b1, 1'b1);
         repeat (10) @(posedge clk);
@@ -215,7 +215,7 @@ endmodule
 `timescale 1ns / 1ps
 module sample_buffer_bank_test ();
 
-sim_util_pkg::debug #(.VERBOSITY(DEFAULT)) debug = new; // printing, error tracking
+sim_util_pkg::debug debug = new(DEFAULT); // printing, error tracking
 
 logic clk = 0;
 localparam CLK_RATE_HZ = 100_000_000;

@@ -45,6 +45,14 @@ assign n_active_channels = 1'b1 << banking_mode;
 logic start, stop;
 assign capture_started = start;
 
+// Capture is only automatically stopped when (one of) the final bank(s) fills up
+// Use the appropriate mask on banks_full to decide when to stop capture.
+// For 8 channels:
+// if banking_mode == 0: mask = 0x80 (10000000)
+// if banking_mode == 1: mask = 0xc0 (11000000)
+// if banking_mode == 2: mask = 0xf0 (11110000)
+// if banking_mode == 3: mask = 0xff (11111111)
+logic [CHANNELS-1:0] full_mask;
 // process new configuration data
 always_ff @(posedge clk) begin
   if (reset) begin
@@ -53,6 +61,13 @@ always_ff @(posedge clk) begin
     banking_mode <= '0;
   end else begin
     if (config_in.valid) begin
+      for (int channel = 0; channel < CHANNELS; channel++) begin
+        if (channel > ((1 << banking_mode) - 1)) begin
+          full_mask[CHANNELS-1-channel] <= 1'b0;
+        end else begin
+          full_mask[CHANNELS-1-channel] <= 1'b1;
+        end
+      end
       banking_mode <= config_in.data[2+:$clog2(N_BANKING_MODES)];
       start <= config_in.data[1];
       stop <= config_in.data[0];
@@ -67,24 +82,10 @@ end
 // logic to track when banks fill up and trigger the stop of other banks when
 // one bank fills up
 logic [CHANNELS-1:0] banks_full, banks_full_latch;
-logic [CHANNELS-1:0] full_mask;
 logic banks_stop;
 // output a flag when the buffer fills up so we can stop other buffers running in parallel
 assign buffer_full = |(full_mask & banks_full);
-always_comb begin
-  if (stop || stop_aux) begin
-    banks_stop = 1'b1;
-  end else begin
-    // capture is only stopped when (one of) the final bank(s) fills up
-    // use the appropriate mask on banks_full to decide when to stop capture
-    // if banking_mode == 0: mask = 1 << CHANNELS
-    // if banking_mode == 1: mask = 3 << (CHANNELS - 1)
-    // if banking_mode == 2: mask = 7 << (CHANNELS - 2)
-    // ...
-    full_mask = ((2 << banking_mode) - 1) << (CHANNELS - banking_mode);
-    banks_stop = |(full_mask & banks_full);
-  end
-end
+assign banks_stop = stop | stop_aux | buffer_full;
 
 // latch banks_full: when operating with banking_mode < MAX_BANKING_MODE,
 // multiple banks are assigned to the same input channel. They are filled in
@@ -254,14 +255,13 @@ assign data_in.ready = state == CAPTURE;
 
 logic [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0] buffer [BUFFER_DEPTH];
 logic [$clog2(BUFFER_DEPTH)-1:0] write_addr, read_addr;
-logic [1:0][$clog2(BUFFER_DEPTH)-1:0] read_addr_d; // delay so that we don't miss the last sample
-logic [3:0][PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0] data_out_d;
-logic [3:0] data_out_valid; // extra valid to match latency of BRAM
-logic [3:0] data_out_last;
+logic [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0] data_out_reg, data_out_muxed;
+logic [1:0] data_out_valid; // extra valid to match latency of BRAM
+logic [1:0] data_out_last;
 logic buffer_has_data, readout_begun;
-assign data_out.data = data_out_d[3];
-assign data_out.valid = data_out_valid[3];
-assign data_out.last = data_out_last[3];
+assign data_out.data = data_out_muxed;
+assign data_out.valid = data_out_valid[1];
+assign data_out.last = data_out_last[1];
 
 // state machine
 always_ff @(posedge clk) begin
@@ -296,8 +296,7 @@ always_ff @(posedge clk) begin
   if (reset) begin
     write_addr <= '0;
     read_addr <= '0;
-    read_addr_d <= '0;
-    data_out_d <= '0;
+    data_out_muxed <= '0;
     data_out_valid <= '0;
     data_out_last <= '0;
     buffer_has_data <= '0;
@@ -309,8 +308,7 @@ always_ff @(posedge clk) begin
       IDLE: begin
         write_addr <= '0;
         read_addr <= '0;
-        read_addr_d <= '0;
-        data_out_d <= '0;
+        data_out_muxed <= '0;
         data_out_valid <= '0;
         data_out_last <= '0;
         buffer_has_data <= '0;
@@ -334,38 +332,40 @@ always_ff @(posedge clk) begin
         // sample_buffer_bank with the ID of the channel whose data is stored
         // in the bank
         first <= 1'b1;
-        data_out_d[3] <= '1;
+        data_out_muxed <= '1;
         if (data_out.ok) begin
-          data_out_valid[3] <= 1'b0;
+          data_out_valid[1] <= 1'b0;
         end else begin
-          data_out_valid[3] <= 1'b1;
+          data_out_valid[1] <= 1'b1;
         end
       end
       SEND_NUM_SAMPLES: begin
         first <= '0;
         if (write_addr > 0) begin
-          data_out_d[3] <= write_addr;
+          data_out_muxed <= write_addr;
         end else if (buffer_has_data) begin
           // if write_addr == 0 but we've written to the buffer, then it's full
-          data_out_d[3] <= BUFFER_DEPTH;
+          data_out_muxed <= BUFFER_DEPTH;
         end else begin
-          data_out_d[3] <= '0; // we don't have any data to send
-          data_out_last[3] <= 1'b1;
+          data_out_muxed <= '0; // we don't have any data to send
+          data_out_last[1] <= 1'b1;
         end
         if (data_out.ok) begin
           // transaction will go through, so we should reset data_out_valid so
           // that we don't accidentally send the sample count twice
-          data_out_valid[3] <= 1'b0;
+          data_out_valid[1] <= 1'b0;
           // also reset last in case we don't have any data to send and the
           // sample count is the only thing we're outputting
-          data_out_last[3] <= 1'b0;
+          data_out_last[1] <= 1'b0;
         end else begin
-          data_out_valid[3] <= 1'b1;
+          data_out_valid[1] <= 1'b1;
         end
       end
       SEND_SAMPLES: begin
         first <= '0;
         if (data_out.ok || (!data_out.valid)) begin
+          data_out_reg <= buffer[read_addr];
+          data_out_muxed <= data_out_reg;
           // in case the entire buffer was filled, we would never read anything out if we don't add
           // the option to increment the address when readout hasn't been begun but the read/write
           // addresses are both zero
@@ -374,17 +374,15 @@ always_ff @(posedge clk) begin
           if ((read_addr != write_addr) || (!readout_begun)) begin
             readout_begun <= 1'b1;
             read_addr <= read_addr + 1'b1;
-            data_out_valid <= {data_out_valid[2:0], 1'b1};
+            data_out_valid <= {data_out_valid[0], 1'b1};
             if (read_addr + 1'b1 == write_addr) begin
-              data_out_last <= {data_out_last[2:0], 1'b1};
+              data_out_last <= {data_out_last[0], 1'b1};
             end
           end else begin
             // no more samples are read out
-            data_out_valid <= {data_out_valid[2:0], 1'b0};
-            data_out_last <= {data_out_last[2:0], 1'b0};
+            data_out_valid <= {data_out_valid[0], 1'b0};
+            data_out_last <= {data_out_last[0], 1'b0};
           end
-          data_out_d <= {data_out_d[2:0], buffer[read_addr]};
-          read_addr_d <= {read_addr_d[1:0], read_addr};
         end
       end
     endcase

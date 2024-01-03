@@ -7,7 +7,7 @@ import sample_discriminator_pkg::*;
 `timescale 1ns / 1ps
 module receive_top_test ();
 
-sim_util_pkg::debug debug = new(VERBOSE); // printing, error tracking
+sim_util_pkg::debug debug = new(DEFAULT); // printing, error tracking
 
 logic clk = 0;
 localparam CLK_RATE_HZ = 100_000_000;
