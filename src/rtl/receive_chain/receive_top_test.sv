@@ -99,28 +99,34 @@ receive_top #(
 );
 
 // temp parallel register for calculating expected output of differentiator
-logic [SAMPLE_WIDTH*PARALLEL_SAMPLES-1:0] diff_temp; 
+logic [SAMPLE_WIDTH*PARALLEL_SAMPLES-1:0] diff_temp;
+logic [CHANNELS-1:0][SAMPLE_WIDTH-1:0] prev_samples; // keep track of final sample in previous clock cycle for differentiator
 
 // send data to DUT and save sent/received data
 always @(posedge clk) begin
   for (int channel = 0; channel < CHANNELS; channel++) begin
     if (reset) begin
       adc_data_in.data[channel] <= '0;
+      prev_samples = '0;
     end else begin
       if (adc_data_in.valid[channel]) begin
         // save data that was sent
         raw_samples[channel].push_front(adc_data_in.data[channel]);
         for (int sample = 0; sample < PARALLEL_SAMPLES; sample++) begin
           if (sample == 0) begin
-            if (raw_samples[channel].size() == 1) begin
-              diff_temp[SAMPLE_WIDTH-1:0] = int_t'(raw_samples[channel][0][SAMPLE_WIDTH-1:0] / 2);
-            end else begin
-              diff_temp[SAMPLE_WIDTH-1:0] = int_t'((raw_samples[channel][0][SAMPLE_WIDTH-1:0] - raw_samples[channel][1][PARALLEL_SAMPLES*SAMPLE_WIDTH-1-:SAMPLE_WIDTH]) / 2);
-            end
+            diff_temp[SAMPLE_WIDTH-1:0] = (
+              int_t'(raw_samples[channel][0][SAMPLE_WIDTH-1:0])
+              - int_t'(prev_samples[channel])
+              ) >>> 1;
           end else begin
-            diff_temp[sample*SAMPLE_WIDTH+:SAMPLE_WIDTH] = int_t'((raw_samples[channel][0][sample*SAMPLE_WIDTH+:SAMPLE_WIDTH] - raw_samples[channel][0][(sample-1)*SAMPLE_WIDTH+:SAMPLE_WIDTH]) / 2);
+            diff_temp[sample*SAMPLE_WIDTH+:SAMPLE_WIDTH] = (
+              int_t'(raw_samples[channel][0][sample*SAMPLE_WIDTH+:SAMPLE_WIDTH])
+              - int_t'(raw_samples[channel][0][(sample-1)*SAMPLE_WIDTH+:SAMPLE_WIDTH])
+              ) >>> 1;
           end
         end
+        prev_samples[channel] = raw_samples[channel][0][(PARALLEL_SAMPLES-1)*SAMPLE_WIDTH+:SAMPLE_WIDTH];
+        differentiated_samples[channel].push_front(diff_temp);
       end
       if (adc_data_in.valid[channel] || update_input_data) begin
         // send new data
@@ -228,6 +234,10 @@ initial begin
     for (int channel = 0; channel < CHANNELS; channel++) begin
       channel_mux_config.data[channel*MUX_SELECT_BITS+:MUX_SELECT_BITS] <= channel + mux_select_mode*CHANNELS;
     end
+    // write the new config
+    channel_mux_config.valid <= 1'b1;
+    @(posedge clk);
+    channel_mux_config.valid <= 1'b0;
     for (int in_valid_rand = 0; in_valid_rand < 2; in_valid_rand++) begin
       for (int bank_mode = 0; bank_mode < 4; bank_mode++) begin
         for (int amplitude_mode = 0; amplitude_mode < 5; amplitude_mode++) begin

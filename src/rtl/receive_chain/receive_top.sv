@@ -75,7 +75,7 @@ axis_channel_mux #(
 ) channel_mux_i (
   .clk,
   .reset,
-  .data_in(adc_data_in),
+  .data_in(mux_input),
   .data_out(logical_channels),
   .config_in(channel_mux_config)
 );
