@@ -20,7 +20,7 @@ module sparse_sample_buffer #(
 
 localparam int SAMPLE_INDEX_WIDTH = $clog2(DATA_BUFFER_DEPTH*CHANNELS);
 localparam int TIMESTAMP_WIDTH = SAMPLE_WIDTH * ((SAMPLE_INDEX_WIDTH + APPROX_CLOCK_WIDTH + (SAMPLE_WIDTH - 1)) / SAMPLE_WIDTH);
-assign timestamps_width = TIMESTAMP_WIDTH;
+assign timestamp_width = TIMESTAMP_WIDTH;
 
 // when either buffer fills up, it triggers a stop on the other with the stop_aux input
 logic [1:0] buffer_full;
@@ -41,8 +41,17 @@ Axis_If #(.DWIDTH(AXI_MM_WIDTH)) buffer_data_out_resized ();
 // share buffer_config_in between both buffers so their configuration is synchronized
 assign buffer_timestamp_config.data = buffer_config_in.data;
 assign buffer_timestamp_config.valid = buffer_config_in.valid;
+assign buffer_timestamp_config.ready = 1'b0; // unused; tie to 0 to suppress warnings
+assign buffer_timestamp_config.last = 1'b0; // unused; tie to 0 to suppress warnings
 assign buffer_data_config.data = buffer_config_in.data;
 assign buffer_data_config.valid = buffer_config_in.valid;
+assign buffer_data_config.ready = 1'b0; // unused; tie to 0 to suppress warnings
+assign buffer_data_config.last = 1'b0; // unused; tie to 0 to suppress warnings
+
+assign disc_timestamps.ready = 1'b0; // unused; tie to 0 to suppress warnings
+assign disc_timestamps.last = 1'b0; // unused; tie to 0 to suppress warnings
+assign disc_data.ready = 1'b0; // unused; tie to 0 to suppress warnings
+assign disc_data.last = 1'b0; // unused; tie to 0 to suppress warnings
 
 logic start, start_d;
 always_ff @(posedge clk) begin

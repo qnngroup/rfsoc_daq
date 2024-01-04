@@ -18,6 +18,15 @@
 // active so that any physical channel can be routed to the first input
 // channel of this module (allowing high-capacity buffering in single-channel
 // mode for any physical input channel)
+//
+// TODO implement with dual clocks: fast clock for writing, slow clock for
+// reading
+// - writing should be able to achieve 512MHz due to independent nature of the
+//    banked memory (so even major congestion has little impact on timing)
+// - output mux presents a challenge for 512MHz due to congestion
+//    (every bank output has to go to the same area for multiplexing, leading
+//    to large routing delays: ~2ns to go 1/4 of the way across the chip,
+//    which blows the slack budget in one go)
 module sample_buffer #(
   parameter int CHANNELS = 8, // number of ADC channels
   parameter int BUFFER_DEPTH = 8192, // maximum capacity across all channels
@@ -185,6 +194,8 @@ generate
     assign all_banks_out.last[i] = bank_out.last;
     assign bank_out.ready = all_banks_out.ready[i];
 
+    assign bank_in.last = 1'b0; // unused; tie to 0 to suppress warnings
+
     sample_buffer_bank #(
       .BUFFER_DEPTH(BUFFER_DEPTH),
       .PARALLEL_SAMPLES(PARALLEL_SAMPLES),
@@ -255,13 +266,14 @@ assign data_in.ready = state == CAPTURE;
 
 logic [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0] buffer [BUFFER_DEPTH];
 logic [$clog2(BUFFER_DEPTH)-1:0] write_addr, read_addr;
-logic [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0] data_out_reg, data_out_muxed;
-logic [1:0] data_out_valid; // extra valid to match latency of BRAM
-logic [1:0] data_out_last;
+logic [2:0][PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0] data_out_reg;
+logic [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0] data_out_muxed;
+logic [3:0] data_out_valid; // extra valid to match latency of BRAM
+logic [3:0] data_out_last;
 logic buffer_has_data, readout_begun;
 assign data_out.data = data_out_muxed;
-assign data_out.valid = data_out_valid[1];
-assign data_out.last = data_out_last[1];
+assign data_out.valid = data_out_valid[3];
+assign data_out.last = data_out_last[3];
 
 // state machine
 always_ff @(posedge clk) begin
@@ -334,9 +346,9 @@ always_ff @(posedge clk) begin
         first <= 1'b1;
         data_out_muxed <= '1;
         if (data_out.ok) begin
-          data_out_valid[1] <= 1'b0;
+          data_out_valid[3] <= 1'b0;
         end else begin
-          data_out_valid[1] <= 1'b1;
+          data_out_valid[3] <= 1'b1;
         end
       end
       SEND_NUM_SAMPLES: begin
@@ -348,24 +360,26 @@ always_ff @(posedge clk) begin
           data_out_muxed <= BUFFER_DEPTH;
         end else begin
           data_out_muxed <= '0; // we don't have any data to send
-          data_out_last[1] <= 1'b1;
+          data_out_last[3] <= 1'b1;
         end
         if (data_out.ok) begin
           // transaction will go through, so we should reset data_out_valid so
           // that we don't accidentally send the sample count twice
-          data_out_valid[1] <= 1'b0;
+          data_out_valid[3] <= 1'b0;
           // also reset last in case we don't have any data to send and the
           // sample count is the only thing we're outputting
-          data_out_last[1] <= 1'b0;
+          data_out_last[3] <= 1'b0;
         end else begin
-          data_out_valid[1] <= 1'b1;
+          data_out_valid[3] <= 1'b1;
         end
       end
       SEND_SAMPLES: begin
         first <= '0;
         if (data_out.ok || (!data_out.valid)) begin
-          data_out_reg <= buffer[read_addr];
-          data_out_muxed <= data_out_reg;
+          data_out_reg[0] <= buffer[read_addr];
+          data_out_reg[1] <= data_out_reg[0];
+          data_out_reg[2] <= data_out_reg[1];
+          data_out_muxed <= data_out_reg[2];
           // in case the entire buffer was filled, we would never read anything out if we don't add
           // the option to increment the address when readout hasn't been begun but the read/write
           // addresses are both zero
@@ -374,14 +388,14 @@ always_ff @(posedge clk) begin
           if ((read_addr != write_addr) || (!readout_begun)) begin
             readout_begun <= 1'b1;
             read_addr <= read_addr + 1'b1;
-            data_out_valid <= {data_out_valid[0], 1'b1};
+            data_out_valid <= {data_out_valid[2:0], 1'b1};
             if (read_addr + 1'b1 == write_addr) begin
-              data_out_last <= {data_out_last[0], 1'b1};
+              data_out_last <= {data_out_last[2:0], 1'b1};
             end
           end else begin
             // no more samples are read out
-            data_out_valid <= {data_out_valid[0], 1'b0};
-            data_out_last <= {data_out_last[0], 1'b0};
+            data_out_valid <= {data_out_valid[2:0], 1'b0};
+            data_out_last <= {data_out_last[2:0], 1'b0};
           end
         end
       end

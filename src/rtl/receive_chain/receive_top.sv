@@ -29,6 +29,11 @@ module receive_top #(
 Axis_Parallel_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES), .CHANNELS(2*CHANNELS)) mux_input ();
 Axis_Parallel_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES), .CHANNELS(CHANNELS)) logical_channels ();
 
+assign mux_input.ready = 1'b0; // unused; tie to 0 to suppress warning
+assign mux_input.last = 1'b0; // unused; tie to 0 to suppress warning
+assign logical_channels.ready = 1'b0; // unused; tie to 0 to suppress warning
+assign logical_channels.last = 1'b0; // unused; tie to 0 to suppress warning
+
 genvar channel;
 generate
   for (channel = 0; channel < CHANNELS; channel++) begin
@@ -46,10 +51,14 @@ generate
 
     assign differentiator_input.data = adc_data_in.data[channel];
     assign differentiator_input.valid = adc_data_in.valid[channel];
+    assign differentiator_input.last = 1'b0; // unused; tie to 0 to suppress warning
     // differentiator_input.ready is ignored, since we're not applying backpressure
     assign mux_input.data[CHANNELS + channel] = differentiator_output.data;
     assign mux_input.valid[CHANNELS + channel] = differentiator_output.valid;
+    assign mux_input.last = 1'b0; // unused; tie to 0 to suppress warning
+    // sample discriminator won't apply backpressure, so make sure the differentiator always outputs data
     assign differentiator_output.ready = 1'b1;
+    assign differentiator_output.last = 1'b0; // unused; tie to 0 to suppress warning
 
     axis_differentiator #(
       .SAMPLE_WIDTH(SAMPLE_WIDTH),
