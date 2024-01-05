@@ -18,21 +18,21 @@ logic reset;
 
 localparam int PARALLEL_SAMPLES = 16;
 localparam int SAMPLE_WIDTH = 16;
-localparam int CHANNELS = 8;
-localparam int FUNCTIONS_PER_CHANNEL = 1;
+localparam int INPUT_CHANNELS = 8;
+localparam int OUTPUT_CHANNELS = 8;
 
-localparam int SELECT_BITS = $clog2((1+FUNCTIONS_PER_CHANNEL)*CHANNELS);
+localparam int SELECT_BITS = $clog2(INPUT_CHANNELS);
 
-Axis_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS((1+FUNCTIONS_PER_CHANNEL)*CHANNELS)) data_in ();
-Axis_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(CHANNELS)) data_out ();
+Axis_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(INPUT_CHANNELS)) data_in ();
+Axis_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(OUTPUT_CHANNELS)) data_out ();
 
-Axis_If #(.DWIDTH(CHANNELS*SELECT_BITS)) config_in ();
+Axis_If #(.DWIDTH(OUTPUT_CHANNELS*SELECT_BITS)) config_in ();
 
 axis_channel_mux #(
   .PARALLEL_SAMPLES(PARALLEL_SAMPLES),
   .SAMPLE_WIDTH(SAMPLE_WIDTH),
-  .CHANNELS(CHANNELS),
-  .FUNCTIONS_PER_CHANNEL(FUNCTIONS_PER_CHANNEL)
+  .INPUT_CHANNELS(INPUT_CHANNELS),
+  .OUTPUT_CHANNELS(OUTPUT_CHANNELS)
 ) dut_i (
   .clk,
   .reset,
@@ -42,24 +42,24 @@ axis_channel_mux #(
 );
 
 typedef logic [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0] sample_t;
-sample_t expected [CHANNELS][$];
-sample_t received [CHANNELS][$];
+sample_t expected [OUTPUT_CHANNELS][$];
+sample_t received [OUTPUT_CHANNELS][$];
 
-logic [CHANNELS-1:0][SELECT_BITS-1:0] source_select;
+logic [OUTPUT_CHANNELS-1:0][SELECT_BITS-1:0] source_select;
 
 always_ff @(posedge clk) begin
   if (reset) begin
     data_in.data <= '0;
     config_in.data <= '0;
   end else begin
-    for (int in_channel = 0; in_channel < (1+FUNCTIONS_PER_CHANNEL)*CHANNELS; in_channel++) begin
+    for (int in_channel = 0; in_channel < INPUT_CHANNELS; in_channel++) begin
       if (data_in.valid[in_channel]) begin
         for (int sample = 0; sample < PARALLEL_SAMPLES; sample++) begin
           data_in.data[in_channel][sample*SAMPLE_WIDTH+:SAMPLE_WIDTH] <= $urandom_range(0, {SAMPLE_WIDTH{1'b1}});
         end
       end
     end
-    for (int out_channel = 0; out_channel < CHANNELS; out_channel++) begin
+    for (int out_channel = 0; out_channel < OUTPUT_CHANNELS; out_channel++) begin
       if (config_in.valid) begin
         config_in.data[SELECT_BITS*out_channel+:SELECT_BITS] <= $urandom_range(0, {SELECT_BITS{1'b1}});
         source_select[out_channel] <= config_in.data[SELECT_BITS*out_channel+:SELECT_BITS];
@@ -75,7 +75,7 @@ always_ff @(posedge clk) begin
 end
 
 task check_results();
-  for (int out_channel = 0; out_channel < CHANNELS; out_channel++) begin
+  for (int out_channel = 0; out_channel < OUTPUT_CHANNELS; out_channel++) begin
     debug.display($sformatf(
       "checking results for channel %d",
       out_channel),

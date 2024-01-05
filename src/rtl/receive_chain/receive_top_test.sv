@@ -24,12 +24,10 @@ localparam int PARALLEL_SAMPLES = 4;
 localparam int SAMPLE_WIDTH = 16;
 localparam int APPROX_CLOCK_WIDTH = 48;
 
-localparam int FUNCTIONS_PER_CHANNEL = 1; // increase when more math modes/filters are added
-
 // derived parameters
 localparam int SAMPLE_INDEX_WIDTH = $clog2(DATA_BUFFER_DEPTH*CHANNELS);
 localparam int TIMESTAMP_WIDTH = SAMPLE_WIDTH * ((SAMPLE_INDEX_WIDTH + APPROX_CLOCK_WIDTH + (SAMPLE_WIDTH - 1)) / SAMPLE_WIDTH);
-localparam int MUX_SELECT_BITS = $clog2((1+FUNCTIONS_PER_CHANNEL)*CHANNELS);
+localparam int MUX_SELECT_BITS = $clog2(2*CHANNELS);
 
 typedef logic signed [SAMPLE_WIDTH-1:0] int_t; // type for signed samples (needed to check subtraction is working properly)
 

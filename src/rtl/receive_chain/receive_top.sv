@@ -19,7 +19,7 @@ module receive_top #(
   // configuration registers
   Axis_If.Slave_Realtime sample_discriminator_config, // 2*CHANNELS*SAMPLE_WIDTH bits
   Axis_If.Slave_Realtime buffer_config, // 2 + $clog2($clog2(CHANNELS) + 1) bits
-  Axis_If.Slave_Realtime channel_mux_config, // $clog2((1+FUNCTIONS_PER_CHANNEL)*CHANNELS)*CHANNELS bits
+  Axis_If.Slave_Realtime channel_mux_config, // $clog2(2*CHANNELS)*CHANNELS bits
   // output register
   Axis_If.Master_Realtime buffer_timestamp_width // 32 bits
 );
@@ -79,8 +79,8 @@ endgenerate
 axis_channel_mux #(
   .PARALLEL_SAMPLES(PARALLEL_SAMPLES),
   .SAMPLE_WIDTH(SAMPLE_WIDTH),
-  .CHANNELS(CHANNELS),
-  .FUNCTIONS_PER_CHANNEL(1)
+  .INPUT_CHANNELS(2*CHANNELS),
+  .OUTPUT_CHANNELS(CHANNELS)
 ) channel_mux_i (
   .clk,
   .reset,
