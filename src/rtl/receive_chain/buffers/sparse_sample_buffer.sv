@@ -15,7 +15,7 @@ module sparse_sample_buffer #(
   Axis_Parallel_If.Slave_Realtime data_in, // all channels in parallel
   Axis_If.Master_Full data_out,
   Axis_If.Slave_Realtime discriminator_config_in, // {threshold_high, threshold_low} for each channel
-  Axis_If.Slave_Stream buffer_config_in, // {banking_mode}
+  Axis_If.Slave_Stream buffer_config, // {banking_mode}, can only be updated when buffer is in IDLE state
   Axis_If.Slave_Realtime buffer_start_stop, // {start, stop}
   input wire start_aux // auxiliary trigger for capture start
 );
@@ -43,13 +43,13 @@ Axis_If #(.DWIDTH(AXI_MM_WIDTH)) buffer_timestamp_out_resized ();
 Axis_If #(.DWIDTH(AXI_MM_WIDTH)) buffer_data_out_resized ();
 
 // only accept a new configuration when both buffers are ready
-assign buffer_config_in.ready = buffer_timestamp_config.ready & buffer_data_config.ready;
-// share buffer_config_in data/valid between both buffers so their configuration is synchronized
-assign buffer_timestamp_config.data = buffer_config_in.data;
-assign buffer_timestamp_config.valid = buffer_config_in.valid;
+assign buffer_config.ready = buffer_timestamp_config.ready & buffer_data_config.ready;
+// share buffer_config data/valid between both buffers so their configuration is synchronized
+assign buffer_timestamp_config.data = buffer_config.data;
+assign buffer_timestamp_config.valid = buffer_config.valid;
 assign buffer_timestamp_config.last = 1'b0; // unused; tie to 0 to suppress warnings
-assign buffer_data_config.data = buffer_config_in.data;
-assign buffer_data_config.valid = buffer_config_in.valid;
+assign buffer_data_config.data = buffer_config.data;
+assign buffer_data_config.valid = buffer_config.valid;
 assign buffer_data_config.last = 1'b0; // unused; tie to 0 to suppress warnings
 
 // share buffer_start_stop

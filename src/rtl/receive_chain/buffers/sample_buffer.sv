@@ -36,7 +36,7 @@ module sample_buffer #(
   input wire clk, reset,
   Axis_Parallel_If.Slave_Realtime data_in, // all channels in parallel
   Axis_If.Master_Full data_out,
-  Axis_If.Slave_Stream config_in, // {banking_mode}
+  Axis_If.Slave_Stream config_in, // {banking_mode}, can only be updated when buffer is in IDLE state
   Axis_If.Slave_Realtime start_stop, // {start, stop}
   // stop_aux allows parallel operation of separate buffers
   // (e.g. for timestamp/data buffers in sparse sample buffer)

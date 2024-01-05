@@ -43,7 +43,7 @@ sparse_sample_buffer_pkg::util #(
 
 Axis_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(CHANNELS)) data_in ();
 Axis_If #(.DWIDTH(AXI_MM_WIDTH)) data_out ();
-Axis_If #(.DWIDTH($clog2($clog2(CHANNELS)+1))) buffer_config_in ();
+Axis_If #(.DWIDTH($clog2($clog2(CHANNELS)+1))) buffer_config ();
 Axis_If #(.DWIDTH(2)) buffer_start_stop ();
 Axis_If #(.DWIDTH(CHANNELS*SAMPLE_WIDTH*2)) discriminator_config_in();
 
@@ -57,7 +57,7 @@ always_comb begin
   end
 end
 
-assign buffer_config_in.data = banking_mode;
+assign buffer_config.data = banking_mode;
 assign buffer_start_stop.data = {capture_start, capture_stop};
 
 sparse_sample_buffer #(
@@ -75,7 +75,7 @@ sparse_sample_buffer #(
   .data_in,
   .data_out,
   .discriminator_config_in,
-  .buffer_config_in,
+  .buffer_config,
   .buffer_start_stop,
   .start_aux
 );
@@ -163,9 +163,9 @@ endtask
 
 task set_banking_mode(input int mode);
   banking_mode <= mode;
-  buffer_config_in.valid <= 1'b1;
-  while (~buffer_config_in.ok) @(posedge clk);
-  buffer_config_in.valid <= 1'b0;
+  buffer_config.valid <= 1'b1;
+  while (~buffer_config.ok) @(posedge clk);
+  buffer_config.valid <= 1'b0;
 endtask
 
 task start_acq(input bit use_axis);
@@ -202,7 +202,7 @@ initial begin
   banking_mode <= '0; // only enable channel 0 to start
   data_out.ready <= '0;
   data_in.valid <= '0;
-  buffer_config_in.valid <= 1'b0;
+  buffer_config.valid <= 1'b0;
   discriminator_config_in.valid <= 1'b0;
   buffer_start_stop.valid <= 1'b0;
   repeat (100) @(posedge clk);

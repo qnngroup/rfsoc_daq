@@ -20,7 +20,7 @@ module receive_top #(
   input wire start_aux,
   // configuration registers
   Axis_If.Slave_Realtime sample_discriminator_config, // 2*CHANNELS*SAMPLE_WIDTH bits
-  Axis_If.Slave_Stream buffer_config, // $clog2($clog2(CHANNELS) + 1) bits
+  Axis_If.Slave_Stream buffer_config, // $clog2($clog2(CHANNELS) + 1) bits, can only be updated when buffer is in IDLE state
   Axis_If.Slave_Realtime buffer_start_stop, // 2 bits
   Axis_If.Slave_Realtime channel_mux_config, // $clog2(2*CHANNELS)*CHANNELS bits
   // output register
