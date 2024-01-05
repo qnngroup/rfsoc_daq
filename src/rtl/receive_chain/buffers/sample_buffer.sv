@@ -89,17 +89,17 @@ always_ff @(posedge clk) begin
   end else begin
     if (config_in.ok) begin
       for (int channel = 0; channel < CHANNELS; channel++) begin
-        if (channel > ((1 << banking_mode) - 1)) begin
+        if (channel > ((1 << config_in.data) - 1)) begin
           full_mask[CHANNELS-1-channel] <= 1'b0;
         end else begin
           full_mask[CHANNELS-1-channel] <= 1'b1;
         end
       end
-      banking_mode <= config_in.data[2+:$clog2(N_BANKING_MODES)];
+      banking_mode <= config_in.data;
     end
     if (start_stop.valid) begin
-      start <= config_in.data[1];
-      stop <= config_in.data[0];
+      start <= start_stop.data[1];
+      stop <= start_stop.data[0];
     end else begin
       // reset start/stop so they are only a pulse
       start <= '0;

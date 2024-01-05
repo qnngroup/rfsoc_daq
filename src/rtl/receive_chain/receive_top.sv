@@ -11,11 +11,13 @@ module receive_top #(
   parameter int SAMPLE_WIDTH = 16, // width in bits of each sample
   parameter int APPROX_CLOCK_WIDTH = 48 // requested width of timestamp
 ) (
-  // signals in RFADC clock domain (256MHz)
+  // all signals are in RFADC clock domain (256MHz)
   input wire clk, reset,
   // data pipeline
   Axis_Parallel_If.Slave_Realtime adc_data_in,
   Axis_If.Master_Full dma_data_out,
+  // trigger from transmit_top
+  input wire start_aux,
   // configuration registers
   Axis_If.Slave_Realtime sample_discriminator_config, // 2*CHANNELS*SAMPLE_WIDTH bits
   Axis_If.Slave_Stream buffer_config, // $clog2($clog2(CHANNELS) + 1) bits

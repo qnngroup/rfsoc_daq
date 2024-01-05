@@ -3,8 +3,6 @@
 // correctly, saving the correct data and outputting it in the correct format
 // (i.e. timestamps first, then data, and for each bank, outputting the
 // corresponding channel index and sample quantity stored in that bank)
-//
-// TODO test new start/stop interface, test start_aux
 
 import sim_util_pkg::*;
 import sample_discriminator_pkg::*;
@@ -45,10 +43,11 @@ sparse_sample_buffer_pkg::util #(
 
 Axis_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(CHANNELS)) data_in ();
 Axis_If #(.DWIDTH(AXI_MM_WIDTH)) data_out ();
-Axis_If #(.DWIDTH(2+$clog2($clog2(CHANNELS)+1))) buffer_config_in ();
+Axis_If #(.DWIDTH($clog2($clog2(CHANNELS)+1))) buffer_config_in ();
+Axis_If #(.DWIDTH(2)) buffer_start_stop ();
 Axis_If #(.DWIDTH(CHANNELS*SAMPLE_WIDTH*2)) discriminator_config_in();
 
-logic capture_start, capture_stop;
+logic capture_start, capture_stop, start_aux;
 logic [$clog2($clog2(CHANNELS)+1)-1:0] banking_mode;
 logic [CHANNELS-1:0][SAMPLE_WIDTH-1:0] threshold_high, threshold_low;
 
@@ -58,7 +57,8 @@ always_comb begin
   end
 end
 
-assign buffer_config_in.data = {banking_mode, capture_start, capture_stop};
+assign buffer_config_in.data = banking_mode;
+assign buffer_start_stop.data = {capture_start, capture_stop};
 
 sparse_sample_buffer #(
   .CHANNELS(CHANNELS),
@@ -75,7 +75,9 @@ sparse_sample_buffer #(
   .data_in,
   .data_out,
   .discriminator_config_in,
-  .buffer_config_in
+  .buffer_config_in,
+  .buffer_start_stop,
+  .start_aux
 );
 
 // allow the data to be manually updated when we change the range so the first sample for a new range isn't stale
@@ -159,23 +161,35 @@ task check_results(
 
 endtask
 
-task start_acq_with_banking_mode(input int mode);
-  capture_start <= 1'b1;
+task set_banking_mode(input int mode);
   banking_mode <= mode;
   buffer_config_in.valid <= 1'b1;
-  @(posedge clk);
+  while (~buffer_config_in.ok) @(posedge clk);
   buffer_config_in.valid <= 1'b0;
-  capture_start <= 1'b0;
+endtask
+
+task start_acq(input bit use_axis);
+  if (use_axis) begin
+    capture_stop <= 1'b0;
+    capture_start <= 1'b1;
+    buffer_start_stop.valid <= 1'b1;
+    @(posedge clk);
+    capture_start <= 1'b0;
+    buffer_start_stop.valid <= 1'b0;
+  end else begin
+    start_aux <= 1'b1;
+    @(posedge clk);
+    start_aux <= 1'b0;
+  end
 endtask
 
 task stop_acq();
   capture_stop <= 1'b1;
   capture_start <= 1'b0;
-  buffer_config_in.valid <= 1'b1;
+  buffer_start_stop.valid <= 1'b1;
   @(posedge clk);
-  buffer_config_in.valid <= 1'b0;
-  capture_start <= 1'b0;
   capture_stop <= 1'b0;
+  buffer_start_stop.valid <= 1'b0;
 endtask
 
 initial begin
@@ -183,83 +197,90 @@ initial begin
   reset <= 1'b1;
   capture_start <= 1'b0;
   capture_stop <= 1'b0;
+  start_aux <= '0;
   timer <= '0; // reset timer for all channels
   banking_mode <= '0; // only enable channel 0 to start
   data_out.ready <= '0;
   data_in.valid <= '0;
+  buffer_config_in.valid <= 1'b0;
+  discriminator_config_in.valid <= 1'b0;
+  buffer_start_stop.valid <= 1'b0;
   repeat (100) @(posedge clk);
   reset <= 1'b0;
   repeat (50) @(posedge clk);
+  
+  for (int start_type = 0; start_type < 2; start_type++) begin
+    for (int in_valid_rand = 0; in_valid_rand < 2; in_valid_rand++) begin
+      for (int bank_mode = 0; bank_mode < 4; bank_mode++) begin
+        set_banking_mode(bank_mode);
+        for (int amplitude_mode = 0; amplitude_mode < 5; amplitude_mode++) begin
+          repeat (10) @(posedge clk);
+          unique case (amplitude_mode)
+            0: begin
+              // save everything
+              for (int i = 0; i < CHANNELS; i++) begin
+                data_range_low[i] <= 16'h03c0;
+                data_range_high[i] <= 16'h04ff;
+                threshold_low[i] <= 16'h0000;
+                threshold_high[i] <= 16'h0100;
+              end
+            end
+            1: begin
+              // send stuff straddling the threshold with strong hysteresis
+              for (int i = 0; i < CHANNELS; i++) begin
+                data_range_low[i] <= 16'h00ff;
+                data_range_high[i] <= 16'h04ff;
+                threshold_low[i] <= 16'h01c0;
+                threshold_high[i] <= 16'h0400;
+              end
+            end
+            2: begin
+              // send stuff below the threshold
+              for (int i = 0; i < CHANNELS; i++) begin
+                data_range_low[i] <= 16'h0000;
+                data_range_high[i] <= 16'h01ff;
+                threshold_low[i] <= 16'h0200;
+                threshold_high[i] <= 16'h0200;
+              end
+            end
+            3: begin
+              // send stuff straddling the threshold with weak hysteresis
+              for (int i = 0; i < CHANNELS; i++) begin
+                data_range_low[i] <= 16'h0000;
+                data_range_high[i] <= 16'h04ff;
+                threshold_low[i] <= 16'h03c0;
+                threshold_high[i] <= 16'h0400;
+              end
+            end
+            4: begin
+              // send stuff that mostly gets filtered out
+              for (int i = 0; i < CHANNELS; i++) begin
+                data_range_low[i] <= 16'h0000;
+                data_range_high[i] <= 16'h04ff;
+                threshold_low[i] <= 16'h03c0;
+                threshold_high[i] <= 16'h0400;
+              end
+            end
+          endcase
+          // write the new threshold to the discriminator and update the input data
+          discriminator_config_in.valid <= 1'b1;
+          update_input_data <= 1'b1;
+          @(posedge clk);
+          discriminator_config_in.valid <= 1'b0;
+          update_input_data <= 1'b0;
 
-  for (int in_valid_rand = 0; in_valid_rand < 2; in_valid_rand++) begin
-    for (int bank_mode = 0; bank_mode < 4; bank_mode++) begin
-      for (int amplitude_mode = 0; amplitude_mode < 5; amplitude_mode++) begin
-        repeat (10) @(posedge clk);
-        unique case (amplitude_mode)
-          0: begin
-            // save everything
-            for (int i = 0; i < CHANNELS; i++) begin
-              data_range_low[i] <= 16'h03c0;
-              data_range_high[i] <= 16'h04ff;
-              threshold_low[i] <= 16'h0000;
-              threshold_high[i] <= 16'h0100;
-            end
-          end
-          1: begin
-            // send stuff straddling the threshold with strong hysteresis
-            for (int i = 0; i < CHANNELS; i++) begin
-              data_range_low[i] <= 16'h00ff;
-              data_range_high[i] <= 16'h04ff;
-              threshold_low[i] <= 16'h01c0;
-              threshold_high[i] <= 16'h0400;
-            end
-          end
-          2: begin
-            // send stuff below the threshold
-            for (int i = 0; i < CHANNELS; i++) begin
-              data_range_low[i] <= 16'h0000;
-              data_range_high[i] <= 16'h01ff;
-              threshold_low[i] <= 16'h0200;
-              threshold_high[i] <= 16'h0200;
-            end
-          end
-          3: begin
-            // send stuff straddling the threshold with weak hysteresis
-            for (int i = 0; i < CHANNELS; i++) begin
-              data_range_low[i] <= 16'h0000;
-              data_range_high[i] <= 16'h04ff;
-              threshold_low[i] <= 16'h03c0;
-              threshold_high[i] <= 16'h0400;
-            end
-          end
-          4: begin
-            // send stuff that mostly gets filtered out
-            for (int i = 0; i < CHANNELS; i++) begin
-              data_range_low[i] <= 16'h0000;
-              data_range_high[i] <= 16'h04ff;
-              threshold_low[i] <= 16'h03c0;
-              threshold_high[i] <= 16'h0400;
-            end
-          end
-        endcase
-        // write the new threshold to the discriminator and update the input data
-        discriminator_config_in.valid <= 1'b1;
-        update_input_data <= 1'b1;
-        @(posedge clk);
-        discriminator_config_in.valid <= 1'b0;
-        update_input_data <= 1'b0;
+          repeat (10) @(posedge clk);
+          start_acq(start_type & 1'b1);
 
-        repeat (10) @(posedge clk);
-        start_acq_with_banking_mode(bank_mode);
-
-        data_in.send_samples(clk, $urandom_range(50,500), in_valid_rand & 1'b1, 1'b1, 1'b1);
-        repeat (10) @(posedge clk);
-        stop_acq();
-        data_out.do_readout(clk, 1'b1, 100000);
-        debug.display($sformatf("checking results amplitude_mode = %0d", amplitude_mode), VERBOSE);
-        debug.display($sformatf("banking mode                    = %0d", bank_mode), VERBOSE);
-        debug.display($sformatf("samples sent with rand_valid    = %0d", in_valid_rand), VERBOSE);
-        check_results(bank_mode, threshold_high, threshold_low, timer);
+          data_in.send_samples(clk, $urandom_range(50,500), in_valid_rand & 1'b1, 1'b1, 1'b1);
+          repeat (10) @(posedge clk);
+          stop_acq();
+          data_out.do_readout(clk, 1'b1, 100000);
+          debug.display($sformatf("checking results amplitude_mode = %0d", amplitude_mode), VERBOSE);
+          debug.display($sformatf("banking mode                    = %0d", bank_mode), VERBOSE);
+          debug.display($sformatf("samples sent with rand_valid    = %0d", in_valid_rand), VERBOSE);
+          check_results(bank_mode, threshold_high, threshold_low, timer);
+        end
       end
     end
   end

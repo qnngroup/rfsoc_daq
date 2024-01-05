@@ -31,8 +31,10 @@ logic [1:0] buffer_full;
 Axis_Parallel_If #(.DWIDTH(TIMESTAMP_WIDTH), .CHANNELS(CHANNELS)) disc_timestamps();
 Axis_Parallel_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES), .CHANNELS(CHANNELS)) disc_data();
 // config interfaces to timestamp and data buffers
-Axis_If #(.DWIDTH($clog2($clog2(CHANNELS)+1)+2)) buffer_timestamp_config ();
-Axis_If #(.DWIDTH($clog2($clog2(CHANNELS)+1)+2)) buffer_data_config ();
+Axis_If #(.DWIDTH($clog2($clog2(CHANNELS)+1))) buffer_timestamp_config ();
+Axis_If #(.DWIDTH($clog2($clog2(CHANNELS)+1))) buffer_data_config ();
+Axis_If #(.DWIDTH(2)) buffer_timestamp_start_stop ();
+Axis_If #(.DWIDTH(2)) buffer_data_start_stop ();
 // raw buffer outputs
 Axis_If #(.DWIDTH(TIMESTAMP_WIDTH)) buffer_timestamp_out ();
 Axis_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES)) buffer_data_out ();
@@ -49,6 +51,16 @@ assign buffer_timestamp_config.last = 1'b0; // unused; tie to 0 to suppress warn
 assign buffer_data_config.data = buffer_config_in.data;
 assign buffer_data_config.valid = buffer_config_in.valid;
 assign buffer_data_config.last = 1'b0; // unused; tie to 0 to suppress warnings
+
+// share buffer_start_stop
+assign buffer_timestamp_start_stop.data = buffer_start_stop.data;
+assign buffer_timestamp_start_stop.valid = buffer_start_stop.valid;
+assign buffer_timestamp_start_stop.last = 1'b0; // unused; tie to 0 to suppress warnings
+assign buffer_timestamp_start_stop.ready = 1'b0; // unused; tie to 0 to suppress warnings
+assign buffer_data_start_stop.data = buffer_start_stop.data;
+assign buffer_data_start_stop.valid = buffer_start_stop.valid;
+assign buffer_data_start_stop.last = 1'b0; // unused; tie to 0 to suppress warnings
+assign buffer_data_start_stop.ready = 1'b0; // unused; tie to 0 to suppress warnings
 
 assign disc_timestamps.ready = 1'b0; // unused; tie to 0 to suppress warnings
 assign disc_timestamps.last = 1'b0; // unused; tie to 0 to suppress warnings
@@ -97,6 +109,7 @@ sample_buffer #(
   .data_in(disc_data),
   .data_out(buffer_data_out),
   .config_in(buffer_data_config),
+  .start_stop(buffer_data_start_stop),
   .stop_aux(buffer_full[0]), // stop saving data when timestamp buffer is full
   .start_aux(start_aux & ~start_aux_d), // start capture on rising edge of start_aux
   .capture_started(),
@@ -114,6 +127,7 @@ sample_buffer #(
   .data_in(disc_timestamps),
   .data_out(buffer_timestamp_out),
   .config_in(buffer_timestamp_config),
+  .start_stop(buffer_timestamp_start_stop),
   .stop_aux(buffer_full[1]), // stop saving timestamps when data buffer is full
   .start_aux(start_aux & ~start_aux_d), // start capture on rising edge of start_aux
   .capture_started(),

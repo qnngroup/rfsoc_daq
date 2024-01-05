@@ -1,7 +1,5 @@
 // receive_top_test.sv - Reed Foster
 // verifies data from ADC is saved correctly
-//
-// TODO test new start/stop interface, test start_aux
 
 import sim_util_pkg::*;
 import sample_discriminator_pkg::*;
@@ -58,7 +56,7 @@ Axis_If #(.DWIDTH(CHANNELS*MUX_SELECT_BITS)) channel_mux_config ();
 Axis_If #(.DWIDTH(32)) buffer_timestamp_width ();
 
 // configuration signals
-logic capture_start, capture_stop;
+logic capture_start, capture_stop, start_aux;
 logic [$clog2($clog2(CHANNELS)+1)-1:0] banking_mode;
 logic [CHANNELS-1:0][SAMPLE_WIDTH-1:0] threshold_high, threshold_low;
 
@@ -68,7 +66,8 @@ always_comb begin
   end
 end
 
-assign buffer_config.data = {banking_mode, capture_start, capture_stop};
+assign buffer_config.data = banking_mode;
+assign buffer_start_stop.data = {capture_start, capture_stop};
 
 // allow the data to be manually updated when we change the range so the first sample for a new range isn't stale
 // this simplifies the testing
@@ -93,8 +92,10 @@ receive_top #(
   .reset,
   .adc_data_in,
   .dma_data_out,
+  .start_aux,
   .sample_discriminator_config,
   .buffer_config,
+  .buffer_start_stop,
   .channel_mux_config,
   .buffer_timestamp_width
 );
@@ -143,24 +144,35 @@ always @(posedge clk) begin
   end
 end
 
-task start_acq_with_banking_mode(input int mode);
-  while (!buffer_config.ready) @(posedge clk);
-  capture_start <= 1'b1;
+task set_banking_mode(input int mode);
   banking_mode <= mode;
   buffer_config.valid <= 1'b1;
-  @(posedge clk);
+  while (~buffer_config.ok) @(posedge clk);
   buffer_config.valid <= 1'b0;
-  capture_start <= 1'b0;
+endtask
+
+task start_acq(input bit use_axis);
+  if (use_axis) begin
+    capture_stop <= 1'b0;
+    capture_start <= 1'b1;
+    buffer_start_stop.valid <= 1'b1;
+    @(posedge clk);
+    capture_start <= 1'b0;
+    buffer_start_stop.valid <= 1'b0;
+  end else begin
+    start_aux <= 1'b1;
+    @(posedge clk);
+    start_aux <= 1'b0;
+  end
 endtask
 
 task stop_acq();
   capture_stop <= 1'b1;
   capture_start <= 1'b0;
-  buffer_config.valid <= 1'b1;
+  buffer_start_stop.valid <= 1'b1;
   @(posedge clk);
-  buffer_config.valid <= 1'b0;
-  capture_start <= 1'b0;
   capture_stop <= 1'b0;
+  buffer_start_stop.valid <= 1'b0;
 endtask
 
 task check_results(
@@ -213,19 +225,19 @@ task check_results(
 
 endtask
 
-
-
 initial begin
   debug.display("### running test for receive_top ###", DEFAULT);
   reset <= 1'b1;
   capture_start <= 1'b0;
   capture_stop <= 1'b0;
+  start_aux <= 1'b0;
   banking_mode <= '0; // reset banking mode (only enable channel 0 to start)
   timer <= '0; // reset timer for all samples
   adc_data_in.valid <= '0;
   dma_data_out.ready <= 1'b0;
   sample_discriminator_config.valid <= 1'b0;
   buffer_config.valid <= 1'b0;
+  buffer_start_stop.valid <= 1'b0;
   channel_mux_config.valid <= 1'b0;
   repeat (100) @(posedge clk);
   reset <= 1'b0;
@@ -240,91 +252,94 @@ initial begin
     channel_mux_config.valid <= 1'b1;
     @(posedge clk);
     channel_mux_config.valid <= 1'b0;
-    for (int in_valid_rand = 0; in_valid_rand < 2; in_valid_rand++) begin
-      for (int bank_mode = 0; bank_mode < 4; bank_mode++) begin
-        for (int amplitude_mode = 0; amplitude_mode < 5; amplitude_mode++) begin
-          repeat (10) @(posedge clk);
-          unique case (amplitude_mode)
-            0: begin
-              // save everything
-              for (int channel = 0; channel < CHANNELS; channel++) begin
-                data_range_low[channel] <= 16'h03c0;
-                data_range_high[channel] <= 16'h04ff;
-                threshold_low[channel] <= 16'h0000;
-                threshold_high[channel] <= 16'h0100;
+    for (int start_type = 0; start_type < 2; start_type++) begin
+      for (int in_valid_rand = 0; in_valid_rand < 2; in_valid_rand++) begin
+        for (int bank_mode = 0; bank_mode < 4; bank_mode++) begin
+          set_banking_mode(bank_mode);
+          for (int amplitude_mode = 0; amplitude_mode < 5; amplitude_mode++) begin
+            repeat (10) @(posedge clk);
+            unique case (amplitude_mode)
+              0: begin
+                // save everything
+                for (int channel = 0; channel < CHANNELS; channel++) begin
+                  data_range_low[channel] <= 16'h03c0;
+                  data_range_high[channel] <= 16'h04ff;
+                  threshold_low[channel] <= 16'h0000;
+                  threshold_high[channel] <= 16'h0100;
+                end
               end
-            end
-            1: begin
-              // send stuff straddling the threshold with strong hysteresis
-              for (int channel = 0; channel < CHANNELS; channel++) begin
-                data_range_low[channel] <= 16'h00ff;
-                data_range_high[channel] <= 16'h04ff;
-                threshold_low[channel] <= 16'h01c0;
-                threshold_high[channel] <= 16'h0400;
+              1: begin
+                // send stuff straddling the threshold with strong hysteresis
+                for (int channel = 0; channel < CHANNELS; channel++) begin
+                  data_range_low[channel] <= 16'h00ff;
+                  data_range_high[channel] <= 16'h04ff;
+                  threshold_low[channel] <= 16'h01c0;
+                  threshold_high[channel] <= 16'h0400;
+                end
               end
-            end
-            2: begin
-              // send stuff below the threshold
-              for (int channel = 0; channel < CHANNELS; channel++) begin
-                data_range_low[channel] <= 16'h0000;
-                data_range_high[channel] <= 16'h01ff;
-                threshold_low[channel] <= 16'h0200;
-                threshold_high[channel] <= 16'h0200;
+              2: begin
+                // send stuff below the threshold
+                for (int channel = 0; channel < CHANNELS; channel++) begin
+                  data_range_low[channel] <= 16'h0000;
+                  data_range_high[channel] <= 16'h01ff;
+                  threshold_low[channel] <= 16'h0200;
+                  threshold_high[channel] <= 16'h0200;
+                end
               end
-            end
-            3: begin
-              // send stuff straddling the threshold with weak hysteresis
-              for (int channel = 0; channel < CHANNELS; channel++) begin
-                data_range_low[channel] <= 16'h0000;
-                data_range_high[channel] <= 16'h04ff;
-                threshold_low[channel] <= 16'h03c0;
-                threshold_high[channel] <= 16'h0400;
+              3: begin
+                // send stuff straddling the threshold with weak hysteresis
+                for (int channel = 0; channel < CHANNELS; channel++) begin
+                  data_range_low[channel] <= 16'h0000;
+                  data_range_high[channel] <= 16'h04ff;
+                  threshold_low[channel] <= 16'h03c0;
+                  threshold_high[channel] <= 16'h0400;
+                end
               end
-            end
-            4: begin
-              // send stuff that mostly gets filtered out
-              for (int channel = 0; channel < CHANNELS; channel++) begin
-                data_range_low[channel] <= 16'h0000;
-                data_range_high[channel] <= 16'h04ff;
-                threshold_low[channel] <= 16'h03c0;
-                threshold_high[channel] <= 16'h0400;
+              4: begin
+                // send stuff that mostly gets filtered out
+                for (int channel = 0; channel < CHANNELS; channel++) begin
+                  data_range_low[channel] <= 16'h0000;
+                  data_range_high[channel] <= 16'h04ff;
+                  threshold_low[channel] <= 16'h03c0;
+                  threshold_high[channel] <= 16'h0400;
+                end
               end
-            end
-          endcase
-          // write the new threshold to the sample discriminator and update the input data
-          sample_discriminator_config.valid <= 1'b1;
-          update_input_data <= 1'b1;
-          @(posedge clk);
-          sample_discriminator_config.valid <= 1'b0;
-          update_input_data <= 1'b0;
+            endcase
+            // write the new threshold to the sample discriminator and update the input data
+            sample_discriminator_config.valid <= 1'b1;
+            update_input_data <= 1'b1;
+            @(posedge clk);
+            sample_discriminator_config.valid <= 1'b0;
+            update_input_data <= 1'b0;
 
-          repeat (10) @(posedge clk);
-          start_acq_with_banking_mode(bank_mode);
+            repeat (10) @(posedge clk);
+            start_acq(start_type & 1'b1);
 
-          // send a random number of samples, with in_valid_rand setting
-          // whether or not valid should be continously high or randomly
-          // toggled. the final arguments specify valid is reset and the ready signal is ignored
-          adc_data_in.send_samples(clk, $urandom_range(50,500), in_valid_rand & 1'b1, 1'b1, 1'b1);
-          repeat (10) @(posedge clk);
-          stop_acq();
-          // readout over DMA interface with randomly toggling ready signal.
-          // wait for last timeout is 100k clock cycles
-          dma_data_out.do_readout(clk, 1'b1, 100000);
-          debug.display($sformatf("checking results amplitude_mode = %0d", amplitude_mode), VERBOSE);
-          debug.display($sformatf("banking mode                    = %0d", bank_mode), VERBOSE);
-          debug.display($sformatf("samples sent with rand_valid    = %0d", in_valid_rand), VERBOSE);
-          debug.display($sformatf("mux_select_mode                 = %0d", mux_select_mode), VERBOSE);
-          if (mux_select_mode == 0) begin
-            // check with raw_samples
-            check_results(raw_samples, bank_mode, threshold_high, threshold_low, timer);
-            for (int channel = 0; channel < CHANNELS; channel++) begin
-              while (differentiated_samples[channel].size() > 0) differentiated_samples[channel].pop_back();
-            end
-          end else begin
-            // check with differentiated_samples
-            check_results(differentiated_samples, bank_mode, threshold_high, threshold_low, timer);
-            for (int channel = 0; channel < CHANNELS; channel++) begin
-              while (raw_samples[channel].size() > 0) raw_samples[channel].pop_back();
+            // send a random number of samples, with in_valid_rand setting
+            // whether or not valid should be continously high or randomly
+            // toggled. the final arguments specify valid is reset and the ready signal is ignored
+            adc_data_in.send_samples(clk, $urandom_range(50,500), in_valid_rand & 1'b1, 1'b1, 1'b1);
+            repeat (10) @(posedge clk);
+            stop_acq();
+            // readout over DMA interface with randomly toggling ready signal.
+            // wait for last timeout is 100k clock cycles
+            dma_data_out.do_readout(clk, 1'b1, 100000);
+            debug.display($sformatf("checking results amplitude_mode = %0d", amplitude_mode), VERBOSE);
+            debug.display($sformatf("banking mode                    = %0d", bank_mode), VERBOSE);
+            debug.display($sformatf("samples sent with rand_valid    = %0d", in_valid_rand), VERBOSE);
+            debug.display($sformatf("mux_select_mode                 = %0d", mux_select_mode), VERBOSE);
+            if (mux_select_mode == 0) begin
+              // check with raw_samples
+              check_results(raw_samples, bank_mode, threshold_high, threshold_low, timer);
+              for (int channel = 0; channel < CHANNELS; channel++) begin
+                while (differentiated_samples[channel].size() > 0) differentiated_samples[channel].pop_back();
+              end
+            end else begin
+              // check with differentiated_samples
+              check_results(differentiated_samples, bank_mode, threshold_high, threshold_low, timer);
+              for (int channel = 0; channel < CHANNELS; channel++) begin
+                while (raw_samples[channel].size() > 0) raw_samples[channel].pop_back();
+              end
             end
           end
         end

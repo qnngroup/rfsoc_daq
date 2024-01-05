@@ -12,8 +12,6 @@
 //   toggling the input valid signal
 // - tests readout with continuous and toggling ready signal to verify
 //   backpressure handling logicimport sim_util_pkg::*;
-//
-// TODO test new start/stop interface, test start_aux
 
 import sim_util_pkg::*;
 
@@ -34,13 +32,16 @@ localparam int PARALLEL_SAMPLES = 1;
 localparam int SAMPLE_WIDTH = 16;
 
 logic start, stop;
+logic start_aux;
 logic [2:0] banking_mode;
-
-assign config_in.data = {banking_mode, start, stop};
 
 Axis_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(CHANNELS)) data_in ();
 Axis_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH)) data_out ();
-Axis_If #(.DWIDTH(2+$clog2($clog2(CHANNELS)+1))) config_in ();
+Axis_If #(.DWIDTH($clog2($clog2(CHANNELS)+1))) config_in ();
+Axis_If #(.DWIDTH(2)) start_stop ();
+
+assign config_in.data = banking_mode;
+assign start_stop.data = {start, stop};
 
 sample_buffer #(
   .CHANNELS(CHANNELS),
@@ -52,7 +53,12 @@ sample_buffer #(
   .reset,
   .data_in,
   .data_out,
-  .config_in
+  .config_in,
+  .start_stop,
+  .start_aux,
+  .stop_aux(0),
+  .capture_started(),
+  .buffer_full()
 );
 
 int sample_count [CHANNELS];
@@ -148,23 +154,35 @@ task check_results(input int banking_mode, input bit missing_ok);
   end
 endtask
 
-task start_acq_with_banking_mode(input int mode);
-  start <= 1'b1;
+task set_banking_mode(input int mode);
   banking_mode <= mode;
   config_in.valid <= 1'b1;
-  @(posedge clk);
-  start <= 1'b0;
+  while (~config_in.ok) @(posedge clk);
   config_in.valid <= 1'b0;
+endtask
+
+task start_acq(input bit use_axis);
+  if (use_axis) begin
+    stop <= 1'b0;
+    start <= 1'b1;
+    start_stop.valid <= 1'b1;
+    @(posedge clk);
+    start <= 1'b0;
+    start_stop.valid <= 1'b0;
+  end else begin
+    start_aux <= 1'b1;
+    @(posedge clk);
+    start_aux <= 1'b0;
+  end
 endtask
 
 task stop_acq();
   stop <= 1'b1;
   start <= 1'b0;
-  config_in.valid <= 1'b1;
+  start_stop.valid <= 1'b1;
   @(posedge clk);
-  config_in.valid <= 1'b0;
-  start <= 1'b0;
   stop <= 1'b0;
+  start_stop.valid <= 1'b0;
 endtask
 
 int samples_to_send;
@@ -174,40 +192,45 @@ initial begin
   reset <= 1'b1;
   start <= 1'b0;
   stop <= 1'b0;
+  start_aux <= '0;
   banking_mode <= '0; // only enable channel 0
   data_in.valid <= '0;
+  config_in.valid <= '0;
+  start_stop.valid <= '0;
   repeat (100) @(posedge clk);
   reset <= 1'b0;
   repeat (50) @(posedge clk);
-
-  for (int in_valid_rand = 0; in_valid_rand < 2; in_valid_rand++) begin
-    for (int bank_mode = 0; bank_mode < 4; bank_mode++) begin
-      for (int samp_count = 0; samp_count < 3; samp_count++) begin
-        start_acq_with_banking_mode(bank_mode);
-        unique case (samp_count)
-          0: samples_to_send = $urandom_range(4, 10); // a few samples
-          1: samples_to_send = ((BUFFER_DEPTH - $urandom_range(2,10)) / (1 << bank_mode))*CHANNELS;
-          2: samples_to_send = (BUFFER_DEPTH / (1 << bank_mode))*CHANNELS; // fill all buffers
-        endcase
-        data_in.send_samples(clk, samples_to_send, in_valid_rand & 1'b1, 1'b1, 1'b1);
-        repeat (10) @(posedge clk);
-        stop_acq();
-        data_out.do_readout(clk, 1'b1, 100000);
-        debug.display($sformatf("checking results n_samples   = %d", samples_to_send), VERBOSE);
-        debug.display($sformatf("banking mode                 = %d", bank_mode), VERBOSE);
-        debug.display($sformatf("samples sent with rand_valid = %d", in_valid_rand), VERBOSE);
-        // The second argument of check_results is if it's okay for there to
-        // be missing samples that weren't stored.
-        // When data_in.valid is randomly toggled on and off and enough samples
-        // are sent to fill up all the banks, one of the banks will likely
-        // fill up before the others are done, triggering a stop condition for
-        // the other banks before they are full.
-        // This results in "missing" samples that aren't saved
-        check_results(bank_mode, (samp_count == 2) & (in_valid_rand == 1));
+  for (int start_type = 0; start_type < 2; start_type++) begin
+    for (int in_valid_rand = 0; in_valid_rand < 2; in_valid_rand++) begin
+      for (int bank_mode = 0; bank_mode < 4; bank_mode++) begin
+        for (int samp_count = 0; samp_count < 3; samp_count++) begin
+          set_banking_mode(bank_mode);
+          unique case (samp_count)
+            0: samples_to_send = $urandom_range(4, 10); // a few samples
+            1: samples_to_send = ((BUFFER_DEPTH - $urandom_range(2,10)) / (1 << bank_mode))*CHANNELS;
+            2: samples_to_send = (BUFFER_DEPTH / (1 << bank_mode))*CHANNELS; // fill all buffers
+          endcase
+          start_acq(start_type & 1'b1);
+          data_in.send_samples(clk, samples_to_send, in_valid_rand & 1'b1, 1'b1, 1'b1);
+          repeat (10) @(posedge clk);
+          stop_acq();
+          data_out.do_readout(clk, 1'b1, 100000);
+          debug.display($sformatf("checking results n_samples    = %d", samples_to_send), VERBOSE);
+          debug.display($sformatf("banking mode                  = %d", bank_mode), VERBOSE);
+          debug.display($sformatf("samples sent with rand_valid  = %d", in_valid_rand), VERBOSE);
+          debug.display($sformatf("acquisition started with mode = %d", start_type), VERBOSE);
+          // The second argument of check_results is if it's okay for there to
+          // be missing samples that weren't stored.
+          // When data_in.valid is randomly toggled on and off and enough samples
+          // are sent to fill up all the banks, one of the banks will likely
+          // fill up before the others are done, triggering a stop condition for
+          // the other banks before they are full.
+          // This results in "missing" samples that aren't saved
+          check_results(bank_mode, (samp_count == 2) & (in_valid_rand == 1));
+        end
       end
     end
   end
-
   debug.finish();
 end
 
