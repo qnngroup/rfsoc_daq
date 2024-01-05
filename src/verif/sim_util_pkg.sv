@@ -41,16 +41,21 @@ package sim_util_pkg;
     endtask
 
     task error(input string message);
-      $warning(message);
+      $error(message);
       error_count = error_count + 1;
+    endtask
+
+    task fatal(input string message);
+      $display("### ENCOUNTERED A FATAL ERROR, STOPPING SIMULATION NOW ###");
+      $fatal(message);
     endtask
 
     task finish();
       if (error_count == 0) begin
-        $display("### finished with zero errors ###");
+        $display("### FINISHED WITH ZERO ERRORS ###");
         $finish;
       end else begin
-        $fatal(1, "### finished with %0d errors ###", error_count);
+        $fatal(1, "### FINISHED WITH %0d ERRORS ###", error_count);
       end
     endtask
 

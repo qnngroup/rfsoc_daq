@@ -90,6 +90,27 @@ task automatic send_samples(
   end
 endtask
 
+// Update registers with an Axis_If interface
+// must be augmented with a process or other statement to actually update the
+// data
+task automatic send_sample_with_timeout(
+  ref clk,
+  input int timeout,
+  output logic success
+);
+  int timer;
+  timer <= 0;
+  success <= 1'b0;
+  while ((timer < timeout) & (~success)) begin
+    timer <= timer + 1;
+    if (ok) begin
+      success <= 1'b1;
+    end
+    @(posedge clk);
+  end
+endtask
+
+
 // Wait until the last transfer goes through on an Axis_If interface,
 // or until a timeout is reached. Can optionally toggle the ready signal
 // to test backpressure handling logic of modules

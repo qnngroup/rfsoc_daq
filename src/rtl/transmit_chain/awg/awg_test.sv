@@ -1,6 +1,395 @@
 // awg_test.sv - Reed Foster
 
-`timescale 1ns/1ps;
+import sim_util_pkg::*;
+
+`timescale 1ns/1ps
 
 module awg_test ();
+
+sim_util_pkg::debug debug = new(DEFAULT);
+
+parameter int DEPTH = 2048;
+parameter int AXI_MM_WIDTH = 128;
+parameter int PARALLEL_SAMPLES = 16;
+parameter int SAMPLE_WIDTH = 16;
+parameter int CHANNELS = 8;
+
+logic dac_reset;
+logic dac_clk = 0;
+localparam DAC_CLK_RATE_HZ = 384_000_000;
+always #(0.5s/DAC_CLK_RATE_HZ) dac_clk = ~dac_clk;
+
+logic dma_reset;
+logic dma_clk = 0;
+localparam DMA_CLK_RATE_HZ = 100_000_000;
+always #(0.5s/DMA_CLK_RATE_HZ) dma_clk = ~dma_clk;
+
+Axis_If #(.DWIDTH(AXI_MM_WIDTH)) dma_data_in ();
+Axis_If #(.DWIDTH((1+$clog2(DEPTH))*CHANNELS)) dma_write_depth ();
+Axis_If #(.DWIDTH(2*CHANNELS)) dma_trigger_out_config ();
+Axis_If #(.DWIDTH(64*CHANNELS)) dma_awg_burst_length ();
+Axis_If #(.DWIDTH(2)) dma_awg_start_stop ();
+Axis_If #(.DWIDTH(2)) dma_transfer_error ();
+
+Axis_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(CHANNELS)) dac_data_out ();
+logic [CHANNELS-1:0] dac_trigger;
+
+awg #(
+  .DEPTH(DEPTH),
+  .AXI_MM_WIDTH(AXI_MM_WIDTH),
+  .PARALLEL_SAMPLES(PARALLEL_SAMPLES),
+  .SAMPLE_WIDTH(SAMPLE_WIDTH),
+  .CHANNELS(CHANNELS)
+) dut_i (
+  .dma_clk,
+  .dma_reset,
+  .dma_data_in,
+  .dma_write_depth,
+  .dma_trigger_out_config,
+  .dma_awg_burst_length,
+  .dma_awg_start_stop,
+  .dma_transfer_error,
+  .dac_clk,
+  .dac_reset,
+  .dac_data_out,
+  .dac_trigger
+);
+
+logic register_write_success;
+
+logic [$clog2(DEPTH):0] write_depths [CHANNELS];
+logic [63:0] burst_lengths [CHANNELS];
+logic [1:0] trigger_modes [CHANNELS];
+logic [SAMPLE_WIDTH-1:0] samples_to_send [CHANNELS][$];
+logic [AXI_MM_WIDTH-1:0] dma_words [$];
+logic [AXI_MM_WIDTH-1:0] dma_word;
+logic [SAMPLE_WIDTH-1:0] samples_received [CHANNELS][$];
+int trigger_arrivals [CHANNELS][$];
+
+always @(posedge dma_clk) begin
+  if (dma_data_in.ok) begin
+    if (dma_words.size() > 0) begin
+      dma_data_in.data <= dma_words.pop_back();
+    end else begin
+      dma_data_in.data <= '0;
+    end
+  end
+end
+
+task automatic check_dma_words(
+  input logic [SAMPLE_WIDTH-1:0] samples_to_send [CHANNELS][$],
+  input logic [AXI_MM_WIDTH-1:0] dma_words [$]
+);
+  // since the task is static and we've declared the queues as inputs, it's
+  // safe to pop items frome the queues without worrying about disrupting the
+  // state of the calling task/process
+  int channel = 0;
+  debug.display("checking dma input data", DEBUG);
+  debug.display($sformatf("dma_words.size() = %d", dma_words.size()), DEBUG);
+  for (int c = 0; c < CHANNELS; c++) begin
+    debug.display($sformatf(
+      "samples_to_send[%d].size() = %d",
+      c,
+      samples_to_send[c].size()),
+      DEBUG
+    );
+  end
+  while (dma_words.size() > 0) begin
+    for (int sample = 0; sample < AXI_MM_WIDTH/SAMPLE_WIDTH; sample++) begin
+      if (dma_words[$][sample*SAMPLE_WIDTH+:SAMPLE_WIDTH] !== samples_to_send[channel][0]) begin
+        debug.error($sformatf(
+          "mismatched sample at dma_words[%d] for channel %d, got %x expected %x",
+          dma_words.size() - 1,
+          channel,
+          dma_words[$][sample*SAMPLE_WIDTH+:SAMPLE_WIDTH],
+          samples_to_send[channel][0])
+        );
+      end
+      if (samples_to_send[channel].size() == 0) begin
+        debug.fatal($sformatf(
+          {
+            "incorrect dma word alignment of samples",
+            "\nwrite_depth should be a multiple of (AXI_MM_WIDTH + ",
+            "SAMPLE_WIDTH*PARALLEL_SAMPLES - 1)/(SAMPLE_WIDTH*PARALLEL_SAMPLES)",
+            " = %d/%d = %d"
+          },
+          AXI_MM_WIDTH + SAMPLE_WIDTH*PARALLEL_SAMPLES - 1, SAMPLE_WIDTH*PARALLEL_SAMPLES,
+          (SAMPLE_WIDTH*PARALLEL_SAMPLES + AXI_MM_WIDTH - 1)/(SAMPLE_WIDTH*PARALLEL_SAMPLES))
+        );
+      end
+      samples_to_send[channel].pop_front();
+    end
+    dma_words.pop_back();
+    if (samples_to_send[channel].size() == 0) begin
+      channel = channel + 1;
+    end
+  end
+  if (channel != CHANNELS) begin
+    debug.error("dma_words did not have enough samples");
+  end
+endtask
+
+task automatic check_output_data(
+  input logic [SAMPLE_WIDTH-1:0] samples_to_send [CHANNELS][$],
+  input logic [SAMPLE_WIDTH-1:0] samples_received [CHANNELS][$],
+  input int trigger_arrivals [CHANNELS][$],
+  input logic [1:0] trigger_modes [CHANNELS],
+  input logic [$clog2(DEPTH):0] write_depths [CHANNELS],
+  input logic [63:0] burst_lengths [CHANNELS]
+);
+  int sample_count;
+  int burst_count;
+  for (int channel = 0; channel < CHANNELS; channel++) begin
+    sample_count = 0;
+    burst_count = 0;
+    debug.display($sformatf("checking output for channel %d", channel), VERBOSE);
+    if (samples_received[channel].size()
+        != write_depths[channel]*burst_lengths[channel]*PARALLEL_SAMPLES) begin
+      debug.error($sformatf(
+        {
+          "incorrect number of samples received on channel %d.",
+          "\nbased on write_depths*burst_lengths, expected %d;",
+          "\nbased on samples_to_send, expected %d;",
+          "\ngot %d"
+        },
+        channel,
+        write_depths[channel]*burst_lengths[channel]*PARALLEL_SAMPLES,
+        samples_to_send[channel].size(),
+        samples_received[channel].size())
+      );
+    end
+    while (samples_received[channel].size() > 0) begin
+      if (samples_received[channel][$] !== samples_to_send[channel][sample_count]) begin
+        debug.error($sformatf(
+          "channel %d: mismatch on sample %d (burst %d), sent %x, received %x",
+          channel,
+          sample_count,
+          burst_count,
+          samples_to_send[channel][sample_count],
+          samples_received[channel][$])
+        );
+      end
+      samples_received[channel].pop_back();
+      if (sample_count == write_depths[channel]*PARALLEL_SAMPLES - 1) begin
+        // check for a trigger
+        if (trigger_modes[channel] != 0) begin
+          if (trigger_modes[channel] == 1) begin
+            if (trigger_arrivals[channel].size() !== 1) begin
+              debug.error($sformatf(
+                "channel %d: expected exactly one trigger (on burst 0), but got %d triggers",
+                channel,
+                trigger_arrivals[channel].size())
+              );
+            end
+            if (burst_count == 0) begin
+              if (trigger_arrivals[channel][burst_count] !== samples_received[channel].size() + 1) begin
+                debug.error($sformatf(
+                  "channel %d: wrong trigger time for burst %d, got %d expected %d",
+                  channel,
+                  burst_count,
+                  trigger_arrivals[channel][burst_count],
+                  samples_received[channel].size() + 1)
+                );
+              end
+            end
+          end else if (trigger_modes[channel] == 2) begin
+            if (trigger_arrivals[channel].size() !== burst_lengths[channel]) begin
+              debug.error($sformatf(
+                "channel %d: expected exactly %d triggers, but got %d triggers",
+                channel,
+                burst_lengths[channel],
+                trigger_arrivals[channel].size())
+              );
+            end
+          end
+        end
+        burst_count = burst_count + 1;
+      end
+      sample_count = (sample_count + 1) % (write_depths[channel]*PARALLEL_SAMPLES);
+    end
+  end
+endtask
+
+initial begin
+  debug.display("### TESTING ARBITRARY WAVEFORM GENERATOR ###", DEFAULT);
+  debug.display("############################################", DEFAULT);
+  debug.display("######## TEST TODO LIST ####################", DEFAULT);
+  debug.display("############################################", DEFAULT);
+
+  debug.display(" [ ] test with a zero-length frame",                              DEFAULT);
+  debug.display(" [ ] test with a max-length frame",                               DEFAULT);
+  debug.display(" [ ] test with random-length frame",                              DEFAULT);
+  debug.display("                                  ",                              DEFAULT);
+  debug.display(" [ ] test with a zero-length burst",                              DEFAULT);
+  debug.display(" [ ] test with a random-length burst",                            DEFAULT);
+  debug.display("                                    ",                            DEFAULT);
+  debug.display(" [ ] check that triggers are being produced correctly",           DEFAULT);
+  debug.display(" [ ] check output values match what was sent",                    DEFAULT);
+  debug.display("                                            ",                    DEFAULT);
+  debug.display(" [x] check that dma_transfer_error produces the correct output",  DEFAULT);
+  debug.display(" [ ] check behavior when sending start signal multiple times",    DEFAULT);
+
+  dac_reset <= 1'b1;
+  dma_reset <= 1'b1;
+  dma_data_in.valid <= 1'b0;
+  dma_data_in.last <= 1'b0;
+
+  repeat (100) @(posedge dma_clk);
+  dma_reset <= 1'b0;
+  @(posedge dac_clk);
+  dac_reset <= 1'b0;
+
+  for (int channel = 0; channel < CHANNELS; channel++) begin
+    write_depths[channel] <= 16;
+    burst_lengths[channel] <= 4;
+  end
+  
+  for (int tlast_check = 0; tlast_check < 3; tlast_check++) begin
+    for (int rand_valid = 0; rand_valid < 2; rand_valid++) begin
+      // do test
+ 
+      // assign write_depths for trial
+      // assign burst_depths for trial
+
+      // first update the trigger configuration
+      for (int channel = 0; channel < CHANNELS; channel++) begin
+        dma_trigger_out_config.data[channel*2+:2] <= trigger_modes[channel];
+      end
+      dma_trigger_out_config.send_sample_with_timeout(dma_clk, 10, register_write_success);
+      if (~register_write_success) begin
+        debug.error("failed to update trigger configuration register");
+      end
+
+      // then, set the burst lengths
+      for (int channel = 0; channel < CHANNELS; channel++) begin
+        dma_awg_burst_length.data[channel*64+:64] <= burst_lengths[channel];
+      end
+      dma_awg_burst_length.send_sample_with_timeout(dma_clk, 10, register_write_success);
+      if (~register_write_success) begin
+        debug.error("failed to update burst length register");
+      end
+
+      // finally, update the write depth, which will put the DUT into a state
+      // where it is ready to accept DMA data
+      for (int channel = 0; channel < CHANNELS; channel++) begin
+        dma_write_depth.data[channel*(1+$clog2(DEPTH))+:(1+$clog2(DEPTH))] <= write_depths[channel];
+      end
+      dma_write_depth.send_sample_with_timeout(dma_clk, 10, register_write_success);
+      if (~register_write_success) begin
+        debug.fatal("failed to update write_depth register; cannot proceed with DMA");
+      end
+
+      // generate samples to send
+      for (int channel = 0; channel < CHANNELS; channel++) begin
+        for (int batch = 0; batch < write_depths[channel]; batch++) begin
+          for (int sample = 0; sample < PARALLEL_SAMPLES; sample++) begin
+            samples_to_send[channel].push_back($urandom_range(1,{SAMPLE_WIDTH{1'b1}}));
+          end
+        end
+      end
+
+      // reform samples into AXI_MM_WIDTH-wide words
+      for (int channel = 0; channel < CHANNELS; channel++) begin
+        for (int word = 0; word < (write_depths[channel]*PARALLEL_SAMPLES*SAMPLE_WIDTH)/AXI_MM_WIDTH; word++) begin
+          dma_word = '0;
+          for (int sample = 0; sample < AXI_MM_WIDTH/SAMPLE_WIDTH; sample++) begin
+            dma_word |= samples_to_send[channel][word*AXI_MM_WIDTH/SAMPLE_WIDTH+sample] << SAMPLE_WIDTH;
+          end
+          dma_words.push_front(dma_word);
+        end
+      end
+
+      // check to make sure we actually send the right data to the AWG
+      check_dma_words(samples_to_send, dma_words);
+ 
+      // send first word before always block has a chance to run
+      dma_data_in.data <= dma_words.pop_back();
+      dma_data_in.send_samples(dma_clk, dma_words.size() / 2, rand_valid & 1'b1, 1'b1, 1'b0);
+      if (tlast_check == 1) begin
+        // send early tlast
+        dma_data_in.last <= 1'b1;
+        while (~dma_data_in.ok) @(posedge dma_clk);
+      end
+      // still send the rest of the data so we can check for correct behavior
+      // in reality, the DMA module won't output an incorrect TLAST if given the
+      // correct input, but it is possible for the user to give the wrong size
+      // memory block to the DMA IP, which would result in an error that we'd
+      // want to catch
+      dma_data_in.send_samples(dma_clk, dma_words.size() - 1, rand_valid & 1'b1, 1'b1, 1'b0);
+      // one sample left, update tlast
+      if (tlast_check == 0) begin
+        dma_data_in.last <= 1'b1;
+      end else begin
+        dma_data_in.last <= 1'b0;
+      end
+      dma_data_in.data <= dma_words.pop_back();
+      dma_data_in.valid <= 1'b1;
+      while (~dma_data_in.ok) @(posedge dma_clk);
+      dma_data_in.valid <= 1'b0;
+
+      // check that there wasn't a transfer error
+      if (dma_transfer_error.data !== tlast_check) begin
+        debug.error($sformatf(
+          "expected transfer error code %0d, got error code %0d",
+          tlast_check,
+          dma_transfer_error.data)
+        );
+      end
+      // clear the transfer error
+      dma_transfer_error.ready <= 1'b1;
+      @(posedge dma_clk);
+      dma_transfer_error.ready <= 1'b0;
+      // check that it's no longer valid
+      if (dma_transfer_error.valid) begin
+        debug.error("read out dma_transfer_error, but it didn't reset");
+      end
+
+      // start outputting DMA data
+      dma_awg_start_stop.data <= 2'b10;
+      dma_awg_start_stop.valid <= 1'b1;
+      @(posedge dma_clk);
+      dma_awg_start_stop.valid <= 1'b0;
+      @(posedge dma_clk);
+      
+      // wait until we get data that's nonzero (we only send nonzero data so
+      // it's easier to check this)
+      // there should be a way to get the latency accurately, but it's kind of
+      // annoying since the start signal has to cross clock domains
+      do begin @(posedge dac_clk); end while (dac_data_out.valid !== 1'b1);
+      while (dac_data_out.data === '0) @(posedge dac_clk);
+      // we have nonzero data now, so wait until all channels become inactive
+      while (dac_data_out.data !== '0) begin
+        for (int channel = 0; channel < CHANNELS; channel++) begin
+          // save trigger arrival if it happens
+          if (dac_trigger[channel] === 1'b1) begin
+            trigger_arrivals[channel].push_back(samples_received[channel].size());
+          end
+          if (samples_received[channel].size() < write_depths[channel]*burst_lengths[channel]*PARALLEL_SAMPLES) begin
+            for (int sample = 0; sample < PARALLEL_SAMPLES; sample++) begin
+              samples_received[channel].push_front(dac_data_out.data[channel][sample*SAMPLE_WIDTH+:SAMPLE_WIDTH]);
+            end
+          end else begin
+            if (dac_data_out.data[channel] !== '0) begin
+              debug.error($sformatf(
+                {
+                  "Got nonzero set of samples (%x) on DAC channel %d.",
+                  "\nAfter %d bursts of depth %d, samples_received[%d].size() = %d"
+                },
+                dac_data_out.data[channel],
+                channel,
+                burst_lengths[channel],
+                write_depths[channel],
+                samples_received[channel].size())
+              );
+            end
+          end
+        end
+        @(posedge dac_clk);
+      end
+
+      check_output_data(samples_to_send, samples_received, trigger_arrivals, trigger_modes, write_depths, burst_lengths);
+    end
+  end
+  debug.finish();
+end
 endmodule
