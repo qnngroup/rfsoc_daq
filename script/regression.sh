@@ -3,7 +3,9 @@
 # https://askubuntu.com/questions/893911/when-writing-a-bash-script-how-do-i-get-the-absolute-path-of-the-location-of-th
 script_dir=$(dirname "$(realpath $0)")
 
-modules=$(grep -RPho 'module ([a-zA-Z0-9_]*)_test' $script_dir/../src/* | sed 's/^module //g')
+#https://unix.stackexchange.com/questions/21033/how-can-i-grep-the-results-of-find-using-exec-and-still-output-to-a-file
+# https://stackoverflow.com/questions/1133698/using-find-to-locate-files-that-match-one-of-multiple-patterns
+modules=$(find $script_dir/../src/ \( -name "*.sv" -o -name "*.v" \) -print0 | xargs -0 grep -Pho 'module ([a-zA-Z0-9_]*)_test' | sed 's/^module //g')
 
 echo "####################################################################################"
 echo "#                           Running regression test                                #"
