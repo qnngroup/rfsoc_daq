@@ -18,7 +18,8 @@ module receive_top #(
   Axis_If.Master_Full dma_data_out,
   // configuration registers
   Axis_If.Slave_Realtime sample_discriminator_config, // 2*CHANNELS*SAMPLE_WIDTH bits
-  Axis_If.Slave_Realtime buffer_config, // 2 + $clog2($clog2(CHANNELS) + 1) bits
+  Axis_If.Slave_Stream buffer_config, // $clog2($clog2(CHANNELS) + 1) bits
+  Axis_If.Slave_Realtime buffer_start_stop, // 2 bits
   Axis_If.Slave_Realtime channel_mux_config, // $clog2(2*CHANNELS)*CHANNELS bits
   // output register
   Axis_If.Master_Realtime buffer_timestamp_width // 32 bits
@@ -108,7 +109,9 @@ sparse_sample_buffer #(
   .data_in(logical_channels),
   .data_out(dma_data_out),
   .discriminator_config_in(sample_discriminator_config),
-  .buffer_config_in(buffer_config)
+  .buffer_config_in(buffer_config),
+  .buffer_start_stop,
+  .start_aux
 );
 
 endmodule

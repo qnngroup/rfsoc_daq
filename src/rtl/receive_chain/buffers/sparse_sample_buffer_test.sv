@@ -3,6 +3,8 @@
 // correctly, saving the correct data and outputting it in the correct format
 // (i.e. timestamps first, then data, and for each bank, outputting the
 // corresponding channel index and sample quantity stored in that bank)
+//
+// TODO test new start/stop interface, test start_aux
 
 import sim_util_pkg::*;
 import sample_discriminator_pkg::*;

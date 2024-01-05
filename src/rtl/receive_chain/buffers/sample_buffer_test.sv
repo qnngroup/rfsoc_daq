@@ -12,6 +12,8 @@
 //   toggling the input valid signal
 // - tests readout with continuous and toggling ready signal to verify
 //   backpressure handling logicimport sim_util_pkg::*;
+//
+// TODO test new start/stop interface, test start_aux
 
 import sim_util_pkg::*;
 

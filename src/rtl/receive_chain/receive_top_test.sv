@@ -1,5 +1,7 @@
 // receive_top_test.sv - Reed Foster
 // verifies data from ADC is saved correctly
+//
+// TODO test new start/stop interface, test start_aux
 
 import sim_util_pkg::*;
 import sample_discriminator_pkg::*;
@@ -50,7 +52,8 @@ Axis_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(CHANNELS)) 
 Axis_If #(.DWIDTH(AXI_MM_WIDTH)) dma_data_out ();
 // DUT configuration interfaces
 Axis_If #(.DWIDTH(CHANNELS*SAMPLE_WIDTH*2)) sample_discriminator_config ();
-Axis_If #(.DWIDTH(2+$clog2($clog2(CHANNELS)+1))) buffer_config ();
+Axis_If #(.DWIDTH($clog2($clog2(CHANNELS)+1))) buffer_config ();
+Axis_If #(.DWIDTH(2)) buffer_start_stop ();
 Axis_If #(.DWIDTH(CHANNELS*MUX_SELECT_BITS)) channel_mux_config ();
 Axis_If #(.DWIDTH(32)) buffer_timestamp_width ();
 
@@ -141,6 +144,7 @@ always @(posedge clk) begin
 end
 
 task start_acq_with_banking_mode(input int mode);
+  while (!buffer_config.ready) @(posedge clk);
   capture_start <= 1'b1;
   banking_mode <= mode;
   buffer_config.valid <= 1'b1;

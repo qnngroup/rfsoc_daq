@@ -15,7 +15,9 @@ module sparse_sample_buffer #(
   Axis_Parallel_If.Slave_Realtime data_in, // all channels in parallel
   Axis_If.Master_Full data_out,
   Axis_If.Slave_Realtime discriminator_config_in, // {threshold_high, threshold_low} for each channel
-  Axis_If.Slave_Realtime buffer_config_in // {banking_mode, start, stop}
+  Axis_If.Slave_Stream buffer_config_in, // {banking_mode}
+  Axis_If.Slave_Realtime buffer_start_stop, // {start, stop}
+  input wire start_aux // auxiliary trigger for capture start
 );
 
 localparam int SAMPLE_INDEX_WIDTH = $clog2(DATA_BUFFER_DEPTH*CHANNELS);
@@ -38,14 +40,14 @@ Axis_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES)) buffer_data_out ();
 Axis_If #(.DWIDTH(AXI_MM_WIDTH)) buffer_timestamp_out_resized ();
 Axis_If #(.DWIDTH(AXI_MM_WIDTH)) buffer_data_out_resized ();
 
-// share buffer_config_in between both buffers so their configuration is synchronized
+// only accept a new configuration when both buffers are ready
+assign buffer_config_in.ready = buffer_timestamp_config.ready & buffer_data_config.ready;
+// share buffer_config_in data/valid between both buffers so their configuration is synchronized
 assign buffer_timestamp_config.data = buffer_config_in.data;
 assign buffer_timestamp_config.valid = buffer_config_in.valid;
-assign buffer_timestamp_config.ready = 1'b0; // unused; tie to 0 to suppress warnings
 assign buffer_timestamp_config.last = 1'b0; // unused; tie to 0 to suppress warnings
 assign buffer_data_config.data = buffer_config_in.data;
 assign buffer_data_config.valid = buffer_config_in.valid;
-assign buffer_data_config.ready = 1'b0; // unused; tie to 0 to suppress warnings
 assign buffer_data_config.last = 1'b0; // unused; tie to 0 to suppress warnings
 
 assign disc_timestamps.ready = 1'b0; // unused; tie to 0 to suppress warnings
@@ -53,15 +55,17 @@ assign disc_timestamps.last = 1'b0; // unused; tie to 0 to suppress warnings
 assign disc_data.ready = 1'b0; // unused; tie to 0 to suppress warnings
 assign disc_data.last = 1'b0; // unused; tie to 0 to suppress warnings
 
-logic start, start_d;
+logic start, start_d, start_aux_d;
 always_ff @(posedge clk) begin
   if (reset) begin
     start <= '0;
     start_d <= '0;
+    start_aux_d <= '0;
   end else begin
     start_d <= start;
-    if (buffer_config_in.valid) begin
-      start <= buffer_config_in.data[1];
+    start_aux_d <= start_aux;
+    if (buffer_start_stop.valid) begin
+      start <= buffer_start_stop.data[1];
     end
   end
 end
@@ -79,7 +83,7 @@ sample_discriminator #(
   .data_out(disc_data),
   .timestamps_out(disc_timestamps),
   .config_in(discriminator_config_in),
-  .reset_state(start & ~start_d) // reset sample_index count and is_high whenever a new capture is started
+  .reset_state((start & ~start_d) | (start_aux & ~start_aux_d)) // reset sample_index count and is_high whenever a new capture is started
 );
 
 sample_buffer #(
@@ -94,6 +98,7 @@ sample_buffer #(
   .data_out(buffer_data_out),
   .config_in(buffer_data_config),
   .stop_aux(buffer_full[0]), // stop saving data when timestamp buffer is full
+  .start_aux(start_aux & ~start_aux_d), // start capture on rising edge of start_aux
   .capture_started(),
   .buffer_full(buffer_full[1])
 );
@@ -110,6 +115,7 @@ sample_buffer #(
   .data_out(buffer_timestamp_out),
   .config_in(buffer_timestamp_config),
   .stop_aux(buffer_full[1]), // stop saving timestamps when data buffer is full
+  .start_aux(start_aux & ~start_aux_d), // start capture on rising edge of start_aux
   .capture_started(),
   .buffer_full(buffer_full[0])
 );

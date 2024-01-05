@@ -36,11 +36,13 @@ module sample_buffer #(
   input wire clk, reset,
   Axis_Parallel_If.Slave_Realtime data_in, // all channels in parallel
   Axis_If.Master_Full data_out,
-  Axis_If.Slave_Realtime config_in, // {banking_mode, start, stop}
+  Axis_If.Slave_Stream config_in, // {banking_mode}
+  Axis_If.Slave_Realtime start_stop, // {start, stop}
   // stop_aux allows parallel operation of separate buffers
   // (e.g. for timestamp/data buffers in sparse sample buffer)
   // when one buffer fills, it can trigger a stop on all other buffers
-  input wire stop_aux, 
+  // start_aux allows the AWG or another signal source to trigger capture
+  input wire stop_aux, start_aux,
   output logic capture_started, buffer_full
 );
 
@@ -54,6 +56,23 @@ assign n_active_channels = 1'b1 << banking_mode;
 logic start, stop;
 assign capture_started = start;
 
+// Only allow the configuration to be updated when the banks are idling
+always_ff @(posedge clk) begin
+  if (reset) begin
+    config_in.ready <= 1'b1;
+  end else begin
+    if (start) begin
+      config_in.ready <= 1'b0;
+    end
+    if (data_out.ok & data_out.last) begin
+      config_in.ready <= 1'b1;
+    end
+  end
+end
+
+/////////////////////////////////////////////////////
+// Process new configuration data
+/////////////////////////////////////////////////////
 // Capture is only automatically stopped when (one of) the final bank(s) fills up
 // Use the appropriate mask on banks_full to decide when to stop capture.
 // For 8 channels:
@@ -62,14 +81,13 @@ assign capture_started = start;
 // if banking_mode == 2: mask = 0xf0 (11110000)
 // if banking_mode == 3: mask = 0xff (11111111)
 logic [CHANNELS-1:0] full_mask;
-// process new configuration data
 always_ff @(posedge clk) begin
   if (reset) begin
     start <= '0;
     stop <= '0;
     banking_mode <= '0;
   end else begin
-    if (config_in.valid) begin
+    if (config_in.ok) begin
       for (int channel = 0; channel < CHANNELS; channel++) begin
         if (channel > ((1 << banking_mode) - 1)) begin
           full_mask[CHANNELS-1-channel] <= 1'b0;
@@ -78,6 +96,8 @@ always_ff @(posedge clk) begin
         end
       end
       banking_mode <= config_in.data[2+:$clog2(N_BANKING_MODES)];
+    end
+    if (start_stop.valid) begin
       start <= config_in.data[1];
       stop <= config_in.data[0];
     end else begin
@@ -205,7 +225,7 @@ generate
       .reset,
       .data_in(bank_in),
       .data_out(bank_out),
-      .start,
+      .start(start | start_aux),
       .stop(banks_stop),
       .full(banks_full[i]),
       .first(first_sample)
