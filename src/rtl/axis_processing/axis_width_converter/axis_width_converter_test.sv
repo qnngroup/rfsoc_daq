@@ -19,21 +19,24 @@ always #(0.5s/CLK_RATE_HZ) clk = ~clk;
 localparam int DWIDTH_DOWN_IN = 256;
 localparam int DWIDTH_UP_IN = 16;
 localparam int DWIDTH_COMB_IN = 24;
+localparam int DWIDTH_COMB_OUT = 32;
 localparam int DOWN = 4;
 localparam int UP = 8;
+
+// these are needed for the test
 localparam int COMB_UP = 4;
 localparam int COMB_DOWN = 3;
 
 // choose a standard datawidth for all of the DUTs that can fit the largest
 // signal (input or output)
-localparam int DWIDTH = math.max(math.max(math.max(DWIDTH_DOWN_IN, DWIDTH_UP_IN*UP), (DWIDTH_COMB_IN*COMB_UP)/COMB_DOWN), DWIDTH_COMB_IN);
+localparam int DWIDTH = math.max(math.max(math.max(DWIDTH_DOWN_IN, DWIDTH_UP_IN*UP), DWIDTH_COMB_OUT), DWIDTH_COMB_IN);
 
 Axis_If #(.DWIDTH(DWIDTH_DOWN_IN)) downsizer_in ();
 Axis_If #(.DWIDTH(DWIDTH_DOWN_IN/DOWN)) downsizer_out ();
 Axis_If #(.DWIDTH(DWIDTH_UP_IN)) upsizer_in ();
 Axis_If #(.DWIDTH(DWIDTH_UP_IN*UP)) upsizer_out ();
 Axis_If #(.DWIDTH(DWIDTH_COMB_IN)) comb_in ();
-Axis_If #(.DWIDTH((DWIDTH_COMB_IN*COMB_UP)/COMB_DOWN)) comb_out ();
+Axis_If #(.DWIDTH(DWIDTH_COMB_OUT)) comb_out ();
 Axis_If #(.DWIDTH(DWIDTH_COMB_IN)) nochange_comb_in ();
 Axis_If #(.DWIDTH(DWIDTH_COMB_IN)) nochange_comb_out ();
 
@@ -59,8 +62,7 @@ axis_upsizer #(
 
 axis_width_converter #(
   .DWIDTH_IN(DWIDTH_COMB_IN),
-  .UP(COMB_UP),
-  .DOWN(COMB_DOWN)
+  .DWIDTH_OUT(DWIDTH_COMB_OUT)
 ) comb_dut_i (
   .clk,
   .reset,
@@ -70,8 +72,7 @@ axis_width_converter #(
 
 axis_width_converter #(
   .DWIDTH_IN(DWIDTH_COMB_IN),
-  .UP(1),
-  .DOWN(1)
+  .DWIDTH_OUT(DWIDTH_COMB_IN)
 ) nochange_comb_dut_i (
   .clk,
   .reset,

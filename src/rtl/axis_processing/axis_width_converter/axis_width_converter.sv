@@ -7,13 +7,26 @@
 // expected.
 module axis_width_converter #(
   parameter int DWIDTH_IN = 192,
-  parameter int UP = 4,
-  parameter int DOWN = 3
+  parameter int DWIDTH_OUT = 256
 ) (
   input wire clk, reset,
   Axis_If.Slave_Full data_in,
   Axis_If.Master_Full data_out
 );
+
+// merge both buffer outputs into a word that is AXI_MM_WIDTH bits
+// first step down/up the width of the outputs
+function int GCD(input int A, input int B);
+  if (B == 0) begin
+    return A;
+  end else begin
+    return GCD(B, A % B);
+  end
+endfunction
+
+localparam int IN_OUT_GCD = GCD(DWIDTH_IN, DWIDTH_OUT);
+localparam int DOWN = DWIDTH_IN / IN_OUT_GCD;
+localparam int UP = DWIDTH_OUT / IN_OUT_GCD;
 
 Axis_If #(.DWIDTH(DWIDTH_IN*UP)) data ();
 

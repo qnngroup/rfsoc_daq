@@ -136,26 +136,10 @@ sample_buffer #(
 
 // merge both buffer outputs into a word that is AXI_MM_WIDTH bits
 // first step down/up the width of the outputs
-function int GCD(input int A, input int B);
-  if (B == 0) begin
-    return A;
-  end else begin
-    return GCD(B, A % B);
-  end
-endfunction
-
-localparam int DATA_AXI_MM_GCD = GCD(AXI_MM_WIDTH, SAMPLE_WIDTH*PARALLEL_SAMPLES);
-localparam int TIMESTAMP_AXI_MM_GCD = GCD(AXI_MM_WIDTH, TIMESTAMP_WIDTH);
-
-localparam int DATA_RESIZER_UP = AXI_MM_WIDTH / DATA_AXI_MM_GCD;
-localparam int DATA_RESIZER_DOWN = (SAMPLE_WIDTH*PARALLEL_SAMPLES) / DATA_AXI_MM_GCD;
-localparam int TIMESTAMP_RESIZER_UP = AXI_MM_WIDTH / TIMESTAMP_AXI_MM_GCD;
-localparam int TIMESTAMP_RESIZER_DOWN = TIMESTAMP_WIDTH / TIMESTAMP_AXI_MM_GCD;
 
 axis_width_converter #(
   .DWIDTH_IN(SAMPLE_WIDTH*PARALLEL_SAMPLES),
-  .UP(DATA_RESIZER_UP),
-  .DOWN(DATA_RESIZER_DOWN)
+  .DWIDTH_OUT(AXI_MM_WIDTH)
 ) data_width_converter_i (
   .clk,
   .reset,
@@ -165,8 +149,7 @@ axis_width_converter #(
 
 axis_width_converter #(
   .DWIDTH_IN(TIMESTAMP_WIDTH),
-  .UP(TIMESTAMP_RESIZER_UP),
-  .DOWN(TIMESTAMP_RESIZER_DOWN)
+  .DWIDTH_OUT(AXI_MM_WIDTH)
 ) timestamp_width_converter_i (
   .clk,
   .reset,
