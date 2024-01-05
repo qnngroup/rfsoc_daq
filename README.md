@@ -98,7 +98,7 @@ Also run a regression test to ensure that the new module (or any other code that
 
 ### Running a regression test
 
-A full regression test (should be done before every commit) can be run like so:
+A full regression test (should be done before every commit or merge commit to main to ensure the proposed changes don't break anything) can be run like so:
 
 ```
 $ script/regression.sh
