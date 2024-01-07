@@ -254,6 +254,8 @@ logic [CHANNELS-1:0][PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0] dac_data_out_reg;
 logic [CHANNELS-1:0][$clog2(DEPTH)-1:0] dac_read_address;
 logic [CHANNELS-1:0][63:0] dac_frame_counter;
 
+logic [1:0][CHANNELS-1:0] dac_trigger_pipe; // match latency of BRAM output registers
+
 // tracking of when each channel finishes
 logic [1:0][CHANNELS-1:0] dac_awg_channels_done;
 logic dac_awg_done;
@@ -310,18 +312,20 @@ end
 
 // update dac_read_address, dac_awg_channels_done, and dac_trigger
 always_ff @(posedge dac_clk) begin
+  dac_trigger <= dac_trigger_pipe[1];
+  dac_trigger_pipe[1] <= dac_trigger_pipe[0];
   if (dac_reset) begin
     dac_frame_counter <= '0;
     dac_read_address <= '0;
     dac_awg_channels_done <= '0;
-    dac_trigger <= '0;
+    dac_trigger_pipe <= '0;
   end else begin
     unique case (dac_read_state)
       DAC_IDLE: begin
         dac_frame_counter <= '0;
         dac_read_address <= '0;
         dac_awg_channels_done <= '0;
-        dac_trigger <= '0;
+        dac_trigger_pipe[0] <= '0;
       end
       DAC_ACTIVE: begin
         for (int channel = 0; channel < CHANNELS; channel++) begin
@@ -343,17 +347,17 @@ always_ff @(posedge dac_clk) begin
             dac_awg_channels_done[0][channel] <= 1'b1;
           end
           // generate dac_trigger
-          dac_trigger[channel] <= 1'b0;
+          dac_trigger_pipe[0][channel] <= 1'b0;
           if (~dac_awg_channels_done[0][channel]) begin
             if (dac_read_address[channel] == 0) begin
               if (dac_trigger_out_config_reg[channel] == 2) begin
                 // output every frame
-                dac_trigger[channel] <= 1'b1;
+                dac_trigger_pipe[0][channel] <= 1'b1;
               end
               if (dac_frame_counter[channel] == 0) begin
                 if (dac_trigger_out_config_reg[channel] == 1) begin
                   // only output on first frame
-                  dac_trigger[channel] <= 1'b1;
+                  dac_trigger_pipe[0][channel] <= 1'b1;
                 end
               end
             end

@@ -172,42 +172,61 @@ task automatic check_output_data(
       end
       samples_received[channel].pop_back();
       if (sample_count == write_depths[channel]*PARALLEL_SAMPLES - 1) begin
-        // check for a trigger
-        if (trigger_modes[channel] != 0) begin
-          if (trigger_modes[channel] == 1) begin
-            if (trigger_arrivals[channel].size() !== 1) begin
-              debug.error($sformatf(
-                "channel %0d: expected exactly one trigger (on burst 0), but got %0d triggers",
-                channel,
-                trigger_arrivals[channel].size())
-              );
-            end
-            if (burst_count == 0) begin
-              if (trigger_arrivals[channel][burst_count] !== samples_received[channel].size() + 1) begin
-                debug.error($sformatf(
-                  "channel %0d: wrong trigger time for burst %0d, got %0d expected %0d",
-                  channel,
-                  burst_count,
-                  trigger_arrivals[channel][burst_count],
-                  samples_received[channel].size() + 1)
-                );
-              end
-            end
-          end else if (trigger_modes[channel] == 2) begin
-            if (trigger_arrivals[channel].size() !== burst_lengths[channel]) begin
-              debug.error($sformatf(
-                "channel %0d: expected exactly %0d triggers, but got %0d triggers",
-                channel,
-                burst_lengths[channel],
-                trigger_arrivals[channel].size())
-              );
-            end
-          end
-        end
         burst_count = burst_count + 1;
       end
       sample_count = (sample_count + 1) % (write_depths[channel]*PARALLEL_SAMPLES);
     end
+    // check for correct timing of trigger signals
+    case (trigger_modes[channel])
+      0: begin
+        // make sure we didn't get any
+        if (trigger_arrivals[channel].size() > 0) begin
+          debug.error($sformatf(
+            "channel %0d: expected zero triggers, but got %0d triggers",
+            channel,
+            trigger_arrivals[channel].size())
+          );
+        end
+      end
+      1: begin
+        // should have exactly one, with value 0
+        if (trigger_arrivals[channel].size() !== 1) begin
+          debug.error($sformatf(
+            "channel %0d: expected exactly one trigger, but got %0d triggers",
+            channel,
+            trigger_arrivals[channel].size())
+          );
+        end
+        if (trigger_arrivals[channel][0] !== 0) begin
+          debug.error($sformatf(
+            "channel %0d: wrong trigger timing, got %0d, expected 0",
+            channel,
+            trigger_arrivals[channel][0])
+          );
+        end
+      end
+      2: begin
+        // should have burst_lengths[channel], with values k*write_depths[channel]*PARALLEL_SAMPLES for k = 0,1,2,...
+        if (trigger_arrivals[channel].size() !== burst_lengths[channel]) begin
+          debug.error($sformatf(
+            "channel %0d: expected exactly %0d triggers, but got %0d triggers",
+            channel,
+            burst_lengths[channel],
+            trigger_arrivals[channel].size())
+          );
+        end
+        for (int frame = 0; frame < burst_lengths[channel]; frame++) begin
+          if (trigger_arrivals[channel][frame] !== frame*write_depths[channel]*PARALLEL_SAMPLES) begin
+            debug.error($sformatf(
+              "channel %0d: wrong trigger timing, got %0d, expected %0d",
+              channel,
+              trigger_arrivals[channel][frame],
+              frame*write_depths[channel])
+            );
+          end
+        end
+      end
+    endcase
   end
 endtask
 
@@ -234,6 +253,9 @@ initial begin
   dma_reset <= 1'b1;
   dma_data_in.valid <= 1'b0;
   dma_data_in.last <= 1'b0;
+  dma_trigger_out_config.valid <= 1'b0;
+  dma_awg_burst_length.valid <= 1'b0;
+  dma_write_depth.valid <= 1'b0;
   dma_awg_start_stop.valid <= 1'b0;
   dma_transfer_error.ready <= 1'b0;
 
@@ -243,9 +265,9 @@ initial begin
   dac_reset <= 1'b0;
 
   for (int channel = 0; channel < CHANNELS; channel++) begin
-    write_depths[channel] <= 16;
-    burst_lengths[channel] <= 4;
-    trigger_modes[channel] <= 0;
+    write_depths[channel] = 16;
+    burst_lengths[channel] = 4;
+    trigger_modes[channel] = 2;
   end
   
   for (int tlast_check = 0; tlast_check < 3; tlast_check++) begin
@@ -352,7 +374,7 @@ initial begin
         );
       end
       @(posedge dma_clk);
-      // check that it's no longer valid (valid should reset after being read)
+      // check that transfer_error is no longer valid (valid should reset after being read)
       if (dma_transfer_error.valid) begin
         debug.error("read out dma_transfer_error, but it didn't reset");
       end
