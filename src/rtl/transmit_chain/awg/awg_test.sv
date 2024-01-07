@@ -6,7 +6,7 @@ import sim_util_pkg::*;
 
 module awg_test ();
 
-sim_util_pkg::debug debug = new(DEFAULT);
+sim_util_pkg::debug debug = new(VERBOSE);
 
 parameter int DEPTH = 2048;
 parameter int AXI_MM_WIDTH = 128;
@@ -85,10 +85,10 @@ task automatic check_dma_words(
   // state of the calling task/process
   int channel = 0;
   debug.display("checking dma input data", DEBUG);
-  debug.display($sformatf("dma_words.size() = %d", dma_words.size()), DEBUG);
+  debug.display($sformatf("dma_words.size() = %0d", dma_words.size()), DEBUG);
   for (int c = 0; c < CHANNELS; c++) begin
     debug.display($sformatf(
-      "samples_to_send[%d].size() = %d",
+      "samples_to_send[%0d].size() = %0d",
       c,
       samples_to_send[c].size()),
       DEBUG
@@ -98,7 +98,7 @@ task automatic check_dma_words(
     for (int sample = 0; sample < AXI_MM_WIDTH/SAMPLE_WIDTH; sample++) begin
       if (dma_words[$][sample*SAMPLE_WIDTH+:SAMPLE_WIDTH] !== samples_to_send[channel][0]) begin
         debug.error($sformatf(
-          "mismatched sample at dma_words[%d] for channel %d, got %x expected %x",
+          "mismatched sample at dma_words[%0d] for channel %0d, got %x expected %x",
           dma_words.size() - 1,
           channel,
           dma_words[$][sample*SAMPLE_WIDTH+:SAMPLE_WIDTH],
@@ -111,7 +111,7 @@ task automatic check_dma_words(
             "incorrect dma word alignment of samples",
             "\nwrite_depth should be a multiple of (AXI_MM_WIDTH + ",
             "SAMPLE_WIDTH*PARALLEL_SAMPLES - 1)/(SAMPLE_WIDTH*PARALLEL_SAMPLES)",
-            " = %d/%d = %d"
+            " = %0d/%0d = %0d"
           },
           AXI_MM_WIDTH + SAMPLE_WIDTH*PARALLEL_SAMPLES - 1, SAMPLE_WIDTH*PARALLEL_SAMPLES,
           (SAMPLE_WIDTH*PARALLEL_SAMPLES + AXI_MM_WIDTH - 1)/(SAMPLE_WIDTH*PARALLEL_SAMPLES))
@@ -127,6 +127,7 @@ task automatic check_dma_words(
   if (channel != CHANNELS) begin
     debug.error("dma_words did not have enough samples");
   end
+  debug.display("done checking dma_words", DEBUG);
 endtask
 
 task automatic check_output_data(
@@ -142,15 +143,15 @@ task automatic check_output_data(
   for (int channel = 0; channel < CHANNELS; channel++) begin
     sample_count = 0;
     burst_count = 0;
-    debug.display($sformatf("checking output for channel %d", channel), VERBOSE);
+    debug.display($sformatf("checking output for channel %0d", channel), VERBOSE);
     if (samples_received[channel].size()
         != write_depths[channel]*burst_lengths[channel]*PARALLEL_SAMPLES) begin
       debug.error($sformatf(
         {
-          "incorrect number of samples received on channel %d.",
-          "\nbased on write_depths*burst_lengths, expected %d;",
-          "\nbased on samples_to_send, expected %d;",
-          "\ngot %d"
+          "incorrect number of samples received on channel %0d.",
+          "\nbased on write_depths*burst_lengths, expected %0d;",
+          "\nbased on samples_to_send, expected %0d;",
+          "\ngot %0d"
         },
         channel,
         write_depths[channel]*burst_lengths[channel]*PARALLEL_SAMPLES,
@@ -161,7 +162,7 @@ task automatic check_output_data(
     while (samples_received[channel].size() > 0) begin
       if (samples_received[channel][$] !== samples_to_send[channel][sample_count]) begin
         debug.error($sformatf(
-          "channel %d: mismatch on sample %d (burst %d), sent %x, received %x",
+          "channel %0d: mismatch on sample %0d (burst %0d), sent %x, received %x",
           channel,
           sample_count,
           burst_count,
@@ -176,7 +177,7 @@ task automatic check_output_data(
           if (trigger_modes[channel] == 1) begin
             if (trigger_arrivals[channel].size() !== 1) begin
               debug.error($sformatf(
-                "channel %d: expected exactly one trigger (on burst 0), but got %d triggers",
+                "channel %0d: expected exactly one trigger (on burst 0), but got %0d triggers",
                 channel,
                 trigger_arrivals[channel].size())
               );
@@ -184,7 +185,7 @@ task automatic check_output_data(
             if (burst_count == 0) begin
               if (trigger_arrivals[channel][burst_count] !== samples_received[channel].size() + 1) begin
                 debug.error($sformatf(
-                  "channel %d: wrong trigger time for burst %d, got %d expected %d",
+                  "channel %0d: wrong trigger time for burst %0d, got %0d expected %0d",
                   channel,
                   burst_count,
                   trigger_arrivals[channel][burst_count],
@@ -195,7 +196,7 @@ task automatic check_output_data(
           end else if (trigger_modes[channel] == 2) begin
             if (trigger_arrivals[channel].size() !== burst_lengths[channel]) begin
               debug.error($sformatf(
-                "channel %d: expected exactly %d triggers, but got %d triggers",
+                "channel %0d: expected exactly %0d triggers, but got %0d triggers",
                 channel,
                 burst_lengths[channel],
                 trigger_arrivals[channel].size())
@@ -233,6 +234,8 @@ initial begin
   dma_reset <= 1'b1;
   dma_data_in.valid <= 1'b0;
   dma_data_in.last <= 1'b0;
+  dma_awg_start_stop.valid <= 1'b0;
+  dma_transfer_error.ready <= 1'b0;
 
   repeat (100) @(posedge dma_clk);
   dma_reset <= 1'b0;
@@ -242,10 +245,17 @@ initial begin
   for (int channel = 0; channel < CHANNELS; channel++) begin
     write_depths[channel] <= 16;
     burst_lengths[channel] <= 4;
+    trigger_modes[channel] <= 0;
   end
   
   for (int tlast_check = 0; tlast_check < 3; tlast_check++) begin
     for (int rand_valid = 0; rand_valid < 2; rand_valid++) begin
+      debug.display($sformatf(
+        "running test with tlast_check = %0d, rand_valid = %0d",
+        tlast_check,
+        rand_valid),
+        VERBOSE
+      );
       // do test
  
       // assign write_depths for trial
@@ -293,7 +303,7 @@ initial begin
         for (int word = 0; word < (write_depths[channel]*PARALLEL_SAMPLES*SAMPLE_WIDTH)/AXI_MM_WIDTH; word++) begin
           dma_word = '0;
           for (int sample = 0; sample < AXI_MM_WIDTH/SAMPLE_WIDTH; sample++) begin
-            dma_word |= samples_to_send[channel][word*AXI_MM_WIDTH/SAMPLE_WIDTH+sample] << SAMPLE_WIDTH;
+            dma_word = {samples_to_send[channel][word*(AXI_MM_WIDTH/SAMPLE_WIDTH)+sample], dma_word[AXI_MM_WIDTH-1:SAMPLE_WIDTH]};
           end
           dma_words.push_front(dma_word);
         end
@@ -303,31 +313,37 @@ initial begin
       check_dma_words(samples_to_send, dma_words);
  
       // send first word before always block has a chance to run
+      for (int i = 0; i < dma_words.size(); i++) begin
+        debug.display($sformatf("dma_words[%0d] = %x", i, dma_words[$-i]), DEBUG);
+      end
       dma_data_in.data <= dma_words.pop_back();
       dma_data_in.send_samples(dma_clk, dma_words.size() / 2, rand_valid & 1'b1, 1'b1, 1'b0);
       if (tlast_check == 1) begin
         // send early tlast
+        dma_data_in.valid <= 1'b1;
         dma_data_in.last <= 1'b1;
         while (~dma_data_in.ok) @(posedge dma_clk);
-      end
-      // still send the rest of the data so we can check for correct behavior
-      // in reality, the DMA module won't output an incorrect TLAST if given the
-      // correct input, but it is possible for the user to give the wrong size
-      // memory block to the DMA IP, which would result in an error that we'd
-      // want to catch
-      dma_data_in.send_samples(dma_clk, dma_words.size() - 1, rand_valid & 1'b1, 1'b1, 1'b0);
-      // one sample left, update tlast
-      if (tlast_check == 0) begin
-        dma_data_in.last <= 1'b1;
+        dma_data_in.last <= 1'b0;
       end else begin
+        dma_data_in.send_samples(dma_clk, dma_words.size(), rand_valid & 1'b1, 1'b0, 1'b0);
+        // valid has been reset, so first reassert it to send the current sample
+        while (~dma_data_in.ok) @(posedge dma_clk);
+        // one sample left, update tlast
+        if (tlast_check == 0) begin
+          dma_data_in.last <= 1'b1;
+        end else begin
+          dma_data_in.last <= 1'b0;
+        end
+        do @(posedge dma_clk); while (~dma_data_in.ok);
+        dma_data_in.valid <= 1'b0;
         dma_data_in.last <= 1'b0;
       end
-      dma_data_in.data <= dma_words.pop_back();
-      dma_data_in.valid <= 1'b1;
-      while (~dma_data_in.ok) @(posedge dma_clk);
-      dma_data_in.valid <= 1'b0;
+
+      debug.display("done sending samples over DMA", DEBUG);
 
       // check that there wasn't a transfer error
+      dma_transfer_error.ready <= 1'b1;
+      while (~dma_transfer_error.ok) @(posedge dma_clk);
       if (dma_transfer_error.data !== tlast_check) begin
         debug.error($sformatf(
           "expected transfer error code %0d, got error code %0d",
@@ -335,19 +351,17 @@ initial begin
           dma_transfer_error.data)
         );
       end
-      // clear the transfer error
-      dma_transfer_error.ready <= 1'b1;
       @(posedge dma_clk);
-      dma_transfer_error.ready <= 1'b0;
-      // check that it's no longer valid
+      // check that it's no longer valid (valid should reset after being read)
       if (dma_transfer_error.valid) begin
         debug.error("read out dma_transfer_error, but it didn't reset");
       end
+      dma_transfer_error.ready <= 1'b0;
 
       // start outputting DMA data
       dma_awg_start_stop.data <= 2'b10;
       dma_awg_start_stop.valid <= 1'b1;
-      @(posedge dma_clk);
+      while (!dma_awg_start_stop.ok) @(posedge dma_clk);
       dma_awg_start_stop.valid <= 1'b0;
       @(posedge dma_clk);
       
@@ -355,7 +369,8 @@ initial begin
       // it's easier to check this)
       // there should be a way to get the latency accurately, but it's kind of
       // annoying since the start signal has to cross clock domains
-      do begin @(posedge dac_clk); end while (dac_data_out.valid !== 1'b1);
+      do begin @(posedge dac_clk); end while (dac_data_out.valid !== '1);
+      debug.display("waiting until dac_data_out.data is nonzero", DEBUG);
       while (dac_data_out.data === '0) @(posedge dac_clk);
       // we have nonzero data now, so wait until all channels become inactive
       while (dac_data_out.data !== '0) begin
@@ -372,13 +387,14 @@ initial begin
             if (dac_data_out.data[channel] !== '0) begin
               debug.error($sformatf(
                 {
-                  "Got nonzero set of samples (%x) on DAC channel %d.",
-                  "\nAfter %d bursts of depth %d, samples_received[%d].size() = %d"
+                  "Got nonzero set of samples (%x) on DAC channel %0d.",
+                  "\nAfter %0d bursts of depth %0d, samples_received[%0d].size() = %0d"
                 },
                 dac_data_out.data[channel],
                 channel,
                 burst_lengths[channel],
                 write_depths[channel],
+                channel,
                 samples_received[channel].size())
               );
             end
@@ -386,10 +402,38 @@ initial begin
         end
         @(posedge dac_clk);
       end
-
-      check_output_data(samples_to_send, samples_received, trigger_arrivals, trigger_modes, write_depths, burst_lengths);
+      debug.display("finished receiving data from dac_data_out", DEBUG);
+      
+      if (tlast_check == 0) begin
+        check_output_data(samples_to_send, samples_received, trigger_arrivals, trigger_modes, write_depths, burst_lengths);
+      end else begin
+        debug.display($sformatf(
+          "tlast_check = %0d, so not going to check output data since it will be garbage",
+          tlast_check),
+          VERBOSE
+        );
+      end
+      // clear queues
+      for (int channel = 0; channel < CHANNELS; channel++) begin
+        while (samples_to_send[channel].size() > 0) samples_to_send[channel].pop_back();
+        while (samples_received[channel].size() > 0) samples_received[channel].pop_back();
+        while (trigger_arrivals[channel].size() > 0) trigger_arrivals[channel].pop_back();
+      end
+      while (dma_words.size() > 0) dma_words.pop_back();
     end
   end
   debug.finish();
 end
+
+logic [SAMPLE_WIDTH-1:0] samples_to_send [CHANNELS][$];
+logic [AXI_MM_WIDTH-1:0] dma_words [$];
+logic [AXI_MM_WIDTH-1:0] dma_word;
+logic [SAMPLE_WIDTH-1:0] samples_received [CHANNELS][$];
+int trigger_arrivals [CHANNELS][$];
+always @(posedge dma_clk) begin
+  if (dut_i.dma_write_enable & (~dut_i.dma_write_done[dut_i.dma_write_channel])) begin
+    debug.display($sformatf("writing to buffer[%0d][%0d] <= %x", dut_i.dma_write_channel, dut_i.dma_write_address, dut_i.dma_write_data_reg), DEBUG);
+  end
+end
+
 endmodule

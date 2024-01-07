@@ -16,7 +16,7 @@ module axis_width_converter #(
 
 // merge both buffer outputs into a word that is AXI_MM_WIDTH bits
 // first step down/up the width of the outputs
-function int GCD(input int A, input int B);
+function automatic int GCD(input int A, input int B);
   if (B == 0) begin
     return A;
   end else begin

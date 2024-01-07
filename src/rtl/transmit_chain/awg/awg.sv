@@ -75,7 +75,7 @@ module awg #(
 // in normal operation:
 // state = DAC_IDLE:
 //   1. configure triggers and burst length
-//   2. send a word to dma_channel_setup to initiate a DMA transfer
+//   2. send a word to dma_write_depth to initiate a DMA transfer
 //   3. state <- DMA_ACCEPTING
 // state = DMA_ACCEPTING:
 //   1. send data over DMA
@@ -84,7 +84,7 @@ module awg #(
 //   1. wait for DAC to stop, then return to state <- DAC_IDLE
 enum {DMA_IDLE, DMA_ACCEPTING, DMA_BLOCKING} dma_write_state;
 
-Axis_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH)) dma_write_data;
+Axis_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH)) dma_write_data ();
 logic dma_write_enable;
 logic [$clog2(DEPTH)-1:0] dma_write_address;
 logic [$clog2(CHANNELS)-1:0] dma_write_channel;
@@ -114,8 +114,14 @@ always_ff @(posedge dma_clk) begin
     dma_write_state <= DMA_IDLE;
   end else begin
     unique case (dma_write_state)
-      DMA_IDLE: if (dma_channel_setup.ok) dma_write_state <= DMA_ACCEPTING;
-      DMA_ACCEPTING: if (dma_data_in.ok && dma_data_in.last) dma_write_state <= DMA_BLOCKING;
+      DMA_IDLE: if (dma_write_depth.ok) dma_write_state <= DMA_ACCEPTING;
+      DMA_ACCEPTING: begin
+        if ((dma_write_data.ok && dma_write_data.last) // normal operation
+            || ((dma_write_channel == CHANNELS - 1) // didn't get tlast, but finished writing to buffer
+                & (dma_write_address == dma_address_max_reg[dma_write_channel]))) begin
+          dma_write_state <= DMA_BLOCKING;
+        end
+      end
       DMA_BLOCKING: if (dma_awg_stop || dma_awg_done) dma_write_state <= DMA_IDLE;
     endcase
   end
@@ -141,7 +147,7 @@ always_ff @(posedge dma_clk) begin
     if (dma_awg_burst_length.ok) begin
       for (int channel = 0; channel < CHANNELS; channel++) begin
         if (dma_awg_burst_length.data[channel] == 0);
-        dma_awg_burst_length_reg[channel] <= dma_awg_burst_length.data[channel] - 1;
+        dma_awg_burst_length_reg[channel] <= dma_awg_burst_length.data[channel*64+:64] - 1;
       end
     end
     if (dma_awg_start_stop.ok) begin
@@ -156,21 +162,29 @@ end
 always_ff @(posedge dma_clk) begin
   dma_write_data_reg <= dma_write_data.data;
   if (dma_reset) begin
+    dma_write_channel <= '0;
+    dma_write_address <= '0;
     dma_write_enable <= 1'b0;
     dma_write_done <= '0;
   end else begin
     dma_write_enable <= dma_write_data.ok;
-    if (dma_write_enable) begin
-      if (dma_write_address == dma_address_max_reg[dma_write_channel]) begin
-        dma_write_address <= '0;
-        dma_write_done[dma_write_channel] <= 1'b1;
-        if (dma_write_channel == CHANNELS - 1) begin
-          dma_write_channel <= '0;
+    if (dma_write_state == DMA_IDLE) begin
+      dma_write_address <= '0;
+      dma_write_channel <= '0;
+      dma_write_done <= '0;
+    end else begin
+      if (dma_write_enable) begin
+        if (dma_write_address == dma_address_max_reg[dma_write_channel]) begin
+          dma_write_address <= '0;
+          dma_write_done[dma_write_channel] <= 1'b1;
+          if (dma_write_channel == CHANNELS - 1) begin
+            dma_write_channel <= '0;
+          end else begin
+            dma_write_channel <= dma_write_channel + 1'b1;
+          end
         end else begin
-          dma_write_channel <= dma_write_channel + 1'b1;
+          dma_write_address <= dma_write_address + 1'b1;
         end
-      end else begin
-        dma_write_address <= dma_write_address + 1'b1;
       end
     end
   end
@@ -187,7 +201,7 @@ always_ff @(posedge dma_clk) begin
     if (dma_transfer_error.ok) begin
       dma_transfer_error.valid <= 1'b0; // reset each time we read it
     end
-    if (dma_channel_setup.ok) begin
+    if (dma_write_depth.ok) begin
       // reset the status each time we start a new DMA
       dma_transfer_error.data <= '0;
       dma_transfer_error.valid <= 1'b0;
@@ -195,11 +209,17 @@ always_ff @(posedge dma_clk) begin
       if (dma_write_enable) begin
         if ((dma_write_channel == CHANNELS - 1) & (dma_write_address == dma_address_max_reg[dma_write_channel])) begin
           if (~dma_tlast_reg) begin
+            // we were expecting tlast, but didn't get it
             dma_transfer_error.data[1] <= 1'b1;
+            dma_transfer_error.valid <= 1'b1;
+          end else begin
+            // no error
+            dma_transfer_error.data <= '0;
             dma_transfer_error.valid <= 1'b1;
           end
         end else begin
           if (dma_tlast_reg) begin
+            // we weren't expecting tlast, but got one anyway
             dma_transfer_error.data[0] <= 1'b1;
             dma_transfer_error.valid <= 1'b1;
           end
@@ -237,6 +257,7 @@ logic [CHANNELS-1:0][63:0] dac_frame_counter;
 // tracking of when each channel finishes
 logic [1:0][CHANNELS-1:0] dac_awg_channels_done;
 logic dac_awg_done;
+logic [CHANNELS-1:0] dac_data_select; // switch between BRAM output and zero
 always_ff @(posedge dac_clk) dac_awg_done <= &dac_awg_channels_done[1];
 
 always_ff @(posedge dac_clk) begin
@@ -244,10 +265,25 @@ always_ff @(posedge dac_clk) begin
   dac_data_out.data <= dac_data_out_reg;
   dac_data_out_valid <= {dac_data_out_valid[1:0], 1'b1};
   for (int channel = 0; channel < CHANNELS; channel++) begin
-    if (dac_awg_channels_done[1][channel]) begin
+    if (dac_data_select[channel]) begin
       dac_data_out_reg[channel] <= '0;
     end else begin
       dac_data_out_reg[channel] <= dac_buffer_out_reg[1][channel];
+    end
+  end
+end
+
+// update which data source is selected (tie to zero or BRAM output)
+always_ff @(posedge dac_clk) begin
+  if (dac_reset) begin
+    dac_data_select <= '0;
+  end else begin
+    for (int channel = 0; channel < CHANNELS; channel++) begin
+      if (dac_awg_channels_done[0][channel] || (dac_read_state == DAC_IDLE)) begin
+        dac_data_select[channel] <= 1'b1;
+      end else begin
+        dac_data_select[channel] <= 1'b0;
+      end
     end
   end
 end
@@ -275,12 +311,14 @@ end
 // update dac_read_address, dac_awg_channels_done, and dac_trigger
 always_ff @(posedge dac_clk) begin
   if (dac_reset) begin
+    dac_frame_counter <= '0;
     dac_read_address <= '0;
     dac_awg_channels_done <= '0;
     dac_trigger <= '0;
   end else begin
     unique case (dac_read_state)
       DAC_IDLE: begin
+        dac_frame_counter <= '0;
         dac_read_address <= '0;
         dac_awg_channels_done <= '0;
         dac_trigger <= '0;
@@ -299,15 +337,14 @@ always_ff @(posedge dac_clk) begin
           end else begin
             dac_read_address[channel] <= dac_read_address[channel] + 1'b1;
           end
+          dac_awg_channels_done[1][channel] <= dac_awg_channels_done[0][channel];
           if ((dac_read_address[channel] == dac_address_max_reg[channel])
               & (dac_frame_counter[channel] == dac_awg_burst_length_reg[channel])) begin
-            dac_awg_channels_done[channel] <= {dac_awg_channels_done[channel][0], 1'b1};
-          end else begin
-            dac_awg_channels_done[channel] <= {2{dac_awg_channels_done[channel][0]}};
+            dac_awg_channels_done[0][channel] <= 1'b1;
           end
           // generate dac_trigger
           dac_trigger[channel] <= 1'b0;
-          if (~dac_awg_channels_done[channel][0]) begin
+          if (~dac_awg_channels_done[0][channel]) begin
             if (dac_read_address[channel] == 0) begin
               if (dac_trigger_out_config_reg[channel] == 2) begin
                 // output every frame
@@ -342,7 +379,7 @@ xpm_cdc_pulse #(
   .src_rst(dma_reset),
   .src_pulse(dma_awg_start),
   .dest_clk(dac_clk),
-  .dest_rst_in(dac_reset),
+  .dest_rst(dac_reset),
   .dest_pulse(dac_awg_start)
 );
 xpm_cdc_pulse #(
@@ -356,7 +393,7 @@ xpm_cdc_pulse #(
   .src_rst(dma_reset),
   .src_pulse(dma_awg_stop),
   .dest_clk(dac_clk),
-  .dest_rst_in(dac_reset),
+  .dest_rst(dac_reset),
   .dest_pulse(dac_awg_stop)
 );
 // synchronize awg_done to DMA/PS clock domain
@@ -371,7 +408,7 @@ xpm_cdc_pulse #(
   .src_rst(dac_reset),
   .src_pulse(dac_awg_done),
   .dest_clk(dma_clk),
-  .dest_rst_in(dma_reset),
+  .dest_rst(dma_reset),
   .dest_pulse(dma_awg_done)
 );
 
@@ -396,7 +433,7 @@ generate
     // could happen if the user doesn't properly configure the frame lengths
     always_ff @(dma_clk) begin
       if ((channel == dma_write_channel) & dma_write_enable & (~dma_write_done[channel])) begin
-        buffer[dma_write_address] <= dma_write_data.data;
+        buffer[dma_write_address] <= dma_write_data_reg;
       end
     end
     

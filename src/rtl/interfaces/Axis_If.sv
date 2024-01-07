@@ -99,15 +99,17 @@ task automatic send_sample_with_timeout(
   output logic success
 );
   int timer;
-  timer <= 0;
-  success <= 1'b0;
+  timer = 0;
+  success = 1'b0;
+  valid <= 1'b1;
   while ((timer < timeout) & (~success)) begin
-    timer <= timer + 1;
+    timer = timer + 1;
     if (ok) begin
-      success <= 1'b1;
+      success = 1'b1;
     end
     @(posedge clk);
   end
+  valid <= 1'b0;
 endtask
 
 
