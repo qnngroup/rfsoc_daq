@@ -1,0 +1,40 @@
+// trigger_manager.sv - Reed Foster
+
+module trigger_manager #(
+  parameter int CHANNELS = 8
+) (
+  input wire clk, reset,
+  input logic [CHANNELS-1:0] triggers_in,
+  Axis_If.Slave_Realtime trigger_config, // {OR/AND, per-channel mask}
+  output logic trigger_out
+);
+
+logic [CHANNELS-1:0] trigger_mask;
+enum {OR=0, AND=1} comb_mode;
+
+// process new configuration
+always_ff @(posedge clk) begin
+  if (reset) begin
+    trigger_mask <= '0;
+    comb_mode <= OR;
+  end else begin
+    if (trigger_config.valid) begin
+      trigger_mask <= trigger_config.data[CHANNELS-1:0];
+      comb_mode <= trigger_config.data[CHANNELS] ? AND : OR;
+    end
+  end
+end
+
+// trigger combining logic
+always_ff @(posedge clk) begin
+  unique case (comb_mode)
+    OR: begin
+      trigger_out <= |(triggers_in & trigger_mask);
+    end
+    AND: begin
+      trigger_out <= &((triggers_in & trigger_mask) | (~trigger_mask));
+    end
+  endcase
+end
+
+endmodule
