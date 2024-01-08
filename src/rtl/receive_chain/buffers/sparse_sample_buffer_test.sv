@@ -45,7 +45,7 @@ Axis_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(CHANNELS)) 
 Axis_If #(.DWIDTH(AXI_MM_WIDTH)) data_out ();
 Axis_If #(.DWIDTH($clog2($clog2(CHANNELS)+1))) buffer_config ();
 Axis_If #(.DWIDTH(2)) buffer_start_stop ();
-Axis_If #(.DWIDTH(CHANNELS*SAMPLE_WIDTH*2)) discriminator_config_in();
+Axis_If #(.DWIDTH(CHANNELS*SAMPLE_WIDTH*2)) sample_discriminator_config();
 
 logic capture_start, capture_stop, start_aux;
 logic [$clog2($clog2(CHANNELS)+1)-1:0] banking_mode;
@@ -53,7 +53,7 @@ logic [CHANNELS-1:0][SAMPLE_WIDTH-1:0] threshold_high, threshold_low;
 
 always_comb begin
   for (int i = 0; i < CHANNELS; i++) begin
-    discriminator_config_in.data[2*SAMPLE_WIDTH*i+:2*SAMPLE_WIDTH] = {threshold_high[i], threshold_low[i]};
+    sample_discriminator_config.data[2*SAMPLE_WIDTH*i+:2*SAMPLE_WIDTH] = {threshold_high[i], threshold_low[i]};
   end
 end
 
@@ -74,7 +74,7 @@ sparse_sample_buffer #(
   .timestamp_width(),
   .data_in,
   .data_out,
-  .discriminator_config_in,
+  .sample_discriminator_config,
   .buffer_config,
   .buffer_start_stop,
   .start_aux
@@ -203,7 +203,7 @@ initial begin
   data_out.ready <= '0;
   data_in.valid <= '0;
   buffer_config.valid <= 1'b0;
-  discriminator_config_in.valid <= 1'b0;
+  sample_discriminator_config.valid <= 1'b0;
   buffer_start_stop.valid <= 1'b0;
   repeat (100) @(posedge clk);
   reset <= 1'b0;
@@ -263,10 +263,10 @@ initial begin
             end
           endcase
           // write the new threshold to the discriminator and update the input data
-          discriminator_config_in.valid <= 1'b1;
+          sample_discriminator_config.valid <= 1'b1;
           update_input_data <= 1'b1;
           @(posedge clk);
-          discriminator_config_in.valid <= 1'b0;
+          sample_discriminator_config.valid <= 1'b0;
           update_input_data <= 1'b0;
 
           repeat (10) @(posedge clk);

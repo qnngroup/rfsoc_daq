@@ -14,7 +14,7 @@ module sparse_sample_buffer #(
   output logic [31:0] timestamp_width, // output so that PS can correctly parse output data
   Axis_Parallel_If.Slave_Realtime data_in, // all channels in parallel
   Axis_If.Master_Full data_out,
-  Axis_If.Slave_Realtime discriminator_config_in, // {threshold_high, threshold_low} for each channel
+  Axis_If.Slave_Realtime sample_discriminator_config, // {threshold_high, threshold_low} for each channel
   Axis_If.Slave_Stream buffer_config, // {banking_mode}, can only be updated when buffer is in IDLE state
   Axis_If.Slave_Realtime buffer_start_stop, // {start, stop}
   input wire start_aux // auxiliary trigger for capture start
@@ -94,7 +94,7 @@ sample_discriminator #(
   .data_in,
   .data_out(disc_data),
   .timestamps_out(disc_timestamps),
-  .config_in(discriminator_config_in),
+  .config_in(sample_discriminator_config),
   .reset_state((start & ~start_d) | (start_aux & ~start_aux_d)) // reset sample_index count and is_high whenever a new capture is started
 );
 

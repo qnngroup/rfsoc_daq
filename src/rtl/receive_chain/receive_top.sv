@@ -110,8 +110,8 @@ sparse_sample_buffer #(
   .timestamp_width,
   .data_in(logical_channels),
   .data_out(dma_data_out),
-  .discriminator_config_in(sample_discriminator_config),
-  .buffer_config_in(buffer_config),
+  .sample_discriminator_config,
+  .buffer_config,
   .buffer_start_stop,
   .start_aux
 );
