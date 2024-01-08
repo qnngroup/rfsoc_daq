@@ -2,10 +2,10 @@
 // Direct Digital Synthesis module, uses phase dithering with a maximal LFSR
 // to achieve high spectral purity.
 module dds #(
-  parameter int PHASE_BITS = 24,
-  parameter int OUTPUT_WIDTH = 18,
-  parameter int QUANT_BITS = 8,
-  parameter int PARALLEL_SAMPLES = 4
+  parameter int PHASE_BITS = 32,
+  parameter int SAMPLE_WIDTH = 16,
+  parameter int QUANT_BITS = 20,
+  parameter int PARALLEL_SAMPLES = 16
 ) (
   input wire clk, reset,
   Axis_If.Master_Stream cos_out,
@@ -21,10 +21,10 @@ localparam int LUT_DEPTH = 2**LUT_ADDR_BITS;
 // necessary, but it simplifies phase-wrapping and dithering for high SFDR
 // signal synthesis)
 localparam real PI = 3.14159265;
-logic signed [OUTPUT_WIDTH-1:0] lut [LUT_DEPTH];
+logic signed [SAMPLE_WIDTH-1:0] lut [LUT_DEPTH];
 initial begin
   for (int i = 0; i < LUT_DEPTH; i = i + 1) begin
-    lut[i] = signed'(int'($floor($cos(2*PI/(LUT_DEPTH)*i)*(2**(OUTPUT_WIDTH-1) - 0.5) - 0.5)));
+    lut[i] = signed'(int'($floor($cos(2*PI/(LUT_DEPTH)*i)*(2**(SAMPLE_WIDTH-1) - 0.5) - 0.5)));
   end
 end
 
@@ -110,7 +110,7 @@ always_ff @(posedge clk) begin
         end
         // quantize the phase, then perform the lookup
         phase_quant[i] <= phase_dithered[i][PHASE_BITS-1:QUANT_BITS];
-        cos_out.data[OUTPUT_WIDTH*i+:OUTPUT_WIDTH] <= lut[phase_quant[i]];
+        cos_out.data[SAMPLE_WIDTH*i+:SAMPLE_WIDTH] <= lut[phase_quant[i]];
       end
     end
   end
