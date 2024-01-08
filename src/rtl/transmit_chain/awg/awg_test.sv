@@ -1,4 +1,16 @@
 // awg_test.sv - Reed Foster
+// Stress test of arbitrary waveform generator
+// Writes a random waveform to the AWG buffer memory and triggers the
+// generation of zero or more bursts:
+//  - checks output values match what was sent
+//  - checks that triggers are being produced correctly
+//  - checks that dma_transfer_error produces the correct output when tlast
+//      doesn't arrive on the right cycle (also implicitly checks that the
+//      module can recover from this event without needing to be reset)
+//  - tests behavior when sending start signal multiple times
+//  - tests with a max-length frame
+//  - tests with random-length frame
+//  - tests with a random-length burst
 
 import sim_util_pkg::*;
 
@@ -6,9 +18,9 @@ import sim_util_pkg::*;
 
 module awg_test ();
 
-sim_util_pkg::debug debug = new(VERBOSE);
+sim_util_pkg::debug debug = new(DEFAULT);
 
-parameter int DEPTH = 2048;
+parameter int DEPTH = 256;
 parameter int AXI_MM_WIDTH = 128;
 parameter int PARALLEL_SAMPLES = 16;
 parameter int SAMPLE_WIDTH = 16;
@@ -351,19 +363,6 @@ initial begin
   debug.display("######## TEST TODO LIST ####################", DEFAULT);
   debug.display("############################################", DEFAULT);
 
-  debug.display(" [ ] test with a zero-length frame",                              DEFAULT);
-  debug.display(" [ ] test with a max-length frame",                               DEFAULT);
-  debug.display(" [ ] test with random-length frame",                              DEFAULT);
-  debug.display("                                  ",                              DEFAULT);
-  debug.display(" [ ] test with a zero-length burst",                              DEFAULT);
-  debug.display(" [ ] test with a random-length burst",                            DEFAULT);
-  debug.display("                                    ",                            DEFAULT);
-  debug.display(" [x] check that triggers are being produced correctly",           DEFAULT);
-  debug.display(" [x] check output values match what was sent",                    DEFAULT);
-  debug.display("                                            ",                    DEFAULT);
-  debug.display(" [x] check that dma_transfer_error produces the correct output",  DEFAULT);
-  debug.display(" [x] check behavior when sending start signal multiple times",    DEFAULT);
-
   dac_reset <= 1'b1;
   dma_reset <= 1'b1;
   dma_data_in.valid <= 1'b0;
@@ -380,10 +379,11 @@ initial begin
   dac_reset <= 1'b0;
 
   for (int channel = 0; channel < CHANNELS; channel++) begin
-    write_depths[channel] = 16;
-    burst_lengths[channel] = 4;
-    trigger_modes[channel] = 2;
+    write_depths[channel] = $urandom_range(1, DEPTH/2);
+    burst_lengths[channel] = $urandom_range(1, 4);
+    trigger_modes[channel] = $urandom_range(0, 2);
   end
+  write_depths[0] = DEPTH; // test max-depth
  
   for (int start_repeat_count = 0; start_repeat_count < 5; start_repeat_count += 1 + 2*start_repeat_count) begin
     for (int rand_valid = 0; rand_valid < 2; rand_valid++) begin
