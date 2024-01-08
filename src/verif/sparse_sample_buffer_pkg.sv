@@ -29,7 +29,7 @@ package sparse_sample_buffer_pkg;
       output logic [TIMESTAMP_WIDTH-1:0] timestamps [CHANNELS][$],
       output logic [DATA_WIDTH-1:0] samples [CHANNELS][$]
     );
-      logic [AXI_MM_WIDTH-1:0] dma_word;
+      logic [2*AXI_MM_WIDTH-1:0] dma_word;
       int dma_word_leftover_bits;
       int current_channel, words_remaining;
       int parsed_bank_count;
