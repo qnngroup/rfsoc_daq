@@ -47,7 +47,7 @@ module awg #(
   //  synchronized to RFDAC clock domain
   Axis_If.Slave_Stream dma_awg_start_stop,
   // dma_transfer_error
-  //  2 bit: LSB indicates early tlast from DMA, MSB indicates no tlast from DMA
+  //  2 bit: MSB indicates early tlast from DMA, LSB indicates no tlast from DMA
   Axis_If.Master_Stream dma_transfer_error,
 
   // RFDAC clock domain: 384 MHz
@@ -117,7 +117,8 @@ always_ff @(posedge dma_clk) begin
       DMA_IDLE: if (dma_write_depth.ok) dma_write_state <= DMA_ACCEPTING;
       DMA_ACCEPTING: begin
         if ((dma_write_data.ok && dma_write_data.last) // normal operation
-            || ((dma_write_channel == CHANNELS - 1) // didn't get tlast, but finished writing to buffer
+            || (dma_write_enable // didn't get tlast, but finished writing to buffer
+                & (dma_write_channel == CHANNELS - 1)
                 & (dma_write_address == dma_address_max_reg[dma_write_channel]))) begin
           dma_write_state <= DMA_BLOCKING;
         end
@@ -210,7 +211,7 @@ always_ff @(posedge dma_clk) begin
         if ((dma_write_channel == CHANNELS - 1) & (dma_write_address == dma_address_max_reg[dma_write_channel])) begin
           if (~dma_tlast_reg) begin
             // we were expecting tlast, but didn't get it
-            dma_transfer_error.data[1] <= 1'b1;
+            dma_transfer_error.data[0] <= 1'b1;
             dma_transfer_error.valid <= 1'b1;
           end else begin
             // no error
@@ -220,7 +221,7 @@ always_ff @(posedge dma_clk) begin
         end else begin
           if (dma_tlast_reg) begin
             // we weren't expecting tlast, but got one anyway
-            dma_transfer_error.data[0] <= 1'b1;
+            dma_transfer_error.data[1] <= 1'b1;
             dma_transfer_error.valid <= 1'b1;
           end
         end
@@ -253,7 +254,6 @@ logic [1:0][CHANNELS-1:0][PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0] dac_buffer_out_reg;
 logic [CHANNELS-1:0][PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0] dac_data_out_reg;
 logic [CHANNELS-1:0][$clog2(DEPTH)-1:0] dac_read_address;
 logic [CHANNELS-1:0][63:0] dac_frame_counter;
-
 logic [1:0][CHANNELS-1:0] dac_trigger_pipe; // match latency of BRAM output registers
 
 // tracking of when each channel finishes
