@@ -123,7 +123,7 @@ lmh6401_spi #(
 );
 
 initial begin
-  debug.display("### running test for lmh6401_spi ###", DEFAULT);
+  debug.display("### RUNNING TEST FOR LMH6401_SPI ###", DEFAULT);
   reset <= 1'b1;
   command_in.valid <= '0;
   repeat (500) @(posedge clk);

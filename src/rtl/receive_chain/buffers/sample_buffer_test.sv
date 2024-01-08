@@ -331,7 +331,7 @@ task check_results();
 endtask
 
 initial begin
-  debug.display("### testing sample_buffer_bank ###", DEFAULT);
+  debug.display("### TESTING SAMPLE_BUFFER_BANK ###", DEFAULT);
   reset <= 1'b1;
   start <= 1'b0;
   stop <= 1'b0;

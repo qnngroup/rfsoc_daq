@@ -120,7 +120,7 @@ dac_prescaler #(
 );
 
 initial begin
-  debug.display("### running test for dac_prescaler ###", DEFAULT);
+  debug.display("### RUNNING TEST FOR DAC_PRESCALER ###", DEFAULT);
   reset <= 1'b1;
   data_in_if.data <= '0;
   data_in_if.valid <= 1'b0;

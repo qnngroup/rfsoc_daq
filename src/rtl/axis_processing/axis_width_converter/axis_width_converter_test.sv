@@ -315,10 +315,10 @@ initial begin
   // do test
   for (int dut = 0; dut < 4; dut++) begin
     unique case (dut)
-      0: debug.display("### testing axis downsizer ###", DEFAULT);
-      1: debug.display("### testing axis upsizer ###", DEFAULT);
-      2: debug.display("### testing axis combined upsizer/downsizer ###", DEFAULT);
-      3: debug.display("### testing axis combined upsizer/downsizer with no width change (i.e. 1:1) ###", DEFAULT);
+      0: debug.display("### TESTING AXIS DOWNSIZER ###", DEFAULT);
+      1: debug.display("### TESTING AXIS UPSIZER ###", DEFAULT);
+      2: debug.display("### TESTING AXIS COMBINED UPSIZER/DOWNSIZER ###", DEFAULT);
+      3: debug.display("### TESTING AXIS COMBINED UPSIZER/DOWNSIZER WITH NO WIDTH CHANGE (I.E. 1:1) ###", DEFAULT);
     endcase
     repeat (50) begin
       for (int j = 1; j <= 2; j++) begin

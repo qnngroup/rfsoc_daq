@@ -186,7 +186,7 @@ logic [N_CHANNELS-1:0][SAMPLE_INDEX_WIDTH-1:0] sample_index;
 logic [N_CHANNELS-1:0] is_high;
 
 initial begin
-  debug.display("### testing sample discriminator ###", DEFAULT);
+  debug.display("### TESTING SAMPLE DISCRIMINATOR ###", DEFAULT);
   reset <= 1'b1;
   for (int i = 0; i < N_CHANNELS; i++) begin
     data_range_low[i] <= '0;

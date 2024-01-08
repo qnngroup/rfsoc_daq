@@ -226,7 +226,7 @@ task check_results(
 endtask
 
 initial begin
-  debug.display("### running test for receive_top ###", DEFAULT);
+  debug.display("### RUNNING TEST FOR RECEIVE_TOP ###", DEFAULT);
   reset <= 1'b1;
   capture_start <= 1'b0;
   capture_stop <= 1'b0;

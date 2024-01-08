@@ -193,7 +193,7 @@ task stop_acq();
 endtask
 
 initial begin
-  debug.display("### running test for sparse_sample_buffer ###", DEFAULT);
+  debug.display("### RUNNING TEST FOR SPARSE_SAMPLE_BUFFER ###", DEFAULT);
   reset <= 1'b1;
   capture_start <= 1'b0;
   capture_stop <= 1'b0;

@@ -86,7 +86,7 @@ axis_x2 #(
 );
 
 initial begin
-  debug.display("### testing axis x^2 ###", DEFAULT);
+  debug.display("### TESTING AXIS X^2 ###", DEFAULT);
   reset <= 1'b1;
   data_in_if.valid <= 1'b0;
   data_out_if.ready <= 1'b1;

@@ -116,7 +116,7 @@ task check_results();
 endtask
 
 initial begin
-  debug.display("### testing axis_channel_mux ###", DEFAULT);
+  debug.display("### TESTING AXIS_CHANNEL_MUX ###", DEFAULT);
   reset <= 1'b1;
   config_in.data <= '0;
   config_in.valid <= 1'b0;

@@ -123,7 +123,7 @@ task automatic check_output(inout phase_t phase, input phase_t phase_inc, input 
 endtask
 
 initial begin
-  debug.display("### testing dds signal generator ###", DEFAULT);
+  debug.display("### TESTING DDS SIGNAL GENERATOR ###", DEFAULT);
   reset <= 1'b1;
   cos_out.ready <= 1'b0;
   phase <= '0;

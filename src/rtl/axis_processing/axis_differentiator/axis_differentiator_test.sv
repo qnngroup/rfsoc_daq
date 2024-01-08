@@ -92,7 +92,7 @@ axis_differentiator #(
 );
 
 initial begin
-  debug.display("### testing axis differentiator ###", DEFAULT);
+  debug.display("### TESTING AXIS DIFFERENTIATOR ###", DEFAULT);
   reset <= 1'b1;
   data_in_if.valid <= 1'b0;
   data_out_if.ready <= 1'b1;

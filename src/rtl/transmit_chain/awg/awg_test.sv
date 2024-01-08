@@ -359,9 +359,6 @@ endtask
 
 initial begin
   debug.display("### TESTING ARBITRARY WAVEFORM GENERATOR ###", DEFAULT);
-  debug.display("############################################", DEFAULT);
-  debug.display("######## TEST TODO LIST ####################", DEFAULT);
-  debug.display("############################################", DEFAULT);
 
   dac_reset <= 1'b1;
   dma_reset <= 1'b1;

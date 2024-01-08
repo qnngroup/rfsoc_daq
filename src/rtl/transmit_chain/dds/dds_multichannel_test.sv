@@ -6,7 +6,7 @@ import sim_util_pkg::*;
 `timescale 1ns / 1ps
 module dds_multichannel_test ();
 
-sim_util_pkg::debug debug = new(DEBUG); // printing, error tracking
+sim_util_pkg::debug debug = new(DEFAULT); // printing, error tracking
 
 localparam PHASE_BITS = 24;
 localparam SAMPLE_WIDTH = 18;
