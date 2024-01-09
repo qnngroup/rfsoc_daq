@@ -9,11 +9,16 @@ module receive_top_test ();
 
 sim_util_pkg::debug debug = new(DEFAULT); // printing, error tracking
 
-logic clk = 0;
-localparam CLK_RATE_HZ = 100_000_000;
-always #(0.5s/CLK_RATE_HZ) clk = ~clk;
+logic adc_reset;
+logic adc_clk = 0;
+localparam ADC_CLK_RATE_HZ = 256_000_000;
+always #(0.5s/ADC_CLK_RATE_HZ) adc_clk = ~adc_clk;
 
-logic reset;
+logic ps_reset;
+logic ps_clk = 0;
+localparam PS_CLK_RATE_HZ = 100_000_000;
+always #(0.5s/PS_CLK_RATE_HZ) ps_clk = ~ps_clk;
+
 
 // DUT parameters
 localparam int CHANNELS = 8;
@@ -47,27 +52,27 @@ sparse_sample_buffer_pkg::util #(
 
 // DUT data interfaces
 Axis_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(CHANNELS)) adc_data_in ();
-Axis_If #(.DWIDTH(AXI_MM_WIDTH)) dma_data_out ();
+Axis_If #(.DWIDTH(AXI_MM_WIDTH)) adc_dma_out ();
 // DUT configuration interfaces
-Axis_If #(.DWIDTH(CHANNELS*SAMPLE_WIDTH*2)) sample_discriminator_config ();
-Axis_If #(.DWIDTH($clog2($clog2(CHANNELS)+1))) buffer_config ();
-Axis_If #(.DWIDTH(2)) buffer_start_stop ();
-Axis_If #(.DWIDTH(CHANNELS*MUX_SELECT_BITS)) channel_mux_config ();
-Axis_If #(.DWIDTH(32)) buffer_timestamp_width ();
+Axis_If #(.DWIDTH(CHANNELS*SAMPLE_WIDTH*2)) ps_sample_discriminator_config ();
+Axis_If #(.DWIDTH($clog2($clog2(CHANNELS)+1))) ps_buffer_config ();
+Axis_If #(.DWIDTH(2)) ps_buffer_start_stop ();
+Axis_If #(.DWIDTH(CHANNELS*MUX_SELECT_BITS)) ps_channel_mux_config ();
+Axis_If #(.DWIDTH(32)) ps_buffer_timestamp_width ();
 
 // configuration signals
-logic capture_start, capture_stop, start_aux;
-logic [$clog2($clog2(CHANNELS)+1)-1:0] banking_mode;
+logic ps_capture_start, ps_capture_stop, adc_trigger_in;
+logic [$clog2($clog2(CHANNELS)+1)-1:0] ps_banking_mode;
 logic [CHANNELS-1:0][SAMPLE_WIDTH-1:0] threshold_high, threshold_low;
 
 always_comb begin
   for (int i = 0; i < CHANNELS; i++) begin
-    sample_discriminator_config.data[2*SAMPLE_WIDTH*i+:2*SAMPLE_WIDTH] = {threshold_high[i], threshold_low[i]};
+    ps_sample_discriminator_config.data[2*SAMPLE_WIDTH*i+:2*SAMPLE_WIDTH] = {threshold_high[i], threshold_low[i]};
   end
 end
 
-assign buffer_config.data = banking_mode;
-assign buffer_start_stop.data = {capture_start, capture_stop};
+assign ps_buffer_config.data = ps_banking_mode;
+assign ps_buffer_start_stop.data = {ps_capture_start, ps_capture_stop};
 
 // allow the data to be manually updated when we change the range so the first sample for a new range isn't stale
 // this simplifies the testing
@@ -88,16 +93,18 @@ receive_top #(
   .SAMPLE_WIDTH(SAMPLE_WIDTH),
   .APPROX_CLOCK_WIDTH(APPROX_CLOCK_WIDTH)
 ) dut_i (
-  .clk,
-  .reset,
+  .ps_clk,
+  .ps_reset,
+  .ps_sample_discriminator_config,
+  .ps_buffer_config,
+  .ps_buffer_start_stop,
+  .ps_channel_mux_config,
+  .ps_buffer_timestamp_width,
+  .adc_clk,
+  .adc_reset,
   .adc_data_in,
-  .dma_data_out,
-  .start_aux,
-  .sample_discriminator_config,
-  .buffer_config,
-  .buffer_start_stop,
-  .channel_mux_config,
-  .buffer_timestamp_width
+  .adc_dma_out,
+  .adc_trigger_in
 );
 
 // temp parallel register for calculating expected output of differentiator
@@ -105,9 +112,9 @@ logic [SAMPLE_WIDTH*PARALLEL_SAMPLES-1:0] diff_temp;
 logic [CHANNELS-1:0][SAMPLE_WIDTH-1:0] prev_samples; // keep track of final sample in previous clock cycle for differentiator
 
 // send data to DUT and save sent/received data
-always @(posedge clk) begin
+always @(posedge adc_clk) begin
   for (int channel = 0; channel < CHANNELS; channel++) begin
-    if (reset) begin
+    if (adc_reset) begin
       adc_data_in.data[channel] <= '0;
       prev_samples = '0;
     end else begin
@@ -139,45 +146,45 @@ always @(posedge clk) begin
     end
   end
   // save all data in the same buffer and postprocess it later
-  if (dma_data_out.ok) begin
-    data_received.push_front(dma_data_out.data);
+  if (adc_dma_out.ok) begin
+    data_received.push_front(adc_dma_out.data);
   end
 end
 
 task set_banking_mode(input int mode);
-  banking_mode <= mode;
-  buffer_config.valid <= 1'b1;
-  while (~buffer_config.ok) @(posedge clk);
-  buffer_config.valid <= 1'b0;
+  ps_banking_mode <= mode;
+  ps_buffer_config.valid <= 1'b1;
+  do @(posedge ps_clk); while (~ps_buffer_config.ok);
+  ps_buffer_config.valid <= 1'b0;
 endtask
 
 task start_acq(input bit use_axis);
   if (use_axis) begin
-    capture_stop <= 1'b0;
-    capture_start <= 1'b1;
-    buffer_start_stop.valid <= 1'b1;
-    @(posedge clk);
-    capture_start <= 1'b0;
-    buffer_start_stop.valid <= 1'b0;
+    ps_capture_stop <= 1'b0;
+    ps_capture_start <= 1'b1;
+    ps_buffer_start_stop.valid <= 1'b1;
+    do @(posedge ps_clk); while (~ps_buffer_start_stop.ok);
+    ps_capture_start <= 1'b0;
+    ps_buffer_start_stop.valid <= 1'b0;
   end else begin
-    start_aux <= 1'b1;
-    @(posedge clk);
-    start_aux <= 1'b0;
+    adc_trigger_in <= 1'b1;
+    @(posedge adc_clk);
+    adc_trigger_in <= 1'b0;
   end
 endtask
 
 task stop_acq();
-  capture_stop <= 1'b1;
-  capture_start <= 1'b0;
-  buffer_start_stop.valid <= 1'b1;
-  @(posedge clk);
-  capture_stop <= 1'b0;
-  buffer_start_stop.valid <= 1'b0;
+  ps_capture_stop <= 1'b1;
+  ps_capture_start <= 1'b0;
+  ps_buffer_start_stop.valid <= 1'b1;
+  do @(posedge ps_clk); while (~ps_buffer_start_stop.ok);
+  ps_capture_stop <= 1'b0;
+  ps_buffer_start_stop.valid <= 1'b0;
 endtask
 
 task check_results(
   inout logic [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0] expected [CHANNELS][$],
-  input int banking_mode,
+  input int ps_banking_mode,
   input logic [CHANNELS-1:0][SAMPLE_WIDTH-1:0] threshold_high,
   input logic [CHANNELS-1:0][SAMPLE_WIDTH-1:0] threshold_low,
   inout logic [CHANNELS-1:0][TIMESTAMP_WIDTH-SAMPLE_INDEX_WIDTH-1:0] timer
@@ -214,7 +221,7 @@ task check_results(
   //////////////////////////////////////
   buf_util.check_timestamps_and_data(
     debug,
-    banking_mode,
+    ps_banking_mode,
     threshold_high,
     threshold_low,
     timer,
@@ -227,37 +234,41 @@ endtask
 
 initial begin
   debug.display("### RUNNING TEST FOR RECEIVE_TOP ###", DEFAULT);
-  reset <= 1'b1;
-  capture_start <= 1'b0;
-  capture_stop <= 1'b0;
-  start_aux <= 1'b0;
-  banking_mode <= '0; // reset banking mode (only enable channel 0 to start)
-  timer <= '0; // reset timer for all samples
+  adc_reset <= 1'b1;
+  ps_reset <= 1'b1;
+  ps_capture_start <= 1'b0;
+  ps_capture_stop <= 1'b0;
+  adc_trigger_in <= 1'b0;
+  ps_banking_mode <= '0; // adc_reset banking mode (only enable channel 0 to start)
+  timer <= '0; // adc_reset timer for all samples
   adc_data_in.valid <= '0;
-  dma_data_out.ready <= 1'b0;
-  sample_discriminator_config.valid <= 1'b0;
-  buffer_config.valid <= 1'b0;
-  buffer_start_stop.valid <= 1'b0;
-  channel_mux_config.valid <= 1'b0;
-  repeat (100) @(posedge clk);
-  reset <= 1'b0;
-  repeat (100) @(posedge clk);
+  adc_dma_out.ready <= 1'b0;
+  ps_sample_discriminator_config.valid <= 1'b0;
+  ps_buffer_config.valid <= 1'b0;
+  ps_buffer_start_stop.valid <= 1'b0;
+  ps_channel_mux_config.valid <= 1'b0;
+  repeat (100) @(posedge ps_clk);
+  adc_reset <= 1'b0;
+  @(posedge ps_clk);
+  ps_reset <= 1'b0;
+  repeat (100) @(posedge adc_clk);
   // do test
   for (int mux_select_mode = 0; mux_select_mode < 2; mux_select_mode++) begin
     // change mux to select either raw data or output of differentiator
     for (int channel = 0; channel < CHANNELS; channel++) begin
-      channel_mux_config.data[channel*MUX_SELECT_BITS+:MUX_SELECT_BITS] <= channel + mux_select_mode*CHANNELS;
+      ps_channel_mux_config.data[channel*MUX_SELECT_BITS+:MUX_SELECT_BITS] <= channel + mux_select_mode*CHANNELS;
     end
     // write the new config
-    channel_mux_config.valid <= 1'b1;
-    @(posedge clk);
-    channel_mux_config.valid <= 1'b0;
+    ps_channel_mux_config.valid <= 1'b1;
+    do @(posedge ps_clk); while (~ps_channel_mux_config.ok);
+    ps_channel_mux_config.valid <= 1'b0;
     for (int start_type = 0; start_type < 2; start_type++) begin
       for (int in_valid_rand = 0; in_valid_rand < 2; in_valid_rand++) begin
         for (int bank_mode = 0; bank_mode < 4; bank_mode++) begin
+          @(posedge ps_clk);
           set_banking_mode(bank_mode);
           for (int amplitude_mode = 0; amplitude_mode < 5; amplitude_mode++) begin
-            repeat (10) @(posedge clk);
+            repeat (10) @(posedge ps_clk);
             unique case (amplitude_mode)
               0: begin
                 // save everything
@@ -306,24 +317,34 @@ initial begin
               end
             endcase
             // write the new threshold to the sample discriminator and update the input data
-            sample_discriminator_config.valid <= 1'b1;
+            ps_sample_discriminator_config.valid <= 1'b1;
+            do @(posedge ps_clk); while (~ps_sample_discriminator_config.ok);
+            ps_sample_discriminator_config.valid <= 1'b0;
+            @(posedge adc_clk);
             update_input_data <= 1'b1;
-            @(posedge clk);
-            sample_discriminator_config.valid <= 1'b0;
+            @(posedge adc_clk);
             update_input_data <= 1'b0;
 
-            repeat (10) @(posedge clk);
+            if (start_type == 0) begin
+              repeat (10) @(posedge adc_clk);
+            end else begin
+              repeat (3) @(posedge ps_clk);
+            end
             start_acq(start_type & 1'b1);
+            
+            // wait for latency of CDC (PS->RFADC) for configuration registers
+            repeat (20) @(posedge ps_clk);
 
             // send a random number of samples, with in_valid_rand setting
             // whether or not valid should be continously high or randomly
             // toggled. the final arguments specify valid is reset and the ready signal is ignored
-            adc_data_in.send_samples(clk, $urandom_range(50,500), in_valid_rand & 1'b1, 1'b1, 1'b1);
-            repeat (10) @(posedge clk);
+            adc_data_in.send_samples(adc_clk, $urandom_range(50,500), in_valid_rand & 1'b1, 1'b1, 1'b1);
+            repeat (10) @(posedge adc_clk);
+            @(posedge ps_clk);
             stop_acq();
             // readout over DMA interface with randomly toggling ready signal.
             // wait for last timeout is 100k clock cycles
-            dma_data_out.do_readout(clk, 1'b1, 100000);
+            adc_dma_out.do_readout(adc_clk, 1'b1, 100000);
             debug.display($sformatf("checking results amplitude_mode = %0d", amplitude_mode), VERBOSE);
             debug.display($sformatf("banking mode                    = %0d", bank_mode), VERBOSE);
             debug.display($sformatf("samples sent with rand_valid    = %0d", in_valid_rand), VERBOSE);
@@ -347,7 +368,6 @@ initial begin
     end
   end
   debug.finish();
-
 end
 
 endmodule

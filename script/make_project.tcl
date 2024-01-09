@@ -34,7 +34,7 @@ proc findFiles { basedir pattern } {
 
 # get all synth RTL and simulation files
 set sim_files [findFiles "$dir/../src/verif/" "*.sv"]
-set rtl_files [findFiles "$dir/../src/rtl/" "*.sv"]
+set rtl_files [findFiles "$dir/../src/rtl/" "*.{sv,v}"]
 set constraint_files [glob -nocomplain "$dir/../src/constraints/*"]
 
 # clean project directory
@@ -42,7 +42,7 @@ source $dir/clean.tcl
 
 # create a project
 if { $project_type == "synth" } {
-  create_project proj $dir/../build/proj -part xczu28dr-ffvg1517-2-e
+  create_project proj $dir/../build/proj
   set_property board_part xilinx.com:zcu111:part0:1.4 [current_project]
 } elseif { $project_type == "sim" } {
   create_project proj $dir/../build/proj

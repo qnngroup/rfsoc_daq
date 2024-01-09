@@ -34,7 +34,7 @@ localparam int AWG_DEPTH = 256;
 localparam int AXI_MM_WIDTH = 128;
 
 // AWG interfaces
-Axis_If #(.DWIDTH(AXI_MM_WIDTH)) ps_dma_in ();
+Axis_If #(.DWIDTH(AXI_MM_WIDTH)) ps_awg_dma_in ();
 Axis_If #(.DWIDTH((1+$clog2(AWG_DEPTH))*CHANNELS)) ps_awg_frame_depth ();
 Axis_If #(.DWIDTH(2*CHANNELS)) ps_awg_trigger_out_config ();
 Axis_If #(.DWIDTH(64*CHANNELS)) ps_awg_burst_length ();
@@ -112,7 +112,7 @@ transmit_top #(
 ) dut_i (
   .ps_clk,
   .ps_reset,
-  .ps_dma_in,
+  .ps_awg_dma_in,
   .ps_awg_frame_depth,
   .ps_awg_trigger_out_config,
   .ps_awg_burst_length,
@@ -138,11 +138,11 @@ logic [SAMPLE_WIDTH-1:0] samples_received [CHANNELS][$];
 int trigger_arrivals [CHANNELS][$];
 
 always @(posedge ps_clk) begin
-  if (ps_dma_in.ok) begin
+  if (ps_awg_dma_in.ok) begin
     if (dma_words.size() > 0) begin
-      ps_dma_in.data <= dma_words.pop_back();
+      ps_awg_dma_in.data <= dma_words.pop_back();
     end else begin
-      ps_dma_in.data <= '0;
+      ps_awg_dma_in.data <= '0;
     end
   end
 end
@@ -248,12 +248,12 @@ initial begin
   awg_util.generate_samples(debug, write_depths, samples_to_send, dma_words);
 
   // just send some basic data on the AWG to make sure it's producing something
-  ps_dma_in.data <= dma_words.pop_back();
-  ps_dma_in.send_samples(ps_clk, dma_words.size(), 1'b0, 1'b0, 1'b0);
-  ps_dma_in.last <= 1'b1;
-  do @(posedge ps_clk); while (~ps_dma_in.ok);
-  ps_dma_in.valid <= 1'b0;
-  ps_dma_in.last <= 1'b0;
+  ps_awg_dma_in.data <= dma_words.pop_back();
+  ps_awg_dma_in.send_samples(ps_clk, dma_words.size(), 1'b0, 1'b0, 1'b0);
+  ps_awg_dma_in.last <= 1'b1;
+  do @(posedge ps_clk); while (~ps_awg_dma_in.ok);
+  ps_awg_dma_in.valid <= 1'b0;
+  ps_awg_dma_in.last <= 1'b0;
   
   awg_util.check_transfer_error(debug, ps_clk, 0); // no tlast error was introduced
 

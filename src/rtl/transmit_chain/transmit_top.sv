@@ -20,7 +20,7 @@ module transmit_top #(
   input wire ps_clk, ps_reset,
 
   // AWG PS interfaces
-  Axis_If.Slave_Full ps_dma_in, // DMA interface
+  Axis_If.Slave_Full ps_awg_dma_in, // DMA interface
   Axis_If.Slave_Stream ps_awg_frame_depth, // (1+$clog2(DEPTH))*CHANNELS bits
   Axis_If.Slave_Stream ps_awg_trigger_out_config, // 2*CHANNELS bits
   Axis_If.Slave_Stream ps_awg_burst_length, // 64*CHANNELS bits
@@ -126,7 +126,7 @@ awg #(
 ) awg_i (
   .dma_clk(ps_clk),
   .dma_reset(ps_reset),
-  .dma_data_in(ps_dma_in),
+  .dma_data_in(ps_awg_dma_in),
   .dma_write_depth(ps_awg_frame_depth),
   .dma_trigger_out_config(ps_awg_trigger_out_config),
   .dma_awg_burst_length(ps_awg_burst_length),

@@ -11,31 +11,104 @@ module receive_top #(
   parameter int SAMPLE_WIDTH = 16, // width in bits of each sample
   parameter int APPROX_CLOCK_WIDTH = 48 // requested width of timestamp
 ) (
-  // all signals are in RFADC clock domain (256MHz)
-  input wire clk, reset,
+  /////////////////////////////////////
+  // PS clock domain (100MHz)
+  /////////////////////////////////////
+  input wire ps_clk, ps_reset,
+  // configuration registers
+  Axis_If.Slave_Stream ps_sample_discriminator_config, // 2*CHANNELS*SAMPLE_WIDTH bits
+  Axis_If.Slave_Stream ps_buffer_config, // $clog2($clog2(CHANNELS) + 1) bits, can only be updated when buffer is in IDLE state
+  Axis_If.Slave_Stream ps_buffer_start_stop, // 2 bits
+  Axis_If.Slave_Stream ps_channel_mux_config, // $clog2(2*CHANNELS)*CHANNELS bits
+  // output register
+  Axis_If.Master_Stream ps_buffer_timestamp_width, // 32 bits
+
+  /////////////////////////////////////
+  // RFADC clock domain (256MHz)
+  /////////////////////////////////////
+  input wire adc_clk, adc_reset,
   // data pipeline
   Axis_Parallel_If.Slave_Realtime adc_data_in,
-  Axis_If.Master_Full dma_data_out,
+  Axis_If.Master_Full adc_dma_out,
   // trigger from transmit_top
-  input wire start_aux,
-  // configuration registers
-  Axis_If.Slave_Realtime sample_discriminator_config, // 2*CHANNELS*SAMPLE_WIDTH bits
-  Axis_If.Slave_Stream buffer_config, // $clog2($clog2(CHANNELS) + 1) bits, can only be updated when buffer is in IDLE state
-  Axis_If.Slave_Realtime buffer_start_stop, // 2 bits
-  Axis_If.Slave_Realtime channel_mux_config, // $clog2(2*CHANNELS)*CHANNELS bits
-  // output register
-  Axis_If.Master_Realtime buffer_timestamp_width // 32 bits
+  input wire adc_trigger_in
+);
+//////////////////////////////////////////////////////////////////////////
+// PS clock domain (100MHz) -> RFADC clock domain (256MHz) CDC
+//////////////////////////////////////////////////////////////////////////
+Axis_If #(.DWIDTH(2*CHANNELS*SAMPLE_WIDTH)) adc_sample_discriminator_config ();
+Axis_If #(.DWIDTH($clog2($clog2(CHANNELS)+1))) adc_buffer_config ();
+Axis_If #(.DWIDTH(2)) adc_buffer_start_stop ();
+Axis_If #(.DWIDTH($clog2(2*CHANNELS)*CHANNELS)) adc_channel_mux_config ();
+Axis_If #(.DWIDTH(32)) adc_buffer_timestamp_width ();
+
+assign adc_sample_discriminator_config.ready = 1'b1; // sample discriminator config is realtime
+assign adc_buffer_start_stop.ready = 1'b1; // realtime
+assign adc_channel_mux_config.ready = 1'b1; // realtime
+
+axis_config_reg_cdc #(
+  .DWIDTH(2*CHANNELS*SAMPLE_WIDTH)
+) ps_to_adc_sample_discriminator_config_i (
+  .src_clk(ps_clk),
+  .src_reset(ps_reset),
+  .src(ps_sample_discriminator_config),
+  .dest_clk(adc_clk),
+  .dest_reset(adc_reset),
+  .dest(adc_sample_discriminator_config)
+);
+axis_config_reg_cdc #(
+  .DWIDTH($clog2($clog2(CHANNELS)+1))
+) ps_to_adc_buffer_config_i (
+  .src_clk(ps_clk),
+  .src_reset(ps_reset),
+  .src(ps_buffer_config),
+  .dest_clk(adc_clk),
+  .dest_reset(adc_reset),
+  .dest(adc_buffer_config)
+);
+axis_config_reg_cdc #(
+  .DWIDTH(2)
+) ps_to_adc_buffer_start_stop_i (
+  .src_clk(ps_clk),
+  .src_reset(ps_reset),
+  .src(ps_buffer_start_stop),
+  .dest_clk(adc_clk),
+  .dest_reset(adc_reset),
+  .dest(adc_buffer_start_stop)
+);
+axis_config_reg_cdc #(
+  .DWIDTH($clog2(2*CHANNELS)*CHANNELS)
+) ps_to_adc_channel_mux_config_i (
+  .src_clk(ps_clk),
+  .src_reset(ps_reset),
+  .src(ps_channel_mux_config),
+  .dest_clk(adc_clk),
+  .dest_reset(adc_reset),
+  .dest(adc_channel_mux_config)
+);
+axis_config_reg_cdc #(
+  .DWIDTH(32)
+) adc_to_ps_buffer_timestamp_width_i (
+  .src_clk(adc_clk),
+  .src_reset(adc_reset),
+  .src(adc_buffer_timestamp_width),
+  .dest_clk(ps_clk),
+  .dest_reset(ps_reset),
+  .dest(ps_buffer_timestamp_width)
 );
 
+//////////////////////////////////////////////////////////////////////////
+// RFADC clock domain (256MHz)
+//////////////////////////////////////////////////////////////////////////
 // multiplexer takes in physical ADC channels + differentiator outputs and
 // produces logical channels
-Axis_Parallel_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES), .CHANNELS(2*CHANNELS)) mux_input ();
-Axis_Parallel_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES), .CHANNELS(CHANNELS)) logical_channels ();
+Axis_Parallel_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES), .CHANNELS(2*CHANNELS)) adc_mux_input ();
+Axis_Parallel_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES), .CHANNELS(CHANNELS)) adc_mux_output ();
 
-assign mux_input.ready = 1'b0; // unused; tie to 0 to suppress warning
-assign mux_input.last = 1'b0; // unused; tie to 0 to suppress warning
-assign logical_channels.ready = 1'b0; // unused; tie to 0 to suppress warning
-assign logical_channels.last = 1'b0; // unused; tie to 0 to suppress warning
+assign adc_mux_input.ready = 1'b0; // unused; tie to 0 to suppress warning
+assign adc_mux_input.last = 1'b0; // unused; tie to 0 to suppress warning
+assign adc_mux_output.ready = 1'b0; // unused; tie to 0 to suppress warning
+assign adc_mux_output.last = 1'b0; // unused; tie to 0 to suppress warning
 
 genvar channel;
 generate
@@ -43,8 +116,8 @@ generate
     //////////////////////////////////////////////////////////////////
     // connect ADC outputs to lower CHANNELS inputs of channel mux
     //////////////////////////////////////////////////////////////////
-    assign mux_input.data[channel] = adc_data_in.data[channel];
-    assign mux_input.valid[channel] = adc_data_in.valid[channel];
+    assign adc_mux_input.data[channel] = adc_data_in.data[channel];
+    assign adc_mux_input.valid[channel] = adc_data_in.valid[channel];
 
     //////////////////////////////////////////////////////////////////
     // instantiate and connect differentiator
@@ -56,9 +129,9 @@ generate
     assign differentiator_input.valid = adc_data_in.valid[channel];
     assign differentiator_input.last = 1'b0; // unused; tie to 0 to suppress warning
     // differentiator_input.ready is ignored, since we're not applying backpressure
-    assign mux_input.data[CHANNELS + channel] = differentiator_output.data;
-    assign mux_input.valid[CHANNELS + channel] = differentiator_output.valid;
-    assign mux_input.last = 1'b0; // unused; tie to 0 to suppress warning
+    assign adc_mux_input.data[CHANNELS + channel] = differentiator_output.data;
+    assign adc_mux_input.valid[CHANNELS + channel] = differentiator_output.valid;
+    assign adc_mux_input.last = 1'b0; // unused; tie to 0 to suppress warning
     // sample discriminator won't apply backpressure, so make sure the differentiator always outputs data
     assign differentiator_output.ready = 1'b1;
     assign differentiator_output.last = 1'b0; // unused; tie to 0 to suppress warning
@@ -67,8 +140,8 @@ generate
       .SAMPLE_WIDTH(SAMPLE_WIDTH),
       .PARALLEL_SAMPLES(PARALLEL_SAMPLES)
     ) differentiator_i (
-      .clk,
-      .reset,
+      .clk(adc_clk),
+      .reset(adc_reset),
       .data_in(differentiator_input),
       .data_out(differentiator_output)
     );
@@ -85,16 +158,16 @@ axis_channel_mux #(
   .INPUT_CHANNELS(2*CHANNELS),
   .OUTPUT_CHANNELS(CHANNELS)
 ) channel_mux_i (
-  .clk,
-  .reset,
-  .data_in(mux_input),
-  .data_out(logical_channels),
-  .config_in(channel_mux_config)
+  .clk(adc_clk),
+  .reset(adc_reset),
+  .data_in(adc_mux_input),
+  .data_out(adc_mux_output),
+  .config_in(adc_channel_mux_config)
 );
 
 logic [31:0] timestamp_width;
-assign buffer_timestamp_width.data = timestamp_width;
-assign buffer_timestamp_width.valid = 1'b1;
+assign adc_buffer_timestamp_width.data = timestamp_width;
+assign adc_buffer_timestamp_width.valid = 1'b1;
 
 sparse_sample_buffer #(
   .CHANNELS(CHANNELS),
@@ -105,15 +178,15 @@ sparse_sample_buffer #(
   .SAMPLE_WIDTH(SAMPLE_WIDTH),
   .APPROX_CLOCK_WIDTH(APPROX_CLOCK_WIDTH)
 ) buffer_i (
-  .clk,
-  .reset,
+  .clk(adc_clk),
+  .reset(adc_reset),
   .timestamp_width,
-  .data_in(logical_channels),
-  .data_out(dma_data_out),
-  .sample_discriminator_config,
-  .buffer_config,
-  .buffer_start_stop,
-  .start_aux
+  .data_in(adc_mux_output),
+  .data_out(adc_dma_out),
+  .sample_discriminator_config(adc_sample_discriminator_config),
+  .buffer_config(adc_buffer_config),
+  .buffer_start_stop(adc_buffer_start_stop),
+  .start_aux(adc_trigger_in)
 );
 
 endmodule
