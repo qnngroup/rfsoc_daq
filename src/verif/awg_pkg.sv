@@ -16,7 +16,6 @@ package awg_pkg;
     // https://verificationacademy.com/forums/t/typedef-interface/34464
     // https://www.reddit.com/r/Verilog/comments/1158h4w/trouble_with_parameterized_virtual_interfaces/
 
-    typedef virtual Axis_If #(.DWIDTH(AXI_MM_WIDTH))               dma_if;
     typedef virtual Axis_If #(.DWIDTH((1+$clog2(DEPTH))*CHANNELS)) write_depth_if;
     typedef virtual Axis_If #(.DWIDTH(2*CHANNELS))                 trig_cfg_if;
     typedef virtual Axis_If #(.DWIDTH(64*CHANNELS))                burst_len_if;
@@ -24,7 +23,6 @@ package awg_pkg;
     typedef virtual Axis_If #(.DWIDTH(2))                          transfer_error_if;
     typedef virtual Axis_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(CHANNELS)) data_out_if;
 
-    dma_if            v_dma_data_in;
     write_depth_if    v_dma_write_depth;
     trig_cfg_if       v_dma_trigger_out_config;
     burst_len_if      v_dma_awg_burst_length;
@@ -33,7 +31,6 @@ package awg_pkg;
     data_out_if       v_dac_data_out;
 
     function new (
-      input dma_if            dma_data_in,
       input write_depth_if    dma_write_depth,
       input trig_cfg_if       dma_trigger_out_config,
       input burst_len_if      dma_awg_burst_length,
@@ -41,7 +38,6 @@ package awg_pkg;
       input transfer_error_if dma_transfer_error,
       input data_out_if       dac_data_out
     );
-      v_dma_data_in             = dma_data_in;
       v_dma_write_depth         = dma_write_depth;
       v_dma_trigger_out_config  = dma_trigger_out_config;
       v_dma_awg_burst_length    = dma_awg_burst_length;
@@ -365,36 +361,6 @@ package awg_pkg;
       debug.display("finished receiving data from dac_data_out", sim_util_pkg::DEBUG);
     endtask
 
-    task automatic send_dma_data(
-      ref logic dma_clk,
-      inout logic [AXI_MM_WIDTH-1:0] dma_words [$],
-      input int rand_valid,
-      input int tlast_check
-    );
-      v_dma_data_in.data <= dma_words.pop_back();
-      v_dma_data_in.send_samples(dma_clk, (dma_words.size() / 4) * 2, rand_valid & 1'b1, 1'b1, 1'b0);
-      v_dma_data_in.last <= 1'b0;
-      if (tlast_check == 2) begin
-        // send early tlast
-        v_dma_data_in.valid <= 1'b1;
-        v_dma_data_in.last <= 1'b1;
-        while (~v_dma_data_in.ok) @(posedge dma_clk);
-      end else begin
-        v_dma_data_in.send_samples(dma_clk, dma_words.size(), rand_valid & 1'b1, 1'b0, 1'b0);
-        v_dma_data_in.valid <= 1'b1; // may have been reset by rand_valid
-        while (~v_dma_data_in.ok) @(posedge dma_clk);
-        // one sample left, update tlast under normal operation
-        if (tlast_check == 0) begin
-          v_dma_data_in.last <= 1'b1;
-          do @(posedge dma_clk); while (~v_dma_data_in.ok);
-        end else begin
-          v_dma_data_in.last <= 1'b0;
-          do @(posedge dma_clk); while (~v_dma_data_in.ok);
-        end
-      end
-      v_dma_data_in.valid <= 1'b0;
-      v_dma_data_in.last <= 1'b0;
-    endtask
-
   endclass
+
 endpackage
