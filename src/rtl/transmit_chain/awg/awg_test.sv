@@ -48,7 +48,6 @@ Axis_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(CHANNELS)) 
 logic [CHANNELS-1:0] dac_trigger;
 
 awg_pkg::util util = new(
-  dma_data_in,
   dma_write_depth,
   dma_trigger_out_config,
   dma_awg_burst_length,

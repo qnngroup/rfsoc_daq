@@ -6,7 +6,7 @@ module axis_config_reg_cdc #(
   parameter int DWIDTH = 16
 ) (
   input wire src_clk, src_reset,
-  Axis_If.Master_Stream src,
+  Axis_If.Slave_Stream src,
 
   input wire dest_clk, dest_reset,
   Axis_If.Master_Stream dest
