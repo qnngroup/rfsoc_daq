@@ -8,7 +8,7 @@ Notable features are an arbitrary waveform generator based on piecewise-linear s
 ```
 ./
   src/
-    rtl/                synthesizable hardware description
+    rtl/                synthesizable modules and unit tests
     verif/              test-only code
     constraints/        XDC contraints
     pynq/               Python drivers and Jupyter notebook
@@ -28,24 +28,31 @@ Each unit test should create an instance of the `sim_util_pkg::debug` class to t
 The `sim_util_pkg::debug` class offers 3 levels of verbosity: `DEFAULT` (lowest verbosity, good for regression tests or sanity checks), `VERBOSE` (medium verbosity), and `DEBUG` (highest verbosity, good if something is going wrong).
 
 ```
-sim_util_pkg::debug #(.VERBOSITY(DEFAULT)) dbg = new;
+sim_util_pkg::debug debug = new(DEFAULT);
 ```
 
 The method `sim_util_pkg::debug.display(string msg, verbosity_t verbosity)` allows print statements to be generated at differing verbosity levels.
 For example, if the method were called like so:
 
 ```
-dbg.display("Running test my_module_test", DEFAULT);
+debug.display("Running test my_module_test", DEFAULT);
 ```
 
-then the message `Running test for module my_module` would always be printed out, regardless of what verbosity setting the instance `dbg_i` is initialized with.
+then the message `Running test for module my_module` would always be printed out, regardless of what verbosity setting the instance `debug` is initialized with.
 However, if the method were called like this
 
 ```
-dbg.display("Signal in submodule my_module_test.dut.dut_submodule is x", VERBOSE);
+debug.display("Signal in submodule my_module_test.dut.dut_submodule is x", VERBOSE);
 ```
 
-then the message would only be printed if the `dbg_i` was initialized with a verbosity setting of `VERBOSE` or `DEBUG`.
+then the message would only be printed if the `debug` was initialized with a verbosity setting of `VERBOSE` or `DEBUG`.
+That is:
+
+```
+sim_util_pkg::debug debug = new(VERBOSE);
+// or
+sim_util_pkg::debug debug = new(DEBUG);
+```
 
 Here's a template:
 ```
@@ -54,7 +61,7 @@ import sim_util_pkg::*;
 `timescale 1ns / 1ps
 module my_module_test ();
 
-sim_util_pkg::debug #(.VERBOSITY(DEFAULT)) dbg = new;
+sim_util_pkg::debug debug = new(DEFAULT);
 
 logic reset;
 logic clk = 0;
@@ -62,20 +69,20 @@ localparam CLK_RATE_HZ = 100_000_000;
 always #(0.5s/CLK_RATE_HZ) clk = ~clk;
 
 initial begin
-  dbg.display("running test for my_module_test", DEFAULT);
+  debug.display("### RUNNING TEST FOR MY_MODULE ", DEFAULT);
   // run test
   ...
 
-  dbg.display("super verbose debug information", DEBUG);
+  debug.display("super verbose debug information to help debug when module breaks", DEBUG);
   ...
 
   // check for an error, and report if so
   if (error) begin
-    dbg.error("error message");
+    debug.error("error message");
   end
 
-  // report total number of errors and exit the simulation
-  dbg.finish();
+  // report total number of errors and exit the simulation with the appropriate exit code
+  debug.finish();
 end
 
 endmodule
@@ -105,3 +112,4 @@ $ script/regression.sh
 ```
 
 This script generates a list of all test modules (named `[a-zA-Z0-9_]*_test`) in `src/` and passes them to the unit test script.
+For this reason, it is important to name your unit tests following this naming scheme so that they are run in a regression test.
