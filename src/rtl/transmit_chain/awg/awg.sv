@@ -254,12 +254,12 @@ logic [1:0][CHANNELS-1:0][PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0] dac_buffer_out_reg;
 logic [CHANNELS-1:0][PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0] dac_data_out_reg;
 logic [CHANNELS-1:0][$clog2(DEPTH)-1:0] dac_read_address;
 logic [CHANNELS-1:0][63:0] dac_frame_counter;
-logic [1:0][CHANNELS-1:0] dac_trigger_pipe; // match latency of BRAM output registers
+logic [2:0][CHANNELS-1:0] dac_trigger_pipe; // match latency of BRAM output registers
 
 // tracking of when each channel finishes
 logic [1:0][CHANNELS-1:0] dac_awg_channels_done;
 logic dac_awg_done;
-logic [CHANNELS-1:0] dac_data_select; // switch between BRAM output and zero
+logic [1:0][CHANNELS-1:0] dac_data_select; // switch between BRAM output and zero
 always_ff @(posedge dac_clk) dac_awg_done <= &dac_awg_channels_done[1];
 
 always_ff @(posedge dac_clk) begin
@@ -267,7 +267,7 @@ always_ff @(posedge dac_clk) begin
   dac_data_out.data <= dac_data_out_reg;
   dac_data_out_valid <= {dac_data_out_valid[1:0], 1'b1};
   for (int channel = 0; channel < CHANNELS; channel++) begin
-    if (dac_data_select[channel]) begin
+    if (dac_data_select[1][channel]) begin
       dac_data_out_reg[channel] <= '0;
     end else begin
       dac_data_out_reg[channel] <= dac_buffer_out_reg[1][channel];
@@ -280,11 +280,12 @@ always_ff @(posedge dac_clk) begin
   if (dac_reset) begin
     dac_data_select <= '0;
   end else begin
+    dac_data_select[1] <= dac_data_select[0];
     for (int channel = 0; channel < CHANNELS; channel++) begin
       if (dac_awg_channels_done[0][channel] || (dac_read_state == DAC_IDLE)) begin
-        dac_data_select[channel] <= 1'b1;
+        dac_data_select[0][channel] <= 1'b1;
       end else begin
-        dac_data_select[channel] <= 1'b0;
+        dac_data_select[0][channel] <= 1'b0;
       end
     end
   end
@@ -312,8 +313,8 @@ end
 
 // update dac_read_address, dac_awg_channels_done, and dac_trigger
 always_ff @(posedge dac_clk) begin
-  dac_trigger <= dac_trigger_pipe[1];
-  dac_trigger_pipe[1] <= dac_trigger_pipe[0];
+  dac_trigger <= dac_trigger_pipe[2];
+  dac_trigger_pipe[2:1] <= dac_trigger_pipe[1:0];
   if (dac_reset) begin
     dac_frame_counter <= '0;
     dac_read_address <= '0;
@@ -419,11 +420,47 @@ xpm_cdc_pulse #(
 // dma_address_max_reg does not change when the DAC-side is reading out the
 // buffers, so any metastability will not be an issue.
 // same is true of dma_awg_burst_length_reg and dma_trigger_out_config_reg
-always_ff @(posedge dac_clk) begin
-  dac_address_max_reg <= dma_address_max_reg;
-  dac_awg_burst_length_reg <= dma_awg_burst_length_reg;
-  dac_trigger_out_config_reg <= dma_trigger_out_config_reg;
-end
+// regardless, we should do a proper CDC so that the tools don't complain
+// probably could do a set_false_path, but just use a CDC
+// xpm_cdc_array_single is designed for separate (i.e. independent) bits that
+// are packed into an array for convenience. Since our signal isn't changing
+// anytime near where we want to read it, it's fine to use this module
+xpm_cdc_array_single #(
+  .DEST_SYNC_FF(4), // four synchronization stages
+  .INIT_SYNC_FF(0), // disable behavioral initialization in simulation
+  .SIM_ASSERT_CHK(1), // report violations when simulating
+  .SRC_INPUT_REG(1), // register input
+  .WIDTH(CHANNELS*$clog2(DEPTH))
+) dma_to_dac_address_max_cdc_i (
+  .dest_clk(dac_clk),
+  .dest_out(dac_address_max_reg),
+  .src_clk(dma_clk),
+  .src_in(dma_address_max_reg)
+);
+xpm_cdc_array_single #(
+  .DEST_SYNC_FF(4), // four synchronization stages
+  .INIT_SYNC_FF(0), // disable behavioral initialization in simulation
+  .SIM_ASSERT_CHK(1), // report violations when simulating
+  .SRC_INPUT_REG(1), // register input
+  .WIDTH(CHANNELS*64)
+) dma_to_dac_burst_length_cdc_i (
+  .dest_clk(dac_clk),
+  .dest_out(dac_awg_burst_length_reg),
+  .src_clk(dma_clk),
+  .src_in(dma_awg_burst_length_reg)
+);
+xpm_cdc_array_single #(
+  .DEST_SYNC_FF(4), // four synchronization stages
+  .INIT_SYNC_FF(0), // disable behavioral initialization in simulation
+  .SIM_ASSERT_CHK(1), // report violations when simulating
+  .SRC_INPUT_REG(1), // register input
+  .WIDTH(CHANNELS*2)
+) dma_to_dac_trigger_config_cdc_i (
+  .dest_clk(dac_clk),
+  .dest_out(dac_trigger_out_config_reg),
+  .src_clk(dma_clk),
+  .src_in(dma_trigger_out_config_reg)
+);
 
 // buffers
 genvar channel;
