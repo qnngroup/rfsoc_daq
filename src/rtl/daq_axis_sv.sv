@@ -58,6 +58,10 @@ module daq_axis_sv #(
   output  wire [31:0]                             m_axis_buffer_timestamp_width_tdata,
   output  wire                                    m_axis_buffer_timestamp_width_tvalid,
   input   wire                                    m_axis_buffer_timestamp_width_tready,
+  // LMH6401 configuration
+  input   wire [16+$clog2(CHANNELS)-1:0]          s_axis_lmh6401_config_tdata,
+  input   wire                                    s_axis_lmh6401_config_tvalid,
+  output  wire                                    s_axis_lmh6401_config_tready,
 
   //////////////////////////////////////////////////////
   // DAC CONFIGURATION
@@ -165,7 +169,14 @@ module daq_axis_sv #(
   input   wire                                      m12_axis_dac_tready,
   output  wire [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0]  m13_axis_dac_tdata,
   output  wire                                      m13_axis_dac_tvalid,
-  input   wire                                      m13_axis_dac_tready
+  input   wire                                      m13_axis_dac_tready,
+
+  //////////////////////////////////////////////////////
+  // SPI
+  //////////////////////////////////////////////////////
+  output wire [CHANNELS-1:0]  lmh6401_cs_n,
+  output wire                 lmh6401_sck,
+  output wire                 lmh6401_sdi
 );
 
 //////////////////////////////////////////////////////
@@ -308,6 +319,7 @@ Axis_If #(.DWIDTH($clog2($clog2(CHANNELS)+1))) ps_buffer_config ();
 Axis_If #(.DWIDTH(2)) ps_buffer_start_stop ();
 Axis_If #(.DWIDTH(CHANNELS*$clog2(2*CHANNELS))) ps_channel_mux_config ();
 Axis_If #(.DWIDTH(32)) ps_buffer_timestamp_width ();
+Axis_If #(.DWIDTH(16+$clog2(CHANNELS))) ps_lmh6401_config ();
 
 // connect DMA interface
 assign m_axis_dma_tdata = adc_dma_out.data;
@@ -336,6 +348,10 @@ assign s_axis_adc_mux_config_tready = ps_channel_mux_config.ready;
 assign m_axis_buffer_timestamp_width_tdata = ps_buffer_timestamp_width.data;
 assign m_axis_buffer_timestamp_width_tvalid = ps_buffer_timestamp_width.valid;
 assign ps_buffer_timestamp_width.ready = m_axis_buffer_timestamp_width_tready;
+
+assign ps_lmh6401_config.data = s_axis_lmh6401_config_tdata;
+assign ps_lmh6401_config.valid = s_axis_lmh6401_config_tvalid;
+assign s_axis_lmh6401_config_tready = ps_lmh6401_config.ready;
 
 // connect datastream interface
 assign adc_data_in.data[0] = s00_axis_adc_tdata;
@@ -385,5 +401,24 @@ receive_top #(
   .adc_dma_out,
   .adc_trigger_in
 );
+
+SPI_Parallel_If #(.CHANNELS(CHANNELS)) spi ();
+
+assign lmh6401_cs_n = spi.cs_n;
+assign lmh6401_sck = spi.sck;
+assign lmh6401_sdi = spi.sdi;
+
+// LMH6401 SPI interface
+lmh6401_spi #(
+  .AXIS_CLK_FREQ(100_000_000),
+  .SPI_CLK_FREQ(1_000_000),
+  .NUM_CHANNELS(CHANNELS)
+) lmh6401_spi_i (
+  .clk(ps_clk),
+  .reset(ps_reset),
+  .command_in(ps_lmh6401_config),
+  .spi
+);
+
 
 endmodule
