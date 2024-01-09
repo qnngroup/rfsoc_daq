@@ -435,14 +435,14 @@ generate
     // the write.
     // This is necessary in case the DMA TLAST signal doesn't arrive, which
     // could happen if the user doesn't properly configure the frame lengths
-    always_ff @(dma_clk) begin
+    always_ff @(posedge dma_clk) begin
       if ((channel == dma_write_channel) & dma_write_enable & (~dma_write_done[channel])) begin
         buffer[dma_write_address] <= dma_write_data_reg;
       end
     end
     
     // read all buffers simultaneously
-    always_ff @(dac_clk) begin
+    always_ff @(posedge dac_clk) begin
       dac_buffer_out_reg[0][channel] <= buffer[dac_read_address[channel]];
       dac_buffer_out_reg[1][channel] <= dac_buffer_out_reg[0][channel];
     end
