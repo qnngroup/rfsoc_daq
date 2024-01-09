@@ -61,6 +61,44 @@ awg_pkg::util awg_util = new(
   dac_data_out
 );
 
+// DDS util
+typedef logic signed [SAMPLE_WIDTH-1:0] sample_t;
+typedef logic [DDS_PHASE_BITS-1:0] phase_t;
+typedef logic [CHANNELS-1:0][DDS_PHASE_BITS-1:0] multi_phase_t;
+
+sim_util_pkg::math #(sample_t) math; // abs, max functions on sample_t
+
+multi_phase_t phase_inc;
+sample_t dds_received [CHANNELS][$];
+
+localparam real PI = 3.14159265;
+
+localparam int N_FREQS = 8;
+int freqs [N_FREQS] = {
+  12_130_000,
+  517_036_000,
+  1_729_725_000,
+  2_759_000,
+  127_420,
+  8_143_219,
+  14_892_357,
+  764_987_640
+};
+
+function phase_t get_phase_inc_from_freq(input int freq);
+  return phase_t'($floor((real'(freq)/6_400_000_000.0) * (2.0**(DDS_PHASE_BITS))));
+endfunction
+
+always @(posedge ps_clk) begin
+  if (ps_reset) begin
+    phase_inc <= '0;
+  end else begin
+    if (ps_dds_phase_inc.valid) begin
+      phase_inc <= ps_dds_phase_inc.data;
+    end
+  end
+end
+
 transmit_top #(
   .CHANNELS(CHANNELS),
   .PARALLEL_SAMPLES(PARALLEL_SAMPLES),
@@ -114,6 +152,29 @@ always @(posedge dac_clk) begin
   dac_awg_triggers_pipe <= {dac_awg_triggers_pipe[3:0], dut_i.dac_awg_triggers};
 end
 
+task automatic check_dds_output();
+  multi_phase_t phase;
+  sample_t expected;
+  phase = '0;
+  for (int channel = 0; channel < CHANNELS; channel++) begin
+    while (dds_received[channel].size() > 0) begin
+      expected = sample_t'($floor((2.0**(SAMPLE_WIDTH-1) - 0.5)*$cos((2.0*PI/2.0**DDS_PHASE_BITS)*real'(phase[channel])) - 0.5));
+      // we won't get the phase exactly right
+      if (math.abs(dds_received[channel][$] - expected) > 6'h3f) begin
+        debug.error($sformatf(
+          "channel %0d: mismatched sample value for phase = %x: expected %x got %x",
+          channel,
+          phase[channel],
+          expected,
+          dds_received[channel][$])
+        );
+      end
+      phase[channel] = phase[channel] + phase_inc[channel];
+      dds_received[channel].pop_back();
+    end
+  end
+endtask
+
 initial begin
   debug.display("### TESTING TRANSMIT TOPLEVEL ###", DEFAULT);
 
@@ -142,13 +203,10 @@ initial begin
   // don't accept data from dma_error tracking output
   ps_awg_dma_error.ready <= 1'b0;
 
-  dac_data_out.ready <= 1'b0;
-
   repeat (100) @(posedge ps_clk);
   ps_reset <= 1'b0;
   @(posedge dac_clk);
   dac_reset <= 1'b0;
-  dac_data_out.ready <= 1'b1;
 
   // configure the mux to select the AWG
   for (int channel = 0; channel < CHANNELS; channel++) begin
@@ -222,14 +280,43 @@ initial begin
     write_depths,
     burst_lengths
   );
+  
+  debug.display("finished testing AWG", VERBOSE);
  
-  // enable the phase inc on the DDS, just set every channel to the same phase
-  // and make sure they're all correct
   // configure the mux to select the DDS
-  //for (int channel = 0; channel < CHANNELS; channel++) begin
-  //  ps_channel_mux_config.data[channel*$clog2(2*CHANNELS)+:$clog2(2*CHANNELS)] <= channel + CHANNELS;
-  //end
+  for (int channel = 0; channel < CHANNELS; channel++) begin
+    ps_channel_mux_config.data[channel*$clog2(2*CHANNELS)+:$clog2(2*CHANNELS)] <= channel + CHANNELS;
+  end
+  // set phase increment
+  for (int channel = 0; channel < CHANNELS; channel++) begin
+    ps_dds_phase_inc.data[channel*DDS_PHASE_BITS+:DDS_PHASE_BITS] <= get_phase_inc_from_freq(freqs[channel]);
+  end
 
+  ps_dds_phase_inc.valid <= 1'b1;
+  ps_channel_mux_config.valid <= 1'b1;
+  @(posedge ps_clk);
+  ps_dds_phase_inc.valid <= 1'b0;
+  ps_channel_mux_config.valid <= 1'b0;
+
+  debug.display("finished configuring DDS", VERBOSE);
+
+  // wait until we get nonzero data, then start adding to dds_received
+  while (dac_data_out.data === '0) @(posedge dac_clk);
+  repeat (4) @(posedge dac_clk); // extra latency with 0 phase increment but nonzero output
+  // nonzero data now
+  debug.display("collecting DDS data", VERBOSE);
+  repeat (100) begin
+    for (int channel = 0; channel < CHANNELS; channel++) begin
+      for (int sample = 0; sample < PARALLEL_SAMPLES; sample++) begin
+        dds_received[channel].push_front(dac_data_out.data[channel][sample*SAMPLE_WIDTH+:SAMPLE_WIDTH]);
+      end
+    end
+    @(posedge dac_clk);
+  end
+  debug.display("checking DDS data", VERBOSE);
+  // check to make sure that data matches what we'd expect
+  check_dds_output();
+  
   debug.finish();
 end
 

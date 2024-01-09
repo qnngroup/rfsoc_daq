@@ -167,8 +167,8 @@ assign dac_mux_data_in.data[CHANNELS-1:0] = dac_awg_data_out.data;
 assign dac_mux_data_in.valid[CHANNELS-1:0] = dac_awg_data_out.valid;
 assign dac_mux_data_in.data[2*CHANNELS-1:CHANNELS] = dac_dds_data_out.data;
 assign dac_mux_data_in.valid[2*CHANNELS-1:CHANNELS] = dac_dds_data_out.valid;
-assign dac_awg_data_out.ready = dac_mux_data_in.ready[CHANNELS-1:0];
-assign dac_dds_data_out.ready = dac_mux_data_in.ready[2*CHANNELS-1:CHANNELS];
+assign dac_awg_data_out.ready = '1; // mux has realtime interface (no backpressure), so always accept data
+assign dac_dds_data_out.ready = '1;
 
 // mux
 axis_channel_mux #(

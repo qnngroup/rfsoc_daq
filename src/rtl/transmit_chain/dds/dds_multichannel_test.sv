@@ -72,7 +72,7 @@ sample_t received [CHANNELS][$];
 localparam real PI = 3.14159265;
 
 function phase_t get_phase_inc_from_freq(input int freq);
-  return unsigned'(int'($floor((real'(freq)/6_400_000_000.0) * (2**(PHASE_BITS)))));
+  return unsigned'(int'($floor((real'(freq)/6_400_000_000.0) * (2.0**(PHASE_BITS)))));
 endfunction
 
 always @(posedge clk) begin
