@@ -3,3 +3,5 @@ build/
 **/*.log
 **/*.swp
 **/*.wcfg
+pynq/hw/
+pynq/.ipynb_checkpoints/
