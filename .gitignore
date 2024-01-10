@@ -5,3 +5,4 @@ build/
 **/*.wcfg
 pynq/hw/
 pynq/.ipynb_checkpoints/
+pynq/__pycache__/
