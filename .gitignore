@@ -6,3 +6,4 @@ build/
 pynq/hw/
 pynq/.ipynb_checkpoints/
 pynq/__pycache__/
+pynq/figures/*.png
