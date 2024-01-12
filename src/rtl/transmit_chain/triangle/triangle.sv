@@ -36,7 +36,7 @@ logic [CHANNELS-1:0][PARALLEL_SAMPLES-1:0][PHASE_BITS-1:0] dac_sample_phase, dac
 logic [CHANNELS-1:0][PHASE_BITS-1:0] dac_cycle_phase;
 
 localparam int LATENCY = 4;
-logic [LATENCY-1:0][CHANNELS-1:0] data_valid;
+logic [CHANNELS-1:0][LATENCY-1:0] data_valid;
 always_comb begin
   for (int channel = 0; channel < CHANNELS; channel++) begin
     dac_data_out.valid[channel] = data_valid[channel][LATENCY-1];
