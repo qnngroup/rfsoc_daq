@@ -24,7 +24,9 @@ module daq_axis_sv #(
   parameter int SCALE_WIDTH = 18,
   parameter int SCALE_FRAC_BITS = 16,
   // AWG parameters
-  parameter int AWG_DEPTH = 2048
+  parameter int AWG_DEPTH = 2048,
+  // Triangle wave parameters
+  parameter int TRI_PHASE_BITS = 32
 ) (
   input wire ps_clk, ps_reset,
 
@@ -57,6 +59,7 @@ module daq_axis_sv #(
   // buffer timestamp width out
   output  wire [31:0]                             m_axis_buffer_timestamp_width_tdata,
   output  wire                                    m_axis_buffer_timestamp_width_tvalid,
+  output  wire                                    m_axis_buffer_timestamp_width_tlast,
   input   wire                                    m_axis_buffer_timestamp_width_tready,
   // LMH6401 configuration
   input   wire [16+$clog2(CHANNELS)-1:0]          s_axis_lmh6401_config_tdata,
@@ -85,6 +88,7 @@ module daq_axis_sv #(
   // awg dma error
   output  wire [1:0]                                m_axis_awg_dma_error_tdata,
   output  wire                                      m_axis_awg_dma_error_tvalid,
+  output  wire                                      m_axis_awg_dma_error_tlast,
   input   wire                                      m_axis_awg_dma_error_tready,
   // dac scale factor
   input   wire [SCALE_WIDTH*CHANNELS-1:0]           s_axis_dac_scale_config_tdata,
@@ -94,12 +98,16 @@ module daq_axis_sv #(
   input   wire [DDS_PHASE_BITS*CHANNELS-1:0]        s_axis_dds_phase_inc_tdata,
   input   wire                                      s_axis_dds_phase_inc_tvalid,
   output  wire                                      s_axis_dds_phase_inc_tready,
+  // triangle wave phase increment
+  input   wire [TRI_PHASE_BITS*CHANNELS-1:0]        s_axis_tri_phase_inc_tdata,
+  input   wire                                      s_axis_tri_phase_inc_tvalid,
+  output  wire                                      s_axis_tri_phase_inc_tready,
   // trigger manager config
-  input   wire [CHANNELS:0]                         s_axis_trigger_manager_config_tdata,
+  input   wire [2*CHANNELS:0]                       s_axis_trigger_manager_config_tdata,
   input   wire                                      s_axis_trigger_manager_config_tvalid,
   output  wire                                      s_axis_trigger_manager_config_tready,
   // TX channel mux config
-  input   wire [$clog2(2*CHANNELS)*CHANNELS-1:0]    s_axis_dac_mux_config_tdata,
+  input   wire [$clog2(3*CHANNELS)*CHANNELS-1:0]    s_axis_dac_mux_config_tdata,
   input   wire                                      s_axis_dac_mux_config_tvalid,
   output  wire                                      s_axis_dac_mux_config_tready,
 
@@ -193,10 +201,12 @@ Axis_If #(.DWIDTH(2)) ps_awg_dma_error ();
 Axis_If #(.DWIDTH(SCALE_WIDTH*CHANNELS)) ps_dac_scale_factor ();
 // DDS interface
 Axis_If #(.DWIDTH(DDS_PHASE_BITS*CHANNELS)) ps_dds_phase_inc ();
+// Tri interface
+Axis_If #(.DWIDTH(TRI_PHASE_BITS*CHANNELS)) ps_tri_phase_inc ();
 // Trigger manager interface
-Axis_If #(.DWIDTH(1+CHANNELS)) ps_trigger_manager_config ();
+Axis_If #(.DWIDTH(1+2*CHANNELS)) ps_trigger_manager_config ();
 // Channel mux interface
-Axis_If #(.DWIDTH($clog2(2*CHANNELS)*CHANNELS)) ps_dac_mux_config ();
+Axis_If #(.DWIDTH($clog2(3*CHANNELS)*CHANNELS)) ps_dac_mux_config ();
 // Outputs
 Axis_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(CHANNELS)) dac_data_out ();
 logic dac_trigger_out, adc_trigger_in;
@@ -226,6 +236,7 @@ assign s_axis_awg_start_stop_tready = ps_awg_start_stop.ready;
 
 assign m_axis_awg_dma_error_tdata = ps_awg_dma_error.data;
 assign m_axis_awg_dma_error_tvalid = ps_awg_dma_error.valid;
+assign m_axis_awg_dma_error_tlast = ps_awg_dma_error.last;
 assign ps_awg_dma_error.ready = m_axis_awg_dma_error_tready;
 
 assign ps_dac_scale_factor.data = s_axis_dac_scale_config_tdata;
@@ -235,6 +246,10 @@ assign s_axis_dac_scale_config_tready = ps_dac_scale_factor.ready;
 assign ps_dds_phase_inc.data = s_axis_dds_phase_inc_tdata;
 assign ps_dds_phase_inc.valid = s_axis_dds_phase_inc_tvalid;
 assign s_axis_dds_phase_inc_tready = ps_dds_phase_inc.ready;
+
+assign ps_tri_phase_inc.data = s_axis_tri_phase_inc_tdata;
+assign ps_tri_phase_inc.valid = s_axis_tri_phase_inc_tvalid;
+assign s_axis_tri_phase_inc_tready = ps_tri_phase_inc.ready;
 
 assign ps_trigger_manager_config.data = s_axis_trigger_manager_config_tdata;
 assign ps_trigger_manager_config.valid = s_axis_trigger_manager_config_tvalid;
@@ -288,6 +303,7 @@ transmit_top #(
   .SCALE_WIDTH(SCALE_WIDTH),
   .SCALE_FRAC_BITS(SCALE_FRAC_BITS),
   .AWG_DEPTH(AWG_DEPTH),
+  .TRI_PHASE_BITS(TRI_PHASE_BITS),
   .AXI_MM_WIDTH(AXI_MM_WIDTH)
 ) transmit_top_i (
   .ps_clk,
@@ -300,6 +316,7 @@ transmit_top #(
   .ps_awg_dma_error,
   .ps_scale_factor(ps_dac_scale_factor),
   .ps_dds_phase_inc,
+  .ps_tri_phase_inc,
   .ps_trigger_config(ps_trigger_manager_config),
   .ps_channel_mux_config(ps_dac_mux_config),
   .dac_clk,
@@ -347,6 +364,7 @@ assign s_axis_adc_mux_config_tready = ps_channel_mux_config.ready;
 
 assign m_axis_buffer_timestamp_width_tdata = ps_buffer_timestamp_width.data;
 assign m_axis_buffer_timestamp_width_tvalid = ps_buffer_timestamp_width.valid;
+assign m_axis_buffer_timestamp_width_tlast = ps_buffer_timestamp_width.last;
 assign ps_buffer_timestamp_width.ready = m_axis_buffer_timestamp_width_tready;
 
 assign ps_lmh6401_config.data = s_axis_lmh6401_config_tdata;

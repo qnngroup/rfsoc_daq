@@ -21,7 +21,7 @@ module receive_top #(
   Axis_If.Slave_Stream ps_buffer_start_stop, // 2 bits
   Axis_If.Slave_Stream ps_channel_mux_config, // $clog2(2*CHANNELS)*CHANNELS bits
   // output register
-  Axis_If.Master_Stream ps_buffer_timestamp_width, // 32 bits
+  Axis_If.Master_Full ps_buffer_timestamp_width, // 32 bits
 
   /////////////////////////////////////
   // RFADC clock domain (256MHz)
@@ -33,6 +33,9 @@ module receive_top #(
   // trigger from transmit_top
   input wire adc_trigger_in
 );
+
+assign ps_buffer_timestamp_width.last = 1'b1; // always send just a packet as a single word
+
 //////////////////////////////////////////////////////////////////////////
 // PS clock domain (100MHz) -> RFADC clock domain (256MHz) CDC
 //////////////////////////////////////////////////////////////////////////
@@ -86,6 +89,11 @@ axis_config_reg_cdc #(
   .dest_reset(adc_reset),
   .dest(adc_channel_mux_config)
 );
+// TODO clean this up
+Axis_If #(.DWIDTH(32)) ps_buffer_timestamp_width_stream ();
+assign ps_buffer_timestamp_width.data = ps_buffer_timestamp_width_stream.data;
+assign ps_buffer_timestamp_width.valid = ps_buffer_timestamp_width_stream.valid;
+assign ps_buffer_timestamp_width_stream.ready = ps_buffer_timestamp_width.ready;
 axis_config_reg_cdc #(
   .DWIDTH(32)
 ) adc_to_ps_buffer_timestamp_width_i (
@@ -94,7 +102,7 @@ axis_config_reg_cdc #(
   .src(adc_buffer_timestamp_width),
   .dest_clk(ps_clk),
   .dest_reset(ps_reset),
-  .dest(ps_buffer_timestamp_width)
+  .dest(ps_buffer_timestamp_width_stream)
 );
 
 //////////////////////////////////////////////////////////////////////////

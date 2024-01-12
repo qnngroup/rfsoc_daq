@@ -48,7 +48,7 @@ module awg #(
   Axis_If.Slave_Stream dma_awg_start_stop,
   // dma_transfer_error
   //  2 bit: MSB indicates early tlast from DMA, LSB indicates no tlast from DMA
-  Axis_If.Master_Stream dma_transfer_error,
+  Axis_If.Master_Full dma_transfer_error,
 
   // RFDAC clock domain: 384 MHz
   input wire dac_clk, dac_reset,
@@ -63,6 +63,8 @@ module awg #(
   // RFDAC clock domain to the RFADC clock domain and apply a variable delay
   output logic [CHANNELS-1:0] dac_trigger
 );
+
+assign dma_transfer_error.last = 1'b1; // always send just a packet as a single word
 
 ////////////////////////////////////////////////////////////////////////
 // DMA/PS clock domain logic

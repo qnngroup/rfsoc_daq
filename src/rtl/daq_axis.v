@@ -22,7 +22,9 @@ module daq_axis #(
   parameter SCALE_WIDTH = 18,
   parameter SCALE_FRAC_BITS = 16,
   // AWG parameters
-  parameter AWG_DEPTH = 2048
+  parameter AWG_DEPTH = 2048,
+  // Tri parameters
+  parameter TRI_PHASE_BITS = 32
 ) (
   (* X_INTERFACE_INFO = "xilinx.com:signal:clock:1.0 ps_clk CLK" *)
   (* X_INTERFACE_PARAMETER = "FREQ_HZ 99999001, ASSOCIATED_BUSIF \
@@ -40,6 +42,7 @@ module daq_axis #(
     m_axis_awg_dma_error:\
     s_axis_dac_scale_config:\
     s_axis_dds_phase_inc:\
+    s_axis_tri_phase_inc:\
     s_axis_trigger_manager_config:\
     s_axis_dac_mux_config" *)
   input wire ps_clk,
@@ -95,6 +98,8 @@ module daq_axis #(
   output  wire [31:0]                             m_axis_buffer_timestamp_width_tdata,
   (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 m_axis_buffer_timestamp_width TVALID" *)
   output  wire                                    m_axis_buffer_timestamp_width_tvalid,
+  (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 m_axis_buffer_timestamp_width TLAST" *)
+  output  wire                                    m_axis_buffer_timestamp_width_tlast,
   (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 m_axis_buffer_timestamp_width TREADY" *)
   input   wire                                    m_axis_buffer_timestamp_width_tready,
   // LMH6401 configuration
@@ -141,11 +146,13 @@ module daq_axis #(
   output  wire [31:0]                               m_axis_awg_dma_error_tdata,
   (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 m_axis_awg_dma_error TVALID" *)
   output  wire                                      m_axis_awg_dma_error_tvalid,
+  (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 m_axis_awg_dma_error TLAST" *)
+  output  wire                                      m_axis_awg_dma_error_tlast,
   (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 m_axis_awg_dma_error TREADY" *)
   input   wire                                      m_axis_awg_dma_error_tready,
   // dac scale factor
   (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 s_axis_dac_scale_config TDATA" *)
-  input   wire [SCALE_WIDTH*CHANNELS-1:0]           s_axis_dac_scale_config_tdata,
+  input   wire [159:0]                              s_axis_dac_scale_config_tdata,
   (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 s_axis_dac_scale_config TVALID" *)
   input   wire                                      s_axis_dac_scale_config_tvalid,
   (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 s_axis_dac_scale_config TREADY" *)
@@ -157,6 +164,13 @@ module daq_axis #(
   input   wire                                      s_axis_dds_phase_inc_tvalid,
   (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 s_axis_dds_phase_inc TREADY" *)
   output  wire                                      s_axis_dds_phase_inc_tready,
+  // tri phase increment
+  (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 s_axis_tri_phase_inc TDATA" *)
+  input   wire [TRI_PHASE_BITS*CHANNELS-1:0]        s_axis_tri_phase_inc_tdata,
+  (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 s_axis_tri_phase_inc TVALID" *)
+  input   wire                                      s_axis_tri_phase_inc_tvalid,
+  (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 s_axis_tri_phase_inc TREADY" *)
+  output  wire                                      s_axis_tri_phase_inc_tready,
   // trigger manager config
   (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 s_axis_trigger_manager_config TDATA" *)
   input   wire [31:0]                               s_axis_trigger_manager_config_tdata,
@@ -166,7 +180,7 @@ module daq_axis #(
   output  wire                                      s_axis_trigger_manager_config_tready,
   // TX channel mux config
   (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 s_axis_dac_mux_config TDATA" *)
-  input   wire [$clog2(2*CHANNELS)*CHANNELS-1:0]    s_axis_dac_mux_config_tdata,
+  input   wire [63:0]                               s_axis_dac_mux_config_tdata,
   (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 s_axis_dac_mux_config TVALID" *)
   input   wire                                      s_axis_dac_mux_config_tvalid,
   (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 s_axis_dac_mux_config TREADY" *)
@@ -342,7 +356,8 @@ daq_axis_sv #(
   .DDS_QUANT_BITS      (DDS_QUANT_BITS),
   .SCALE_WIDTH         (SCALE_WIDTH),
   .SCALE_FRAC_BITS     (SCALE_FRAC_BITS),
-  .AWG_DEPTH           (AWG_DEPTH)
+  .AWG_DEPTH           (AWG_DEPTH),
+  .TRI_PHASE_BITS      (TRI_PHASE_BITS)
 ) daq_axis_sv_i (
   .ps_clk                                             (ps_clk),
   .ps_reset                                           (~ps_resetn),
@@ -365,6 +380,7 @@ daq_axis_sv #(
   .s_axis_adc_mux_config_tready                       (s_axis_adc_mux_config_tready),
   .m_axis_buffer_timestamp_width_tdata                (m_axis_buffer_timestamp_width_tdata),
   .m_axis_buffer_timestamp_width_tvalid               (m_axis_buffer_timestamp_width_tvalid),
+  .m_axis_buffer_timestamp_width_tlast                (m_axis_buffer_timestamp_width_tlast),
   .m_axis_buffer_timestamp_width_tready               (m_axis_buffer_timestamp_width_tready),
   .s_axis_lmh6401_config_tdata                        (s_axis_lmh6401_config_tdata[16+$clog2(CHANNELS)-1:0]),
   .s_axis_lmh6401_config_tvalid                       (s_axis_lmh6401_config_tvalid),
@@ -383,17 +399,21 @@ daq_axis_sv #(
   .s_axis_awg_start_stop_tready                       (s_axis_awg_start_stop_tready),
   .m_axis_awg_dma_error_tdata                         (m_axis_awg_dma_error_tdata[1:0]),
   .m_axis_awg_dma_error_tvalid                        (m_axis_awg_dma_error_tvalid),
+  .m_axis_awg_dma_error_tlast                         (m_axis_awg_dma_error_tlast),
   .m_axis_awg_dma_error_tready                        (m_axis_awg_dma_error_tready),
-  .s_axis_dac_scale_config_tdata                      (s_axis_dac_scale_config_tdata),
+  .s_axis_dac_scale_config_tdata                      (s_axis_dac_scale_config_tdata[SCALE_WIDTH*CHANNELS-1:0]),
   .s_axis_dac_scale_config_tvalid                     (s_axis_dac_scale_config_tvalid),
   .s_axis_dac_scale_config_tready                     (s_axis_dac_scale_config_tready),
   .s_axis_dds_phase_inc_tdata                         (s_axis_dds_phase_inc_tdata),
   .s_axis_dds_phase_inc_tvalid                        (s_axis_dds_phase_inc_tvalid),
   .s_axis_dds_phase_inc_tready                        (s_axis_dds_phase_inc_tready),
-  .s_axis_trigger_manager_config_tdata                (s_axis_trigger_manager_config_tdata[CHANNELS:0]),
+  .s_axis_tri_phase_inc_tdata                         (s_axis_tri_phase_inc_tdata),
+  .s_axis_tri_phase_inc_tvalid                        (s_axis_tri_phase_inc_tvalid),
+  .s_axis_tri_phase_inc_tready                        (s_axis_tri_phase_inc_tready),
+  .s_axis_trigger_manager_config_tdata                (s_axis_trigger_manager_config_tdata[2*CHANNELS:0]),
   .s_axis_trigger_manager_config_tvalid               (s_axis_trigger_manager_config_tvalid),
   .s_axis_trigger_manager_config_tready               (s_axis_trigger_manager_config_tready),
-  .s_axis_dac_mux_config_tdata                        (s_axis_dac_mux_config_tdata),
+  .s_axis_dac_mux_config_tdata                        (s_axis_dac_mux_config_tdata[$clog2(3*CHANNELS)*CHANNELS-1:0]),
   .s_axis_dac_mux_config_tvalid                       (s_axis_dac_mux_config_tvalid),
   .s_axis_dac_mux_config_tready                       (s_axis_dac_mux_config_tready),
   .adc_clk                                            (adc_clk),
