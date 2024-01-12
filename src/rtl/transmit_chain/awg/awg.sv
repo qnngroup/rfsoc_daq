@@ -108,6 +108,26 @@ assign dma_write_data.ready = dma_write_state == DMA_ACCEPTING;
 // allow starting bursts as long as the buffer isn't being written to:
 assign dma_awg_start_stop.ready = dma_write_state != DMA_ACCEPTING;
 
+logic dma_awg_config_done, dma_awg_config_done_pulse; // asserted when dma_write_state enters DMA_ACCEPTING
+always_ff @(posedge dma_clk) begin
+  if (dma_reset) begin
+    dma_awg_config_done <= 1'b0;
+    dma_awg_config_done_pulse <= 1'b0;
+  end else begin
+    if (dma_write_state == DMA_ACCEPTING) begin
+      if (dma_awg_config_done_pulse) begin
+        dma_awg_config_done_pulse <= 1'b0;
+      end
+      if (~dma_awg_config_done) begin
+        dma_awg_config_done <= 1'b1;
+        dma_awg_config_done_pulse <= 1'b1;
+      end
+    end else if (dma_write_state == DMA_IDLE) begin
+      dma_awg_config_done <= 1'b0;
+    end
+  end
+end
+
 // state machine update
 always_ff @(posedge dma_clk) begin
   if (dma_reset) begin
@@ -262,6 +282,8 @@ logic dac_awg_done;
 logic [1:0][CHANNELS-1:0] dac_data_select; // switch between BRAM output and zero
 always_ff @(posedge dac_clk) dac_awg_done <= &dac_awg_channels_done[1];
 
+logic dac_awg_config_done; // synchronized from DMA/PS domain, used as write enable for CDC'd configurations for DAC readout of buffer
+
 always_ff @(posedge dac_clk) begin
   dac_data_out.valid <= {CHANNELS{dac_data_out_valid[2]}};
   dac_data_out.data <= dac_data_out_reg;
@@ -294,10 +316,10 @@ end
 // syncrhonized start/stop from DMA/PS domain
 logic dac_awg_start, dac_awg_stop;
 // synchronized address_max_reg from DMA/PS domain
-logic [CHANNELS-1:0][$clog2(DEPTH)-1:0] dac_address_max_reg;
-logic [CHANNELS-1:0][63:0] dac_awg_burst_length_reg;
+logic [CHANNELS-1:0][$clog2(DEPTH)-1:0] dac_address_max_sync, dac_address_max_reg;
+logic [CHANNELS-1:0][63:0] dac_awg_burst_length_sync, dac_awg_burst_length_reg;
 // synchronized trigger config from DMA/PS domain
-logic [CHANNELS-1:0][1:0] dac_trigger_out_config_reg;
+logic [CHANNELS-1:0][1:0] dac_trigger_out_config_sync, dac_trigger_out_config_reg;
 
 // update state machine
 always_ff @(posedge dac_clk) begin
@@ -432,10 +454,10 @@ xpm_cdc_array_single #(
   .SRC_INPUT_REG(1), // register input
   .WIDTH(CHANNELS*$clog2(DEPTH))
 ) dma_to_dac_address_max_cdc_i (
-  .dest_clk(dac_clk),
-  .dest_out(dac_address_max_reg),
   .src_clk(dma_clk),
-  .src_in(dma_address_max_reg)
+  .src_in(dma_address_max_reg),
+  .dest_clk(dac_clk),
+  .dest_out(dac_address_max_sync)
 );
 xpm_cdc_array_single #(
   .DEST_SYNC_FF(4), // four synchronization stages
@@ -444,10 +466,10 @@ xpm_cdc_array_single #(
   .SRC_INPUT_REG(1), // register input
   .WIDTH(CHANNELS*64)
 ) dma_to_dac_burst_length_cdc_i (
-  .dest_clk(dac_clk),
-  .dest_out(dac_awg_burst_length_reg),
   .src_clk(dma_clk),
-  .src_in(dma_awg_burst_length_reg)
+  .src_in(dma_awg_burst_length_reg),
+  .dest_clk(dac_clk),
+  .dest_out(dac_awg_burst_length_sync)
 );
 xpm_cdc_array_single #(
   .DEST_SYNC_FF(4), // four synchronization stages
@@ -456,10 +478,34 @@ xpm_cdc_array_single #(
   .SRC_INPUT_REG(1), // register input
   .WIDTH(CHANNELS*2)
 ) dma_to_dac_trigger_config_cdc_i (
-  .dest_clk(dac_clk),
-  .dest_out(dac_trigger_out_config_reg),
   .src_clk(dma_clk),
-  .src_in(dma_trigger_out_config_reg)
+  .src_in(dma_trigger_out_config_reg),
+  .dest_clk(dac_clk),
+  .dest_out(dac_trigger_out_config_sync)
+);
+// register with an enable signal to make sure we're always comparing valid data
+always_ff @(posedge dac_clk) begin
+  if (dac_awg_config_done) begin
+    dac_trigger_out_config_reg <= dac_trigger_out_config_sync;
+    dac_awg_burst_length_reg <= dac_awg_burst_length_sync;
+    dac_address_max_reg <= dac_address_max_sync;
+  end
+end
+
+// synchronize AWG configuration done signal 
+xpm_cdc_pulse #(
+  .DEST_SYNC_FF(10), // 10 synchronization stages (extra delay)
+  .INIT_SYNC_FF(0), // don't allow behavioral initialization
+  .REG_OUTPUT(1), // register the output
+  .RST_USED(1), // use resets
+  .SIM_ASSERT_CHK(1) // report potential violations
+) awg_config_done_cdc_i (
+  .src_clk(dma_clk),
+  .src_rst(dma_reset),
+  .src_pulse(dma_awg_config_done_pulse),
+  .dest_clk(dac_clk),
+  .dest_rst(dac_reset),
+  .dest_pulse(dac_awg_config_done)
 );
 
 // buffers
