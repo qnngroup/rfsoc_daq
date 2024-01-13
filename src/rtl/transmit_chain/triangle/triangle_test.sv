@@ -21,7 +21,7 @@ localparam PS_CLK_RATE_HZ = 100_000_000;
 always #(0.5s/PS_CLK_RATE_HZ) ps_clk = ~ps_clk;
 
 parameter int PHASE_BITS = 32;
-parameter int CHANNELS = 2;
+parameter int CHANNELS = 8;
 parameter int PARALLEL_SAMPLES = 4;
 parameter int SAMPLE_WIDTH = 16;
 

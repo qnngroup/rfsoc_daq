@@ -170,7 +170,8 @@ triangle #(
   .ps_phase_inc(ps_tri_phase_inc),
   .dac_clk,
   .dac_reset,
-  .dac_data_out(dac_tri_data_out)
+  .dac_data_out(dac_tri_data_out),
+  .dac_trigger(dac_tri_triggers)
 );
 
 // combine awg/tri triggers to send a single value to the ADC buffer

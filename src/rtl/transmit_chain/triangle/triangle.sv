@@ -35,13 +35,9 @@ logic [CHANNELS-1:0][PARALLEL_SAMPLES-1:0][PHASE_BITS-1:0] dac_phase_inc_reg;
 logic [CHANNELS-1:0][PARALLEL_SAMPLES-1:0][PHASE_BITS-1:0] dac_sample_phase, dac_sample_phase_d;
 logic [CHANNELS-1:0][PHASE_BITS-1:0] dac_cycle_phase;
 
-localparam int LATENCY = 4;
-logic [CHANNELS-1:0][LATENCY-1:0] data_valid;
-always_comb begin
-  for (int channel = 0; channel < CHANNELS; channel++) begin
-    dac_data_out.valid[channel] = data_valid[channel][LATENCY-1];
-  end
-end
+localparam int LATENCY = 2;
+logic [LATENCY-1:0] dac_data_valid;
+assign dac_data_out.valid = {CHANNELS{dac_data_valid[LATENCY-1:0]}};
 
 always_ff @(posedge dac_clk) begin
   if (dac_reset) begin
@@ -49,7 +45,7 @@ always_ff @(posedge dac_clk) begin
     dac_cycle_phase <= '0;
     dac_sample_phase <= '0;
     dac_sample_phase_d <= '0;
-    data_valid <= '0;
+    dac_data_valid <= '0;
   end else begin
     // load new phase_inc
     if (dac_phase_inc.valid) begin
@@ -73,9 +69,8 @@ always_ff @(posedge dac_clk) begin
       for (int sample = 1; sample < PARALLEL_SAMPLES; sample++) begin
         dac_sample_phase[channel][sample] <= dac_cycle_phase[channel] + dac_phase_inc_reg[channel][sample-1];
       end
-      // match startup latency of addition pipeline
-      data_valid[channel] <= {data_valid[channel][LATENCY-2:0], 1'b1};
     end
+    dac_data_valid <= {dac_data_valid[LATENCY-2:0], 1'b1};
     dac_sample_phase_d <= dac_sample_phase;
   end
 end

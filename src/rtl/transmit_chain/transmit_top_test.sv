@@ -8,7 +8,7 @@ import awg_pkg::*;
 `timescale 1ns/1ps
 module transmit_top_test ();
 
-sim_util_pkg::debug debug = new(DEFAULT);
+sim_util_pkg::debug debug = new(DEBUG);
 
 logic dac_reset;
 logic dac_clk = 0;
@@ -32,6 +32,8 @@ localparam int SCALE_FRAC_BITS = 16;
 // AWG parameters
 localparam int AWG_DEPTH = 256;
 localparam int AXI_MM_WIDTH = 128;
+// Triangle parameters
+localparam int TRI_PHASE_BITS = 32;
 
 // AWG interfaces
 Axis_If #(.DWIDTH(AXI_MM_WIDTH)) ps_awg_dma_in ();
@@ -44,10 +46,11 @@ Axis_If #(.DWIDTH(2)) ps_awg_dma_error ();
 Axis_If #(.DWIDTH(SCALE_WIDTH*CHANNELS)) ps_scale_factor ();
 // DDS interface
 Axis_If #(.DWIDTH(DDS_PHASE_BITS*CHANNELS)) ps_dds_phase_inc ();
+Axis_If #(.DWIDTH(TRI_PHASE_BITS*CHANNELS)) ps_tri_phase_inc ();
 // Trigger manager interface
 Axis_If #(.DWIDTH(1+CHANNELS)) ps_trigger_config ();
 // Channel mux interface
-Axis_If #(.DWIDTH($clog2(2*CHANNELS)*CHANNELS)) ps_channel_mux_config ();
+Axis_If #(.DWIDTH($clog2(3*CHANNELS)*CHANNELS)) ps_channel_mux_config ();
 // Outputs
 Axis_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(CHANNELS)) dac_data_out ();
 logic dac_trigger_out;
@@ -64,12 +67,15 @@ awg_pkg::util awg_util = new(
 // DDS util
 typedef logic signed [SAMPLE_WIDTH-1:0] sample_t;
 typedef logic [DDS_PHASE_BITS-1:0] phase_t;
-typedef logic [CHANNELS-1:0][DDS_PHASE_BITS-1:0] multi_phase_t;
+typedef logic [CHANNELS-1:0][DDS_PHASE_BITS-1:0] dds_phase_t;
+typedef logic [CHANNELS-1:0][TRI_PHASE_BITS-1:0] tri_phase_t;
 
 sim_util_pkg::math #(sample_t) math; // abs, max functions on sample_t
 
-multi_phase_t phase_inc;
+dds_phase_t dds_phase_inc;
 sample_t dds_received [CHANNELS][$];
+tri_phase_t tri_phase_inc;
+sample_t tri_received [CHANNELS][$];
 
 localparam real PI = 3.14159265;
 
@@ -91,10 +97,14 @@ endfunction
 
 always @(posedge ps_clk) begin
   if (ps_reset) begin
-    phase_inc <= '0;
+    dds_phase_inc <= '0;
+    tri_phase_inc <= '0;
   end else begin
     if (ps_dds_phase_inc.valid) begin
-      phase_inc <= ps_dds_phase_inc.data;
+      dds_phase_inc <= ps_dds_phase_inc.data;
+    end
+    if (ps_tri_phase_inc.valid) begin
+      tri_phase_inc <= ps_tri_phase_inc.data;
     end
   end
 end
@@ -108,6 +118,7 @@ transmit_top #(
   .SCALE_WIDTH(SCALE_WIDTH),
   .SCALE_FRAC_BITS(SCALE_FRAC_BITS),
   .AWG_DEPTH(AWG_DEPTH),
+  .TRI_PHASE_BITS(TRI_PHASE_BITS),
   .AXI_MM_WIDTH(AXI_MM_WIDTH)
 ) dut_i (
   .ps_clk,
@@ -120,6 +131,7 @@ transmit_top #(
   .ps_awg_dma_error,
   .ps_scale_factor,
   .ps_dds_phase_inc,
+  .ps_tri_phase_inc,
   .ps_trigger_config,
   .ps_channel_mux_config,
   .dac_clk,
@@ -153,7 +165,7 @@ always @(posedge dac_clk) begin
 end
 
 task automatic check_dds_output();
-  multi_phase_t phase;
+  dds_phase_t phase;
   sample_t expected;
   phase = '0;
   for (int channel = 0; channel < CHANNELS; channel++) begin
@@ -169,11 +181,72 @@ task automatic check_dds_output();
           dds_received[channel][$])
         );
       end
-      phase[channel] = phase[channel] + phase_inc[channel];
+      phase[channel] = phase[channel] + dds_phase_inc[channel];
       dds_received[channel].pop_back();
     end
   end
 endtask
+
+task automatic check_tri_output ();
+  enum {UP, DOWN} direction;
+  sample_t last_sample;
+  // actually check that we're producing the correct output
+  for (int channel = 0; channel < CHANNELS; channel++) begin
+    last_sample = {1'b1, {(SAMPLE_WIDTH-1){1'b0}}};
+    direction = UP;
+    while (tri_received[channel].size() > 0) begin
+      debug.display($sformatf(
+        "channel %0d: sample pair %x, %x (%0d, %0d)",
+        channel,
+        tri_received[channel][$],
+        last_sample,
+        tri_received[channel][$],
+        last_sample),
+        DEBUG
+      );
+      case (direction)
+        UP: begin
+          if (tri_received[channel][$] < last_sample) begin
+            // if we're near the edge, then that's okay
+            if (last_sample < ({1'b0, {(SAMPLE_WIDTH-1){1'b1}}} - tri_phase_inc[channel][TRI_PHASE_BITS-1-:SAMPLE_WIDTH])) begin
+              // not okay
+              debug.error($sformatf(
+                "channel %0d: samples should be increasing, but decreasing pair %x, %x",
+                channel,
+                last_sample,
+                tri_received[channel][$])
+              );
+            end else begin
+              // okay
+              direction = DOWN;
+            end
+          end
+        end
+        DOWN: begin
+          if (tri_received[channel][$] > last_sample) begin
+            // if we're near the edge, then that's okay
+            if (last_sample > ({1'b1, {(SAMPLE_WIDTH-1){1'b0}}} + tri_phase_inc[channel][TRI_PHASE_BITS-1-:SAMPLE_WIDTH])) begin
+              // not okay
+              debug.error($sformatf(
+                "channel %0d: samples should be decreasing, but increasing pair %x, %x",
+                channel,
+                last_sample,
+                tri_received[channel][$])
+              );
+            end else begin
+              // okay
+              direction = UP;
+            end
+          end
+        end
+      endcase
+      last_sample = tri_received[channel][$];
+      tri_received[channel].pop_back();
+    end
+  end
+endtask
+
+
 
 initial begin
   debug.display("### TESTING TRANSMIT TOPLEVEL ###", DEFAULT);
@@ -188,6 +261,7 @@ initial begin
   ps_awg_start_stop.data <= '0;
   ps_scale_factor.data <= '0;
   ps_dds_phase_inc.data <= '0;
+  ps_tri_phase_inc.data <= '0;
   ps_trigger_config.data <= '0;
   ps_channel_mux_config.data <= '0;
 
@@ -197,6 +271,7 @@ initial begin
   ps_awg_start_stop.valid <= 1'b0;
   ps_scale_factor.valid <= 1'b0;
   ps_dds_phase_inc.valid <= 1'b0;
+  ps_tri_phase_inc.valid <= 1'b0;
   ps_trigger_config.valid <= 1'b0;
   ps_channel_mux_config.valid <= 1'b0;
 
@@ -271,6 +346,8 @@ initial begin
     burst_lengths
   );
 
+  debug.display("finished collecting AWG data", VERBOSE);
+
   awg_util.check_output_data(
     debug,
     samples_to_send,
@@ -285,7 +362,7 @@ initial begin
  
   // configure the mux to select the DDS
   for (int channel = 0; channel < CHANNELS; channel++) begin
-    ps_channel_mux_config.data[channel*$clog2(2*CHANNELS)+:$clog2(2*CHANNELS)] <= channel + CHANNELS;
+    ps_channel_mux_config.data[channel*$clog2(3*CHANNELS)+:$clog2(3*CHANNELS)] <= channel + CHANNELS;
   end
   // set phase increment
   for (int channel = 0; channel < CHANNELS; channel++) begin
@@ -316,6 +393,41 @@ initial begin
   debug.display("checking DDS data", VERBOSE);
   // check to make sure that data matches what we'd expect
   check_dds_output();
+
+  debug.display("finished testing DDS", VERBOSE);
+
+  // check triangle wave generator
+  // configure the mux to select the triangle wave gen
+  for (int channel = 0; channel < CHANNELS; channel++) begin
+    ps_channel_mux_config.data[channel*$clog2(3*CHANNELS)+:$clog2(3*CHANNELS)] <= channel + 2*CHANNELS;
+  end
+  // set phase increment
+  for (int channel = 0; channel < CHANNELS; channel++) begin
+    ps_tri_phase_inc.data[channel*TRI_PHASE_BITS+:TRI_PHASE_BITS] <= get_phase_inc_from_freq(freqs[channel]);
+  end
+  
+  ps_trigger_config.data <= {'0, 1'b1, {CHANNELS{1'b0}}};
+  
+  ps_tri_phase_inc.valid <= 1'b1;
+  ps_channel_mux_config.valid <= 1'b1;
+  ps_trigger_config.valid <= 1'b1;
+  @(posedge ps_clk);
+  ps_tri_phase_inc.valid <= 1'b0;
+  ps_channel_mux_config.valid <= 1'b0;
+  ps_trigger_config.valid <= 1'b0;
+
+  debug.display("finished configuring triangle wave generator", VERBOSE);
+  repeat (2) begin
+    while (dac_trigger_out !== 1'b1) @(posedge dac_clk);
+    for (int channel = 0; channel < CHANNELS; channel++) begin
+      for (int sample = 0; sample < PARALLEL_SAMPLES; sample++) begin
+        tri_received[channel].push_front(dac_data_out.data[channel][sample*SAMPLE_WIDTH+:SAMPLE_WIDTH]);
+      end
+    end
+  end
+
+  debug.display("checking triangle wave output", VERBOSE);
+  check_tri_output();
   
   debug.finish();
 end
