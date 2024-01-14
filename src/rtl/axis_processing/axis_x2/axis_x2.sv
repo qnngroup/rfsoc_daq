@@ -6,8 +6,8 @@ module axis_x2 #(
   parameter int SAMPLE_FRAC_BITS = 16
 ) (
   input wire clk, reset,
-  Axis_If.Slave_Stream data_in,
-  Axis_If.Master_Stream data_out
+  Axis_If.Slave data_in,
+  Axis_If.Master data_out
 );
 
 // register signals to infer DSP hardware multiplier
@@ -18,7 +18,7 @@ logic signed [SAMPLE_WIDTH-1:0] data_in_reg [PARALLEL_SAMPLES]; // 0Q16, 2Q14
 logic signed [2*SAMPLE_WIDTH-1:0] product [PARALLEL_SAMPLES]; // 0Q32, 4Q28
 // shift and truncate the product and register it
 logic signed [SAMPLE_WIDTH-1:0] product_d [PARALLEL_SAMPLES]; // 0Q16, 4Q12
-logic [3:0] valid_d;
+logic [3:0] valid_d, last_d;
 
 always_ff @(posedge clk) begin
   if (reset) begin
@@ -36,11 +36,13 @@ always_ff @(posedge clk) begin
         data_out.data[i*SAMPLE_WIDTH+:SAMPLE_WIDTH] <= product_d[i];
       end
       valid_d <= {valid_d[2:0], data_in.ok};
+      last_d <= {last_d[2:0], data_in.last};
     end
   end
 end
 
 assign data_out.valid = valid_d[3];
+assign data_out.last = last_d[3];
 assign data_in.ready = data_out.ready;
 
 endmodule

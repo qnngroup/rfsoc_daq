@@ -5,9 +5,11 @@ module trigger_manager #(
 ) (
   input wire clk, reset,
   input logic [CHANNELS-1:0] triggers_in,
-  Axis_If.Slave_Realtime trigger_config, // {OR/AND, per-channel mask}
+  Axis_If.Slave trigger_config, // {OR/AND, per-channel mask}
   output logic trigger_out
 );
+
+assign trigger_config.ready = 1'b1; // always accept a new trigger configuration
 
 logic [CHANNELS-1:0] trigger_mask;
 enum {OR=0, AND=1} comb_mode;

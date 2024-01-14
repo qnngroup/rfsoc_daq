@@ -11,8 +11,10 @@ module dac_prescaler_multichannel #(
   input wire clk, reset,
   Axis_Parallel_If.Master_Stream data_out,
   Axis_Parallel_If.Slave_Stream data_in,
-  Axis_If.Slave_Realtime scale_factor // 2Q16*CHANNELS
+  Axis_If.Slave scale_factor // 2Q16*CHANNELS
 );
+
+assign scale_factor.ready = 1'b1; // always accept new scale factor
 
 genvar channel;
 generate

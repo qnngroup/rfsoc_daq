@@ -26,7 +26,7 @@ parameter int PARALLEL_SAMPLES = 4;
 parameter int SAMPLE_WIDTH = 16;
 
 Axis_If #(.DWIDTH(PHASE_BITS*CHANNELS)) ps_phase_inc ();
-Axis_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(CHANNELS)) dac_data_out ();
+Realtime_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(CHANNELS)) dac_data_out ();
 logic [CHANNELS-1:0] dac_trigger;
 
 triangle #(
@@ -82,11 +82,20 @@ task automatic check_results ();
         last_sample),
         DEBUG
       );
+      if (math.abs(int'(sample_t'(samples_received[channel][$]) - sample_t'(last_sample))) > 2*phase_increment[channel][PHASE_BITS-1-:SAMPLE_WIDTH]) begin
+        debug.error($sformatf(
+        "channel %0d: sample pair with incorrect difference %x, %x; phase_inc = %x",
+        channel,
+        samples_received[channel][$],
+        last_sample,
+        phase_increment[channel])
+        );
+      end
       case (direction)
         UP: begin
           if (samples_received[channel][$] < last_sample) begin
             // if we're near the edge, then that's okay
-            if (last_sample < ({1'b0, {(SAMPLE_WIDTH-1){1'b1}}} - phase_increment[PHASE_BITS-1-:SAMPLE_WIDTH])) begin
+            if (last_sample < ({1'b0, {(SAMPLE_WIDTH-1){1'b1}}} - phase_increment[channel][PHASE_BITS-1-:SAMPLE_WIDTH])) begin
               // not okay
               debug.error($sformatf(
                 "channel %0d: samples should be increasing, but decreasing pair %x, %x",
@@ -131,7 +140,7 @@ task automatic check_results ();
         DOWN: begin
           if (samples_received[channel][$] > last_sample) begin
             // if we're near the edge, then that's okay
-            if (last_sample > ({1'b1, {(SAMPLE_WIDTH-1){1'b0}}} + phase_increment[PHASE_BITS-1-:SAMPLE_WIDTH])) begin
+            if (last_sample > ({1'b1, {(SAMPLE_WIDTH-1){1'b0}}} + phase_increment[channel][PHASE_BITS-1-:SAMPLE_WIDTH])) begin
               // not okay
               debug.error($sformatf(
                 "channel %0d: samples should be decreasing, but increasing pair %x, %x",

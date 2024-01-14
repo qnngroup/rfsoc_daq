@@ -138,9 +138,9 @@ initial begin
     data_in_if.valid <= 1'b0;
     scale_factor <= $urandom_range(18'h3ffff);
     repeat (5) @(posedge clk);
-    data_in_if.send_samples(clk, 20, 1'b0, 1'b1, 1'b0);
+    data_in_if.send_samples(clk, 20, 1'b0, 1'b1);
     repeat (50) @(posedge clk);
-    data_in_if.send_samples(clk, 20, 1'b1, 1'b1, 1'b0);
+    data_in_if.send_samples(clk, 20, 1'b1, 1'b1);
     repeat (50) @(posedge clk);
   end
   // stop sending data and finish reading out anything that is in the pipeline

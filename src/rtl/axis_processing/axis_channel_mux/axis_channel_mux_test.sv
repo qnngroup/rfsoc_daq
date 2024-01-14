@@ -23,8 +23,8 @@ localparam int OUTPUT_CHANNELS = 8;
 
 localparam int SELECT_BITS = $clog2(INPUT_CHANNELS);
 
-Axis_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(INPUT_CHANNELS)) data_in ();
-Axis_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(OUTPUT_CHANNELS)) data_out ();
+Realtime_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(INPUT_CHANNELS)) data_in ();
+Realtime_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(OUTPUT_CHANNELS)) data_out ();
 
 Axis_If #(.DWIDTH(OUTPUT_CHANNELS*SELECT_BITS)) config_in ();
 
@@ -60,7 +60,7 @@ always_ff @(posedge clk) begin
       end
     end
     for (int out_channel = 0; out_channel < OUTPUT_CHANNELS; out_channel++) begin
-      if (config_in.valid) begin
+      if (config_in.ok) begin
         config_in.data[SELECT_BITS*out_channel+:SELECT_BITS] <= $urandom_range(0, {SELECT_BITS{1'b1}});
         source_select[out_channel] <= config_in.data[SELECT_BITS*out_channel+:SELECT_BITS];
       end
@@ -120,23 +120,23 @@ initial begin
   reset <= 1'b1;
   config_in.data <= '0;
   config_in.valid <= 1'b0;
-  data_in.valid <= 1'b0;
+  data_in.valid <= '0;
   repeat (100) @(posedge clk);
   reset <= 1'b0;
   repeat (100) @(posedge clk);
   // change the configuration a few times
   repeat (5) begin
-    data_in.valid <= 1'b0;
+    data_in.valid <= '0;
     config_in.valid <= 1'b1;
     @(posedge clk);
     config_in.valid <= 1'b0;
     repeat (200) begin
       @(posedge clk);
-      data_in.valid <= $urandom();
+      data_in.valid <= $urandom_range(0, {INPUT_CHANNELS{1'b1}});
     end
-    data_in.valid <= 1'b1;
+    data_in.valid <= '1;
     repeat (20) @(posedge clk);
-    data_in.valid <= 1'b0;
+    data_in.valid <= '0;
     repeat (5) @(posedge clk);
     check_results();
   end

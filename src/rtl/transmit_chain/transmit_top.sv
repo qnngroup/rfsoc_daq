@@ -22,31 +22,31 @@ module transmit_top #(
   input wire ps_clk, ps_reset,
 
   // AWG PS interfaces
-  Axis_If.Slave_Full ps_awg_dma_in, // DMA interface
-  Axis_If.Slave_Stream ps_awg_frame_depth, // (1+$clog2(DEPTH))*CHANNELS bits
-  Axis_If.Slave_Stream ps_awg_trigger_out_config, // 2*CHANNELS bits
-  Axis_If.Slave_Stream ps_awg_burst_length, // 64*CHANNELS bits
-  Axis_If.Slave_Stream ps_awg_start_stop, // 2 bits
-  Axis_If.Master_Full  ps_awg_dma_error, // 2 bits
+  Axis_If.Slave   ps_awg_dma_in, // DMA interface
+  Axis_If.Slave   ps_awg_frame_depth, // (1+$clog2(DEPTH))*CHANNELS bits
+  Axis_If.Slave   ps_awg_trigger_out_config, // 2*CHANNELS bits
+  Axis_If.Slave   ps_awg_burst_length, // 64*CHANNELS bits
+  Axis_If.Slave   ps_awg_start_stop, // 2 bits
+  Axis_If.Master  ps_awg_dma_error, // 2 bits
 
   // DAC prescaler configuration
-  Axis_If.Slave_Stream ps_scale_factor, // SCALE_WIDTH*CHANNELS
+  Axis_If.Slave   ps_scale_factor, // SCALE_WIDTH*CHANNELS
 
   // DDS configuration
-  Axis_If.Slave_Stream ps_dds_phase_inc, // DDS_PHASE_BITS*CHANNELS
+  Axis_If.Slave   ps_dds_phase_inc, // DDS_PHASE_BITS*CHANNELS
 
   // Triangle wave configuration
-  Axis_If.Slave_Stream ps_tri_phase_inc, // TRI_PHASE_BITS*CHANNELS
+  Axis_If.Slave   ps_tri_phase_inc, // TRI_PHASE_BITS*CHANNELS
 
   // Trigger manager configuration
-  Axis_If.Slave_Stream ps_trigger_config, // 1 + 2*CHANNELS
+  Axis_If.Slave   ps_trigger_config, // 1 + 2*CHANNELS
 
-  Axis_If.Slave_Stream ps_channel_mux_config, // $clog2(3*CHANNELS)*CHANNELS
+  Axis_If.Slave   ps_channel_mux_config, // $clog2(3*CHANNELS)*CHANNELS
 
   // RFDAC clock domain: 384 MHz
   input wire dac_clk, dac_reset,
   // Datapath
-  Axis_Parallel_If.Master_Realtime dac_data_out,
+  Realtime_Parallel_If.Master dac_data_out,
 
   // Trigger output
   output logic dac_trigger_out
@@ -58,11 +58,6 @@ Axis_If #(.DWIDTH(SCALE_WIDTH*CHANNELS)) dac_scale_factor ();
 Axis_If #(.DWIDTH(DDS_PHASE_BITS*CHANNELS)) dac_dds_phase_inc ();
 Axis_If #(.DWIDTH(1+2*CHANNELS)) dac_trigger_config ();
 Axis_If #(.DWIDTH($clog2(CHANNELS*3)*CHANNELS)) dac_channel_mux_config ();
-// Configuration registers are Axis_If.Realtime modports, so assign ready = 1'b1
-assign dac_scale_factor.ready = 1'b1;
-assign dac_dds_phase_inc.ready = 1'b1;
-assign dac_trigger_config.ready = 1'b1;
-assign dac_channel_mux_config.ready = 1'b1;
 
 // synchronize dac_prescaler scale factor
 axis_config_reg_cdc #(
@@ -115,11 +110,11 @@ axis_config_reg_cdc #(
 ////////////////////////////////////////////////////////////////////////////////
 // Signal chain
 ////////////////////////////////////////////////////////////////////////////////
-Axis_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(CHANNELS)) dac_awg_data_out ();
-Axis_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(CHANNELS)) dac_dds_data_out ();
-Axis_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(CHANNELS)) dac_tri_data_out ();
-Axis_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(3*CHANNELS)) dac_mux_data_in ();
-Axis_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(CHANNELS)) dac_mux_data_out ();
+Realtime_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(CHANNELS)) dac_awg_data_out ();
+Realtime_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(CHANNELS)) dac_dds_data_out ();
+Realtime_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(CHANNELS)) dac_tri_data_out ();
+Realtime_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(3*CHANNELS)) dac_mux_data_in ();
+Realtime_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(CHANNELS)) dac_mux_data_out ();
 
 logic [CHANNELS-1:0] dac_awg_triggers;
 awg #(
@@ -144,7 +139,7 @@ awg #(
 );
 
 // dds
-dds_multichannel #(
+dds #(
   .PHASE_BITS(DDS_PHASE_BITS),
   .QUANT_BITS(DDS_QUANT_BITS),
   .SAMPLE_WIDTH(SAMPLE_WIDTH),
@@ -191,9 +186,6 @@ assign dac_mux_data_in.data[2*CHANNELS-1:CHANNELS] = dac_dds_data_out.data;
 assign dac_mux_data_in.valid[2*CHANNELS-1:CHANNELS] = dac_dds_data_out.valid;
 assign dac_mux_data_in.data[3*CHANNELS-1:2*CHANNELS] = dac_tri_data_out.data;
 assign dac_mux_data_in.valid[3*CHANNELS-1:2*CHANNELS] = dac_tri_data_out.valid;
-assign dac_awg_data_out.ready = '1; // mux has realtime interface (no backpressure), so always accept data
-assign dac_dds_data_out.ready = '1;
-assign dac_tri_data_out.ready = '1;
 
 // mux
 axis_channel_mux #(
@@ -209,10 +201,13 @@ axis_channel_mux #(
   .config_in(dac_channel_mux_config)
 );
 
+Axis_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(CHANNELS)) dac_prescaler_in ();
 Axis_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(CHANNELS)) dac_prescaler_out ();
+assign dac_prescaler_in.data = dac_mux_data_out.data;
+assign dac_prescaler_in.valid = dac_mux_data_out.valid;
 assign dac_data_out.valid = dac_prescaler_out.valid;
 assign dac_data_out.data = dac_prescaler_out.data;
-assign dac_prescaler_out.ready = '1;
+assign dac_prescaler_out.ready = '1; // always accept data from dac_prescaler
 
 // scaler
 dac_prescaler_multichannel #(
@@ -226,7 +221,7 @@ dac_prescaler_multichannel #(
   .clk(dac_clk),
   .reset(dac_reset),
   .data_out(dac_prescaler_out),
-  .data_in(dac_mux_data_out),
+  .data_in(dac_prescaler_in),
   .scale_factor(dac_scale_factor)
 );
 

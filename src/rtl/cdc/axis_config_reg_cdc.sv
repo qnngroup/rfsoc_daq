@@ -6,22 +6,22 @@ module axis_config_reg_cdc #(
   parameter int DWIDTH = 16
 ) (
   input wire src_clk, src_reset,
-  Axis_If.Slave_Stream src,
+  Axis_If.Slave src,
 
   input wire dest_clk, dest_reset,
-  Axis_If.Master_Stream dest
+  Axis_If.Master dest
 );
 
 ///////////////////////////////////////////////////
 // Source clock domain backpressure handling
 ///////////////////////////////////////////////////
 logic src_send, src_rcv;
-logic [DWIDTH-1:0] src_data;
+logic [DWIDTH:0] src_packet; // extra bit for last flag
 // only allow new data if we aren't currently transferring data
 assign src.ready = ~(src_send | src_rcv);
 
 always_ff @(posedge src_clk) begin
-  src_data <= src.data;
+  src_packet <= {src.last, src.data};
   if (src_reset) begin
     src_send <= 1'b0;
   end else begin
@@ -37,11 +37,11 @@ end
 // Destination clock domain backpressure handling
 ///////////////////////////////////////////////////
 logic dest_req, dest_ack;
-logic [DWIDTH-1:0] dest_data;
+logic [DWIDTH:0] dest_packet; // extra bit for last flag
 logic transfer_done;
 
 always_ff @(posedge dest_clk) begin
-  dest.data <= dest_data;
+  {dest.last, dest.data} <= dest_packet;
   if (dest_reset) begin
     dest_ack <= 1'b0;
     transfer_done <= 1'b0;
@@ -77,14 +77,14 @@ xpm_cdc_handshake #(
   .INIT_SYNC_FF(0), // disable behavioral initialization of sync FFs
   .SIM_ASSERT_CHK(1), // enable simulation message reporting for misuse
   .SRC_SYNC_FF(4), // four FF synchronizer for dest->src
-  .WIDTH(DWIDTH)
+  .WIDTH(1+DWIDTH)
 ) cdc_handshake_i (
   .dest_clk,
-  .dest_out(dest_data),
+  .dest_out(dest_packet),
   .dest_req, // out
   .dest_ack, // in
   .src_clk,
-  .src_in(src_data),
+  .src_in(src_packet),
   .src_rcv, // out
   .src_send // in
 );

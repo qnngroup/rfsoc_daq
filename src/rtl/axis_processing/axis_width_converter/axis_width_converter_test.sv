@@ -353,31 +353,31 @@ initial begin
         unique case (dut)
           0: begin
             // send samples with random arrivals
-            downsizer_in.send_samples(clk, $urandom_range(3,100), 1'b1, 1'b1, 1'b0);
+            downsizer_in.send_samples(clk, $urandom_range(3,100), 1'b1, 1'b1);
             // send samples all at once
-            downsizer_in.send_samples(clk, $urandom_range(3,100), 1'b0, 1'b1, 1'b0);
+            downsizer_in.send_samples(clk, $urandom_range(3,100), 1'b0, 1'b1);
             // send samples with random arrivals
-            downsizer_in.send_samples(clk, $urandom_range(3,100), 1'b1, 1'b1, 1'b0);
+            downsizer_in.send_samples(clk, $urandom_range(3,100), 1'b1, 1'b1);
           end
           1: begin
-            upsizer_in.send_samples(clk, $urandom_range(3,100), 1'b1, 1'b1, 1'b0);
-            upsizer_in.send_samples(clk, $urandom_range(3,100), 1'b0, 1'b1, 1'b0);
-            upsizer_in.send_samples(clk, $urandom_range(3,100), 1'b1, 1'b1, 1'b0);
+            upsizer_in.send_samples(clk, $urandom_range(3,100), 1'b1, 1'b1);
+            upsizer_in.send_samples(clk, $urandom_range(3,100), 1'b0, 1'b1);
+            upsizer_in.send_samples(clk, $urandom_range(3,100), 1'b1, 1'b1);
           end
           2: begin
-            comb_in.send_samples(clk, $urandom_range(3,100), 1'b1, 1'b1, 1'b0);
-            comb_in.send_samples(clk, $urandom_range(3,100), 1'b0, 1'b1, 1'b0);
-            comb_in.send_samples(clk, $urandom_range(3,100), 1'b1, 1'b1, 1'b0);
+            comb_in.send_samples(clk, $urandom_range(3,100), 1'b1, 1'b1);
+            comb_in.send_samples(clk, $urandom_range(3,100), 1'b0, 1'b1);
+            comb_in.send_samples(clk, $urandom_range(3,100), 1'b1, 1'b1);
           end
           3: begin
-            nochange_comb_in.send_samples(clk, $urandom_range(3,100), 1'b1, 1'b1, 1'b0);
-            nochange_comb_in.send_samples(clk, $urandom_range(3,100), 1'b0, 1'b1, 1'b0);
-            nochange_comb_in.send_samples(clk, $urandom_range(3,100), 1'b1, 1'b1, 1'b0);
+            nochange_comb_in.send_samples(clk, $urandom_range(3,100), 1'b1, 1'b1);
+            nochange_comb_in.send_samples(clk, $urandom_range(3,100), 1'b0, 1'b1);
+            nochange_comb_in.send_samples(clk, $urandom_range(3,100), 1'b1, 1'b1);
           end
           4: begin
-            comb_up2_in.send_samples(clk, $urandom_range(3,100), 1'b1, 1'b1, 1'b0);
-            comb_up2_in.send_samples(clk, $urandom_range(3,100), 1'b0, 1'b1, 1'b0);
-            comb_up2_in.send_samples(clk, $urandom_range(3,100), 1'b1, 1'b1, 1'b0);
+            comb_up2_in.send_samples(clk, $urandom_range(3,100), 1'b1, 1'b1);
+            comb_up2_in.send_samples(clk, $urandom_range(3,100), 1'b0, 1'b1);
+            comb_up2_in.send_samples(clk, $urandom_range(3,100), 1'b1, 1'b1);
           end
         endcase
         last[0][dut] <= 1'b1;

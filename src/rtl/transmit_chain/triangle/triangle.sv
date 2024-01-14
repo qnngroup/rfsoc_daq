@@ -8,10 +8,10 @@ module triangle #(
   parameter int SAMPLE_WIDTH = 16
 ) (
   input wire ps_clk, ps_reset,
-  Axis_If.Slave_Stream ps_phase_inc, // {phase_inc} for each channel
+  Axis_If.Slave ps_phase_inc, // {phase_inc} for each channel
 
   input wire dac_clk, dac_reset,
-  Axis_Parallel_If.Master_Realtime dac_data_out,
+  Realtime_Parallel_If.Master dac_data_out,
 
   output logic [CHANNELS-1:0] dac_trigger // send a trigger at zero crossing going up
 );

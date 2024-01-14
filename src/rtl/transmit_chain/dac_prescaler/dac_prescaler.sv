@@ -8,16 +8,18 @@ module dac_prescaler #(
   parameter int SCALE_FRAC_BITS = 16
 ) (
   input wire clk, reset,
-  Axis_If.Master_Stream data_out,
-  Axis_If.Slave_Stream data_in,
-  Axis_If.Slave_Realtime scale_factor // 2Q16
+  Axis_If.Master data_out,
+  Axis_If.Slave data_in,
+  Axis_If.Slave scale_factor // 2Q16
 );
+
+assign scale_factor.ready = 1'b1; // always accept scale_factor
 
 logic signed [SAMPLE_WIDTH-1:0] data_in_reg [PARALLEL_SAMPLES]; // 0Q16
 logic signed [SCALE_WIDTH-1:0] scale_factor_reg; // 2Q16
 logic signed [SAMPLE_WIDTH+SCALE_WIDTH-1:0] product [PARALLEL_SAMPLES]; // 2Q32
 logic signed [SAMPLE_WIDTH-1:0] product_d [PARALLEL_SAMPLES]; // 0Q16
-logic [3:0] valid_d;
+logic [3:0] valid_d, last_d;
 
 always_ff @(posedge clk) begin
   if (reset) begin
@@ -38,10 +40,12 @@ always_ff @(posedge clk) begin
       data_out.data[i*SAMPLE_WIDTH+:SAMPLE_WIDTH] <= product_d[i];
     end
     valid_d <= {valid_d[2:0], data_in.ok};
+    last_d <= {last_d[2:0], data_in.last};
   end
 end
 
 assign data_out.valid = valid_d[3];
+assign data_out.last = last_d[3];
 assign data_in.ready = data_out.ready;
 
 endmodule

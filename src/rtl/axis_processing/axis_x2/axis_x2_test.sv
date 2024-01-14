@@ -10,9 +10,10 @@ import sim_util_pkg::*;
 `timescale 1ns / 1ps
 module axis_x2_test ();
 
-typedef logic signed [SAMPLE_WIDTH-1:0] int_t;
-sim_util_pkg::math #(int_t) math; // abs, max functions on signed sample type
 sim_util_pkg::debug debug = new(DEFAULT); // printing, error tracking
+
+typedef logic signed [SAMPLE_WIDTH-1:0] sample_t;
+sim_util_pkg::math #(sample_t) math; // abs, max functions on signed sample type
 
 logic reset;
 logic clk = 0;
@@ -28,8 +29,10 @@ Axis_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES)) data_out_if();
 Axis_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES)) data_in_if();
 
 real d_in;
-int_t received[$];
-int_t expected[$];
+sample_t received[$];
+sample_t expected[$];
+int last_expected[$];
+int last_received[$];
 
 always @(posedge clk) begin
   if (reset) begin
@@ -39,14 +42,20 @@ always @(posedge clk) begin
     if (data_in_if.ok) begin
       for (int i = 0; i < PARALLEL_SAMPLES; i++) begin
         data_in_if.data[i*SAMPLE_WIDTH+:SAMPLE_WIDTH] <= $urandom_range({SAMPLE_WIDTH{1'b1}});
-        d_in = real'(int_t'(data_in_if.data[i*SAMPLE_WIDTH+:SAMPLE_WIDTH]));
-        expected.push_front(int_t'(((d_in/(2.0**SAMPLE_FRAC_BITS))**2) * 2.0**(SAMPLE_WIDTH - 2*SAMPLE_INT_BITS)));
+        d_in = real'(sample_t'(data_in_if.data[i*SAMPLE_WIDTH+:SAMPLE_WIDTH]));
+        expected.push_front(sample_t'(((d_in/(2.0**SAMPLE_FRAC_BITS))**2) * 2.0**(SAMPLE_WIDTH - 2*SAMPLE_INT_BITS)));
+      end
+      if (data_in_if.last) begin
+        last_expected.push_front(expected.size());
       end
     end
     // receive data
     if (data_out_if.ok) begin
       for (int i = 0; i < PARALLEL_SAMPLES; i++) begin
-        received.push_front(int_t'(data_out_if.data[i*SAMPLE_WIDTH+:SAMPLE_WIDTH]));
+        received.push_front(sample_t'(data_out_if.data[i*SAMPLE_WIDTH+:SAMPLE_WIDTH]));
+      end
+      if (data_out_if.last) begin
+        last_received.push_front(received.size());
       end
     end
   end
@@ -71,6 +80,22 @@ task check_results();
     end
     received.pop_back();
     expected.pop_back();
+  end
+  debug.display($sformatf("last_received.size() = %0d", last_received.size()), VERBOSE);
+  debug.display($sformatf("last_expected.size() = %0d", last_expected.size()), VERBOSE);
+  if (last_expected.size() != last_received.size()) begin
+    debug.error($sformatf(
+      "mismatched number of last signals: got %0d, expected %0d",
+      last_received.size(),
+      last_expected.size())
+    );
+  end
+  while (last_expected.size() > 0) begin
+    if (last_expected[$] !== last_received[$]) begin
+      debug.error($sformatf("last mismatch: got %0d, expected %0d", last_received[$], last_expected[$]));
+    end
+    last_expected.pop_back();
+    last_received.pop_back();
   end
 endtask
 

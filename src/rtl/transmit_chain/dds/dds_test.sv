@@ -14,32 +14,36 @@ import sim_util_pkg::*;
 `timescale 1ns / 1ps
 module dds_test ();
 
+sim_util_pkg::debug debug = new(DEFAULT); // printing, error tracking
+
 localparam PHASE_BITS = 24;
-localparam SAMPLE_WIDTH = 18;
+localparam SAMPLE_WIDTH = 16;
 localparam QUANT_BITS = 8;
 localparam PARALLEL_SAMPLES = 4;
+localparam CHANNELS = 8;
+
 localparam LUT_ADDR_BITS = PHASE_BITS - QUANT_BITS;
 localparam LUT_DEPTH = 2**LUT_ADDR_BITS;
 
 typedef logic signed [SAMPLE_WIDTH-1:0] sample_t;
 typedef logic [PHASE_BITS-1:0] phase_t;
+typedef logic [CHANNELS-1:0][PHASE_BITS-1:0] multi_phase_t;
 
 sim_util_pkg::math #(sample_t) math; // abs, max functions on sample_t
-sim_util_pkg::debug debug = new(DEFAULT); // printing, error tracking
 
 logic reset;
 logic clk = 0;
 localparam CLK_RATE_HZ = 100_000_000;
 always #(0.5s/CLK_RATE_HZ) clk = ~clk;
 
-Axis_If #(.DWIDTH(PHASE_BITS)) phase_inc_in();
-Axis_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES)) cos_out();
+Axis_If #(.DWIDTH(CHANNELS*PHASE_BITS)) phase_inc_in();
+Realtime_Parallel_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES), .CHANNELS(CHANNELS)) data_out();
 
 // easier debugging in waveform view
 sample_t cos_out_split [PARALLEL_SAMPLES];
 always_comb begin
   for (int i = 0; i < PARALLEL_SAMPLES; i++) begin
-    cos_out_split[i] <= cos_out.data[SAMPLE_WIDTH*i+:SAMPLE_WIDTH];
+    cos_out_split[i] <= data_out.data[SAMPLE_WIDTH*i+:SAMPLE_WIDTH];
   end
 end
 
@@ -47,11 +51,12 @@ dds #(
   .PHASE_BITS(PHASE_BITS),
   .QUANT_BITS(QUANT_BITS),
   .SAMPLE_WIDTH(SAMPLE_WIDTH),
-  .PARALLEL_SAMPLES(PARALLEL_SAMPLES)
+  .PARALLEL_SAMPLES(PARALLEL_SAMPLES),
+  .CHANNELS(CHANNELS)
 ) dut_i (
   .clk,
   .reset,
-  .cos_out,
+  .data_out,
   .phase_inc_in
 );
 
@@ -59,14 +64,16 @@ dds #(
 localparam int N_FREQS = 4;
 int freqs [N_FREQS] = {12_130_000, 517_036_000, 1_729_725_000, 2_759_000};
 
-phase_t phase_inc, phase_inc_prev, phase;
-sample_t received [$];
+multi_phase_t phase_inc, phase_inc_prev;
+sample_t received [CHANNELS][$];
 
 localparam real PI = 3.14159265;
 
 function phase_t get_phase_inc_from_freq(input int freq);
   return unsigned'(int'($floor((real'(freq)/6_400_000_000.0) * (2**(PHASE_BITS)))));
 endfunction
+
+logic save_data;
 
 always @(posedge clk) begin
   if (reset) begin
@@ -75,90 +82,89 @@ always @(posedge clk) begin
     if (phase_inc_in.valid) begin
       phase_inc <= phase_inc_in.data;
     end
-    if (cos_out.ok) begin
-      for (int i = 0; i < PARALLEL_SAMPLES; i++) begin
-        received.push_front(sample_t'(cos_out.data[i*SAMPLE_WIDTH+:SAMPLE_WIDTH]));
+    if (save_data) begin
+      for (int channel = 0; channel < CHANNELS; channel++) begin
+        if (data_out.valid[channel]) begin
+          for (int i = 0; i < PARALLEL_SAMPLES; i++) begin
+            received[channel].push_front(sample_t'(data_out.data[channel][i*SAMPLE_WIDTH+:SAMPLE_WIDTH]));
+          end
+        end
       end
     end
   end
 end
 
-task automatic check_output(inout phase_t phase, input phase_t phase_inc, input phase_t phase_inc_prev);
+task automatic check_output(
+  input multi_phase_t phase_inc
+);
+  phase_t phase, dphase;
   sample_t expected;
-  int count;
-  count = 0;
-  debug.display($sformatf(
-    "checking output with initial phase %x, phase_inc %x, phase_inc_prev %x",
-    phase,
-    phase_inc,
-    phase_inc_prev),
-    VERBOSE
-  );
-  while (received.size() > 0) begin
-    expected = sample_t'($floor((2**(SAMPLE_WIDTH-1) - 0.5)*$cos(2*PI/real'(2**PHASE_BITS)*real'(phase))-0.5));
-    if (math.abs(received[$] - expected) > 4'hf) begin
-      debug.error($sformatf(
-        "mismatched sample value for phase = %x: expected %x got %x",
-        phase,
-        expected,
-        received[$])
-      );
+  for (int channel = 0; channel < CHANNELS; channel++) begin
+    debug.display($sformatf("checking output for channel %0d", channel), DEBUG);
+    // get close to a zero-crossing to get better estimate of the phase
+    while ((math.abs(received[channel][$]) > math.abs(received[channel][$-1]))
+            || (math.abs(received[channel][$]) > 12'hfff)) received[channel].pop_back();
+    if (received[channel].size() < 64) begin
+      debug.error("not enough values left to test, please increase number of samples captured");
+    end
+    // estimate initial phase
+    phase = phase_t'($acos((real'(sample_t'(received[channel][$])) + 0.5)
+                            / (2.0**(SAMPLE_WIDTH-1) - 0.5))/(2.0*PI)*(2.0**PHASE_BITS));
+    // phase difference between first and second sample
+    dphase = phase_t'($acos((real'(sample_t'(received[channel][$-1])) + 0.5)
+                            / (2.0**(SAMPLE_WIDTH-1) - 0.5))/(2.0*PI)*(2.0**PHASE_BITS)) - phase;
+    if (dphase > {1'b0, {(PHASE_BITS-1){1'b1}}}) begin
+      // if the difference in phase was negative, then we're on the wrong side of the unit circle
+      phase = phase_t'((2.0**PHASE_BITS) - real'(phase));
     end
     debug.display($sformatf(
-      "got phase/sample pair: %x, %x",
+      "checking output with initial phase %x, phase_inc %x",
       phase,
-      received[$]),
-      DEBUG
+      phase_inc[channel]),
+      VERBOSE
     );
-    // first few samples are with previous phase inc:
-    // 5 cycles of latency
-    if (count < 4*PARALLEL_SAMPLES) begin
-      phase = phase + phase_inc_prev;
-    end else begin
-      phase = phase + phase_inc;
+    while (received[channel].size() > 0) begin
+      expected = sample_t'($floor((2.0**(SAMPLE_WIDTH-1) - 0.5)*$cos(2.0*PI/real'(2.0**PHASE_BITS)*real'(phase))-0.5));
+      if (math.abs(received[channel][$] - expected) > 3'h7) begin
+        debug.error($sformatf(
+          "mismatched sample value for phase = %x: expected %x got %x",
+          phase,
+          expected,
+          received[channel][$])
+        );
+      end
+      debug.display($sformatf(
+        "got phase/sample pair: %x, %x",
+        phase,
+        received[channel][$]),
+        DEBUG
+      );
+      phase = phase + phase_inc[channel];
+      received[channel].pop_back();
     end
-    received.pop_back();
-    count = count + 1;
   end
 endtask
 
 initial begin
   debug.display("### TESTING DDS SIGNAL GENERATOR ###", DEFAULT);
   reset <= 1'b1;
-  cos_out.ready <= 1'b0;
-  phase <= '0;
   phase_inc_prev <= '0;
+  save_data <= 1'b0;
   repeat (50) @(posedge clk);
   reset <= 1'b0;
   repeat (20) @(posedge clk);
   for (int i = 0; i < N_FREQS; i++) begin
-    phase_inc_in.data <= get_phase_inc_from_freq(freqs[i]);
-    phase_inc_in.valid <= 1;
-    repeat (1) @(posedge clk);
-    phase_inc_in.valid <= 0;
-    repeat (100) @(posedge clk);
-    // wait a few cycles before asserting cos_out.ready to ensure that any
-    // phase_inc changes have propagated
-    // this makes it easier to test for correct behavior
-    // TODO actually implement the correct latency tracking so that the
-    // verification works properly regardless of whether the phase increment
-    // is changed while the output is active
-    cos_out.ready <= 1'b1;
-    repeat (100) begin
-      @(posedge clk);
-      cos_out.ready <= $urandom_range(0,1) & 1'b1;
+    for (int channel = 0; channel < CHANNELS; channel++) begin
+      phase_inc_in.data[channel*PHASE_BITS+:PHASE_BITS] <= get_phase_inc_from_freq(freqs[$urandom_range(0,N_FREQS-1)]);
     end
-    cos_out.ready <= 1'b1;
-    repeat (100) @(posedge clk);
-    cos_out.ready <= 1'b0;
-    repeat (100) @(posedge clk);
-    debug.display($sformatf(
-      "checking behavior for freq = %0d Hz",
-      freqs[i]),
-      VERBOSE
-    );
-    check_output(phase, phase_inc, phase_inc_prev);
-    phase_inc_prev <= phase_inc;
+    phase_inc_in.valid <= 1'b1;
+    repeat (1) @(posedge clk);
+    phase_inc_in.valid <= 1'b0;
+    repeat (5) @(posedge clk);
+    save_data <= 1'b1;
+    repeat (1000) @(posedge clk);
+    check_output(phase_inc);
+    save_data <= 1'b0;
   end
   debug.finish();
 end

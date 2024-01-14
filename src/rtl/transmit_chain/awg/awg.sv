@@ -19,7 +19,7 @@ module awg #(
   // DMA/PS clock domain: 150 MHz
   input wire dma_clk, dma_reset,
   // Datapath
-  Axis_If.Slave_Full dma_data_in,
+  Axis_If.Slave dma_data_in,
 
   // Configuration registers
   // dma_write_depth:
@@ -28,32 +28,32 @@ module awg #(
   //  Need to put restrictions on this so that we always get a clean
   //  transition between subsequent channels when performing the DMA
   //  (1+$clog2(DEPTH))*CHANNELS bits
-  Axis_If.Slave_Stream dma_write_depth,
+  Axis_If.Slave dma_write_depth,
   // dma_trigger_out_config:
   //  For each channel, specify how the trigger signal is generated
   //    0: no trigger output
   //    1: trigger is outputted at the start of a burst
   //    2: trigger is outputted at the start of each frame in the burst
   //  2*CHANNELS bits
-  Axis_If.Slave_Stream dma_trigger_out_config,
+  Axis_If.Slave dma_trigger_out_config,
   // dma_awg_burst_length:
   //  For each channel, specify the number of times the buffer memory should
   //  be read out (i.e. how many frames per burst)
   //  64*CHANNELS bits
-  Axis_If.Slave_Stream dma_awg_burst_length,
+  Axis_If.Slave dma_awg_burst_length,
   // dma_awg_start_stop
   //  {start, stop}, commands the awg to start sending data or stop sending
   //  data
   //  synchronized to RFDAC clock domain
-  Axis_If.Slave_Stream dma_awg_start_stop,
+  Axis_If.Slave dma_awg_start_stop,
   // dma_transfer_error
   //  2 bit: MSB indicates early tlast from DMA, LSB indicates no tlast from DMA
-  Axis_If.Master_Full dma_transfer_error,
+  Axis_If.Master dma_transfer_error,
 
   // RFDAC clock domain: 384 MHz
   input wire dac_clk, dac_reset,
   // Datapath
-  Axis_Parallel_If.Master_Realtime dac_data_out,
+  Realtime_Parallel_If.Master dac_data_out,
 
   // Trigger outputs (per channel)
   // All outputs will go to a separate trigger module which can be configured

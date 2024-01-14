@@ -23,7 +23,7 @@ always #(0.5s/CLK_RATE_HZ) clk = ~clk;
 
 logic reset;
 
-localparam int N_CHANNELS = 2;
+localparam int CHANNELS = 2;
 localparam int SAMPLE_WIDTH = 16;
 localparam int PARALLEL_SAMPLES = 4;
 localparam int SAMPLE_INDEX_WIDTH = 14;
@@ -31,14 +31,14 @@ localparam int CLOCK_WIDTH = 50;
 
 sample_discriminator_pkg::util #(.SAMPLE_WIDTH(SAMPLE_WIDTH), .PARALLEL_SAMPLES(PARALLEL_SAMPLES)) util;
 
-Axis_If #(.DWIDTH(N_CHANNELS*SAMPLE_WIDTH*2)) config_in();
-Axis_Parallel_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES), .CHANNELS(N_CHANNELS)) data_in();
-Axis_Parallel_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES), .CHANNELS(N_CHANNELS)) data_out();
-Axis_Parallel_If #(.DWIDTH(SAMPLE_INDEX_WIDTH+CLOCK_WIDTH), .CHANNELS(N_CHANNELS)) timestamps_out();
+Axis_If #(.DWIDTH(CHANNELS*SAMPLE_WIDTH*2)) config_in();
+Realtime_Parallel_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES), .CHANNELS(CHANNELS)) data_in();
+Realtime_Parallel_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES), .CHANNELS(CHANNELS)) data_out();
+Realtime_Parallel_If #(.DWIDTH(SAMPLE_INDEX_WIDTH+CLOCK_WIDTH), .CHANNELS(CHANNELS)) timestamps_out();
 
-logic [N_CHANNELS-1:0][SAMPLE_WIDTH-1:0] threshold_high, threshold_low;
+logic [CHANNELS-1:0][SAMPLE_WIDTH-1:0] threshold_high, threshold_low;
 always_comb begin
-  for (int i = 0; i < N_CHANNELS; i++) begin
+  for (int i = 0; i < CHANNELS; i++) begin
     config_in.data[2*SAMPLE_WIDTH*i+:2*SAMPLE_WIDTH] = {threshold_high[i], threshold_low[i]};
   end
 end
@@ -48,7 +48,7 @@ logic reset_state;
 sample_discriminator #(
   .SAMPLE_WIDTH(SAMPLE_WIDTH),
   .PARALLEL_SAMPLES(PARALLEL_SAMPLES),
-  .N_CHANNELS(N_CHANNELS),
+  .CHANNELS(CHANNELS),
   .SAMPLE_INDEX_WIDTH(SAMPLE_INDEX_WIDTH),
   .CLOCK_WIDTH(CLOCK_WIDTH)
 ) dut_i (
@@ -61,18 +61,18 @@ sample_discriminator #(
   .reset_state
 );
 
-logic [SAMPLE_WIDTH*PARALLEL_SAMPLES-1:0] data_sent [N_CHANNELS][$];
-logic [SAMPLE_WIDTH*PARALLEL_SAMPLES-1:0] data_received [N_CHANNELS][$];
-logic [SAMPLE_INDEX_WIDTH+CLOCK_WIDTH-1:0] timestamps_received [N_CHANNELS][$];
+logic [SAMPLE_WIDTH*PARALLEL_SAMPLES-1:0] data_sent [CHANNELS][$];
+logic [SAMPLE_WIDTH*PARALLEL_SAMPLES-1:0] data_received [CHANNELS][$];
+logic [SAMPLE_INDEX_WIDTH+CLOCK_WIDTH-1:0] timestamps_received [CHANNELS][$];
 
-logic [N_CHANNELS-1:0][SAMPLE_WIDTH-1:0] data_range_low, data_range_high;
+logic [CHANNELS-1:0][SAMPLE_WIDTH-1:0] data_range_low, data_range_high;
 
 // save data that was sent to DUT
 always @(posedge clk) begin
   if (reset) begin
     data_in.data <= '0;
   end else begin
-    for (int i = 0; i < N_CHANNELS; i++) begin
+    for (int i = 0; i < CHANNELS; i++) begin
       if (data_in.valid[i]) begin
         data_sent[i].push_front(data_in.data[i]);
         for (int j = 0; j < PARALLEL_SAMPLES; j++) begin
@@ -90,13 +90,13 @@ always @(posedge clk) begin
 end
 
 task check_results (
-  input logic [N_CHANNELS-1:0][SAMPLE_WIDTH-1:0] threshold_low,
-  input logic [N_CHANNELS-1:0][SAMPLE_WIDTH-1:0] threshold_high,
-  inout logic [N_CHANNELS-1:0][CLOCK_WIDTH-1:0] timer,
-  inout logic [N_CHANNELS-1:0][SAMPLE_INDEX_WIDTH-1:0] sample_index,
-  inout logic [N_CHANNELS-1:0] is_high
+  input logic [CHANNELS-1:0][SAMPLE_WIDTH-1:0] threshold_low,
+  input logic [CHANNELS-1:0][SAMPLE_WIDTH-1:0] threshold_high,
+  inout logic [CHANNELS-1:0][CLOCK_WIDTH-1:0] timer,
+  inout logic [CHANNELS-1:0][SAMPLE_INDEX_WIDTH-1:0] sample_index,
+  inout logic [CHANNELS-1:0] is_high
 );
-  for (int i = 0; i < N_CHANNELS; i++) begin
+  for (int i = 0; i < CHANNELS; i++) begin
     // process each channel, first check that we received an appropriate amount of data
     debug.display($sformatf(
       "data_sent[%0d].size() = %0d",
@@ -181,14 +181,14 @@ task check_results (
   end
 endtask
 
-logic [N_CHANNELS-1:0][CLOCK_WIDTH-1:0] timer;
-logic [N_CHANNELS-1:0][SAMPLE_INDEX_WIDTH-1:0] sample_index;
-logic [N_CHANNELS-1:0] is_high;
+logic [CHANNELS-1:0][CLOCK_WIDTH-1:0] timer;
+logic [CHANNELS-1:0][SAMPLE_INDEX_WIDTH-1:0] sample_index;
+logic [CHANNELS-1:0] is_high;
 
 initial begin
   debug.display("### TESTING SAMPLE DISCRIMINATOR ###", DEFAULT);
   reset <= 1'b1;
-  for (int i = 0; i < N_CHANNELS; i++) begin
+  for (int i = 0; i < CHANNELS; i++) begin
     data_range_low[i] <= '0;
     data_range_high[i] <= 16'h7fff;
   end
@@ -215,9 +215,9 @@ initial begin
     // loop a couple times, resetting the state to make sure we get the
     // correct behavior
     // send a bunch of data with discrimination disabled
-    data_in.send_samples(clk, 10, 1'b1, 1'b1, 1'b1);
+    data_in.send_samples(clk, 10, 1'b1, 1'b1);
     repeat (50) @(posedge clk);
-    data_in.send_samples(clk, 10, 1'b0, 1'b1, 1'b1);
+    data_in.send_samples(clk, 10, 1'b0, 1'b1);
     repeat (50) @(posedge clk);
     debug.display("testing run with all data above thresholds", VERBOSE);
     debug.display("first sample will be zero", VERBOSE);
@@ -233,16 +233,16 @@ initial begin
     @(posedge clk);
     config_in.valid <= 1'b0;
     repeat (50) @(posedge clk);
-    data_in.send_samples(clk, 100, 1'b1, 1'b1, 1'b1);
+    data_in.send_samples(clk, 100, 1'b1, 1'b1);
     repeat (50) @(posedge clk);
-    data_in.send_samples(clk, 100, 1'b0, 1'b1, 1'b1);
+    data_in.send_samples(clk, 100, 1'b0, 1'b1);
     repeat (50) @(posedge clk);
     debug.display("testing run with channel 0 straddling thresholds", VERBOSE);
     debug.display("and channel 1 above thresholds", VERBOSE);
     check_results(threshold_low, threshold_high, timer, sample_index, is_high);
 
     // send a bunch of data below the threshold
-    for (int i = 0; i < N_CHANNELS; i++) begin
+    for (int i = 0; i < CHANNELS; i++) begin
       data_range_low[i] <= 16'h0000;
       data_range_high[i] <= 16'h00ff;
       threshold_low[i] <= 16'h03ff;
@@ -252,15 +252,15 @@ initial begin
     @(posedge clk);
     config_in.valid <= 1'b0;
     repeat (50) @(posedge clk);
-    data_in.send_samples(clk, 400, 1'b1, 1'b1, 1'b1);
+    data_in.send_samples(clk, 400, 1'b1, 1'b1);
     repeat (50) @(posedge clk);
-    data_in.send_samples(clk, 400, 1'b0, 1'b1, 1'b1);
+    data_in.send_samples(clk, 400, 1'b0, 1'b1);
     repeat (50) @(posedge clk);
     debug.display("testing run with all data below thresholds", VERBOSE);
     check_results(threshold_low, threshold_high, timer, sample_index, is_high);
 
     // send a bunch of data close to the threshold
-    for (int i = 0; i < N_CHANNELS; i++) begin
+    for (int i = 0; i < CHANNELS; i++) begin
       data_range_low[i] <= 16'h0000;
       data_range_high[i] <= 16'h04ff;
       threshold_low[i] <= 16'h03c0;
@@ -270,9 +270,9 @@ initial begin
     @(posedge clk);
     config_in.valid <= 1'b0;
     repeat (50) @(posedge clk);
-    data_in.send_samples(clk, 400, 1'b1, 1'b1, 1'b1);
+    data_in.send_samples(clk, 400, 1'b1, 1'b1);
     repeat (50) @(posedge clk);
-    data_in.send_samples(clk, 400, 1'b0, 1'b1, 1'b1);
+    data_in.send_samples(clk, 400, 1'b0, 1'b1);
     repeat (50) @(posedge clk);
     debug.display("testing run with both channels straddling thresholds", VERBOSE);
     check_results(threshold_low, threshold_high, timer, sample_index, is_high);

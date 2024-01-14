@@ -7,7 +7,7 @@ module lmh6401_spi #(
   parameter int NUM_CHANNELS = 2
 ) (
   input wire clk, reset,
-  Axis_If.Slave_Stream command_in, // {addr + data}
+  Axis_If.Slave command_in, // {addr + data}
   SPI_Parallel_If.Out spi
 );
 

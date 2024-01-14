@@ -44,7 +44,7 @@ Axis_If #(.DWIDTH(64*CHANNELS)) dma_awg_burst_length ();
 Axis_If #(.DWIDTH(2)) dma_awg_start_stop ();
 Axis_If #(.DWIDTH(2)) dma_transfer_error ();
 
-Axis_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(CHANNELS)) dac_data_out ();
+Realtime_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(CHANNELS)) dac_data_out ();
 logic [CHANNELS-1:0] dac_trigger;
 
 awg_pkg::util util = new(
@@ -144,7 +144,7 @@ initial begin
         util.generate_samples(debug, write_depths, samples_to_send, dma_words);
 
         dma_data_in.data <= dma_words.pop_back();
-        dma_data_in.send_samples(dma_clk, (dma_words.size() / 4) * 2, rand_valid & 1'b1, 1'b1, 1'b0);
+        dma_data_in.send_samples(dma_clk, (dma_words.size() / 4) * 2, rand_valid & 1'b1, 1'b1);
         dma_data_in.last <= 1'b0;
         if (tlast_check == 2) begin
           // send early tlast
@@ -152,7 +152,7 @@ initial begin
           dma_data_in.last <= 1'b1;
           while (~dma_data_in.ok) @(posedge dma_clk);
         end else begin
-          dma_data_in.send_samples(dma_clk, dma_words.size(), rand_valid & 1'b1, 1'b0, 1'b0);
+          dma_data_in.send_samples(dma_clk, dma_words.size(), rand_valid & 1'b1, 1'b0);
           dma_data_in.valid <= 1'b1; // may have been reset by rand_valid
           while (~dma_data_in.ok) @(posedge dma_clk);
           // one sample left, update tlast under normal operation

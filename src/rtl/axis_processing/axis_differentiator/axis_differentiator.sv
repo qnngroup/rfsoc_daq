@@ -6,8 +6,8 @@ module axis_differentiator #(
   parameter int PARALLEL_SAMPLES = 2
 ) (
   input wire clk, reset,
-  Axis_If.Slave_Stream data_in,
-  Axis_If.Master_Stream data_out
+  Axis_If.Slave data_in,
+  Axis_If.Master data_out
 );
 
 // register signals to infer DSP hardware subtractor
@@ -22,7 +22,7 @@ logic signed [SAMPLE_WIDTH:0] diff [PARALLEL_SAMPLES]; // 0Q16+0Q16 = 1Q16, 2Q14
 // register this, but we don't care about latency too much)
 logic signed [SAMPLE_WIDTH-1:0] diff_d [PARALLEL_SAMPLES]; // 1Q15, 3Q13
 // delay valid signal to match latency of DSP
-logic [3:0] valid_d;
+logic [3:0] valid_d, last_d;
 
 always_ff @(posedge clk) begin
   if (reset) begin
@@ -49,11 +49,13 @@ always_ff @(posedge clk) begin
         data_out.data[i*SAMPLE_WIDTH+:SAMPLE_WIDTH] <= diff_d[i];
       end
       valid_d <= {valid_d[2:0], data_in.ok};
+      last_d <= {last_d[2:0], data_in.last};
     end
   end
 end
 
 assign data_out.valid = valid_d[3];
+assign data_out.last = last_d[3];
 assign data_in.ready = data_out.ready;
 
 endmodule

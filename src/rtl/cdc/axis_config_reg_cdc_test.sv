@@ -47,8 +47,12 @@ axis_config_reg_cdc #(
 
 logic [7:0] f2s_sent [$];
 logic [7:0] f2s_received [$];
+logic [7:0] f2s_last_sent [$];
+logic [7:0] f2s_last_received [$];
 logic [7:0] s2f_sent [$];
 logic [7:0] s2f_received [$];
+logic [7:0] s2f_last_sent [$];
+logic [7:0] s2f_last_received [$];
 
 logic f2s_enable_send, s2f_enable_send;
 
@@ -57,13 +61,20 @@ always @(posedge fast_clk) begin
     f2s_src.data <= '0;
   end else begin
     f2s_src.valid <= $urandom() & f2s_enable_send;
+    f2s_src.last <= $urandom_range(0,100) < 20;
     s2f_dest.ready <= $urandom() & 1'b1;
     if (f2s_src.ok) begin
       f2s_sent.push_front(f2s_src.data);
       f2s_src.data <= $urandom_range(0, 8'hff);
+      if (f2s_src.last) begin
+        f2s_last_sent.push_front(f2s_sent.size());
+      end
     end
     if (s2f_dest.ok) begin
       s2f_received.push_front(s2f_dest.data);
+      if (s2f_dest.last) begin
+        s2f_last_received.push_front(s2f_received.size());
+      end
     end
   end
 end
@@ -73,13 +84,20 @@ always @(posedge slow_clk) begin
     s2f_src.data <= '0;
   end else begin
     s2f_src.valid <= $urandom() & s2f_enable_send;
+    s2f_src.last <= $urandom_range(0,100) < 20;
     f2s_dest.ready <= $urandom() & 1'b1;
     if (s2f_src.ok) begin
       s2f_sent.push_front(s2f_src.data);
       s2f_src.data <= $urandom_range(0, 8'hff);
+      if (s2f_src.last) begin
+        s2f_last_sent.push_front(s2f_sent.size());
+      end
     end
     if (f2s_dest.ok) begin
       f2s_received.push_front(f2s_dest.data);
+      if (f2s_dest.last) begin
+        f2s_last_received.push_front(f2s_received.size());
+      end
     end
   end
 end
@@ -133,10 +151,14 @@ initial begin
 
   repeat (50) @(posedge slow_clk);
 
-  debug.display("checking results for fast->slow CDC", VERBOSE);
+  debug.display("checking data for fast->slow CDC", VERBOSE);
   check_results(f2s_sent, f2s_received);
-  debug.display("checking results for slow->fast CDC", VERBOSE);
+  debug.display("checking last for fast->slow CDC", VERBOSE);
+  check_results(f2s_last_sent, f2s_last_received);
+  debug.display("checking data for slow->fast CDC", VERBOSE);
   check_results(s2f_sent, s2f_received);
+  debug.display("checking last for slow->fast CDC", VERBOSE);
+  check_results(s2f_last_sent, s2f_last_received);
 
   debug.finish();
 end

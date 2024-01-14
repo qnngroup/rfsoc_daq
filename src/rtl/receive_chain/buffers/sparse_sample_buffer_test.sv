@@ -41,7 +41,7 @@ sparse_sample_buffer_pkg::util #(
   .CHANNELS(CHANNELS)
 ) buf_util;
 
-Axis_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(CHANNELS)) data_in ();
+Realtime_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(CHANNELS)) data_in ();
 Axis_If #(.DWIDTH(AXI_MM_WIDTH)) data_out ();
 Axis_If #(.DWIDTH($clog2($clog2(CHANNELS)+1))) buffer_config ();
 Axis_If #(.DWIDTH(2)) buffer_start_stop ();
@@ -86,6 +86,7 @@ logic update_input_data;
 logic [CHANNELS-1:0][SAMPLE_WIDTH-1:0] data_range_low, data_range_high;
 logic [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0] data_sent [CHANNELS][$];
 logic [AXI_MM_WIDTH-1:0] data_received [$];
+int last_received [$];
 logic [CHANNELS-1:0][TIMESTAMP_WIDTH-SAMPLE_INDEX_WIDTH-1:0] timer;
 
 // send data to DUT and save sent/received data
@@ -109,6 +110,9 @@ always @(posedge clk) begin
   // save all data in the same buffer and postprocess it later
   if (data_out.ok) begin
     data_received.push_front(data_out.data);
+    if (data_out.last) begin
+      last_received.push_front(data_received.size());
+    end
   end
 end
 
@@ -116,7 +120,8 @@ task check_results(
   input int banking_mode,
   input logic [CHANNELS-1:0][SAMPLE_WIDTH-1:0] threshold_high,
   input logic [CHANNELS-1:0][SAMPLE_WIDTH-1:0] threshold_low,
-  inout logic [CHANNELS-1:0][TIMESTAMP_WIDTH-SAMPLE_INDEX_WIDTH-1:0] timer
+  inout logic [CHANNELS-1:0][TIMESTAMP_WIDTH-SAMPLE_INDEX_WIDTH-1:0] timer,
+  input int max_transfer_count
 );
   // checks that:
   // - timestamps line up with when samples were sent
@@ -134,6 +139,23 @@ task check_results(
     debug.display($sformatf("data_sent[%0d].size() = %0d", i, data_sent[i].size()), VERBOSE);
   end
   debug.display($sformatf("data_received.size() = %0d", data_received.size()), VERBOSE);
+
+  // make sure that last arrived before max_transfer_count samples
+  if (last_received.size() !== 1) begin
+    debug.error($sformatf(
+      "expected a single tlast event, got %0d",
+      last_received.size())
+    );
+  end else begin
+    if (last_received[$] > max_transfer_count) begin
+      debug.error($sformatf(
+        "expected tlast event after at most %0d transfers, got it on the %0d transfer",
+        max_transfer_count,
+        last_received[$])
+      );
+    end
+  end
+  while (last_received.size() > 0) last_received.pop_back();
 
   ///////////////////////////////////////////////////////////////////
   // organize DMA output into data structures for easier analysis
@@ -191,6 +213,8 @@ task stop_acq();
   capture_stop <= 1'b0;
   buffer_start_stop.valid <= 1'b0;
 endtask
+
+int samples_to_send;
 
 initial begin
   debug.display("### RUNNING TEST FOR SPARSE_SAMPLE_BUFFER ###", DEFAULT);
@@ -272,14 +296,22 @@ initial begin
           repeat (10) @(posedge clk);
           start_acq(start_type & 1'b1);
 
-          data_in.send_samples(clk, $urandom_range(50,500), in_valid_rand & 1'b1, 1'b1, 1'b1);
+          samples_to_send = $urandom_range(50,500);
+
+          data_in.send_samples(clk, samples_to_send, in_valid_rand & 1'b1, 1'b1);
           repeat (10) @(posedge clk);
           stop_acq();
           data_out.do_readout(clk, 1'b1, 100000);
           debug.display($sformatf("checking results amplitude_mode = %0d", amplitude_mode), VERBOSE);
           debug.display($sformatf("banking mode                    = %0d", bank_mode), VERBOSE);
           debug.display($sformatf("samples sent with rand_valid    = %0d", in_valid_rand), VERBOSE);
-          check_results(bank_mode, threshold_high, threshold_low, timer);
+          check_results(
+            bank_mode,
+            threshold_high,
+            threshold_low,
+            timer,
+            samples_to_send*(1 << bank_mode) + 2*CHANNELS + TSTAMP_BUFFER_DEPTH*(1 << bank_mode) + 2*CHANNELS
+          );
         end
       end
     end

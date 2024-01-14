@@ -1,38 +1,26 @@
-// Axis_Parallel_If.sv - Reed Foster
-// multiple axi-stream interfaces in parallel
-interface Axis_Parallel_If #(
+// Realtime_Parallel_If.sv - Reed Foster
+// multiple axi-stream interfaces without backpressure in parallel
+interface Realtime_Parallel_If #(
   parameter DWIDTH = 32,
   parameter CHANNELS = 1
 );
 
 logic [CHANNELS-1:0][DWIDTH - 1:0]  data;
-logic [CHANNELS-1:0]                ready;
 logic [CHANNELS-1:0]                valid;
-logic [CHANNELS-1:0]                last;
-logic [CHANNELS-1:0]                ok;
-
-assign ok = ready & valid;
 
 // master/slave packetized interface
 modport Master (
-  input   ready,
   output  valid,
-  output  data,
-  output  last,
-  input   ok
+  output  data
 );
 
 modport Slave (
-  output  ready,
   input   valid,
-  input   data,
-  input   last,
-  input   ok
+  input   data
 );
 
-// Similar to Axis_If interface send_samples method.
-// Sends n_samples on each parallel channel
-// Waits until all channels complete sending samples
+// Similar to Axis_Parallel_If interface send_samples method.
+// Doesn't use ready signal
 task automatic send_samples(
   ref clk,
   input int n_samples,
@@ -50,7 +38,7 @@ task automatic send_samples(
   while (~done) begin
     @(posedge clk);
     for (int i = 0; i < CHANNELS; i++) begin
-      if (ok[i]) begin
+      if (valid[i]) begin
         if (samples_sent[i] == n_samples - 1) begin
           done[i] = 1'b1;
         end else begin

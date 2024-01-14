@@ -14,12 +14,14 @@ module sample_discriminator #(
   parameter int CLOCK_WIDTH = 50 // rolls over roughly every 3 days at 4GS/s (100 days at 32MS/s)
 ) (
   input wire clk, reset,
-  Axis_Parallel_If.Slave_Realtime data_in,
-  Axis_Parallel_If.Master_Realtime data_out,
-  Axis_Parallel_If.Master_Realtime timestamps_out,
-  Axis_If.Slave_Realtime config_in, // {threshold_high, threshold_low} for each channel
+  Realtime_Parallel_If.Slave data_in,
+  Realtime_Parallel_If.Master data_out,
+  Realtime_Parallel_If.Master timestamps_out,
+  Axis_If.Slave config_in, // {threshold_high, threshold_low} for each channel
   input wire reset_state
 );
+
+assign config_in.ready = 1'b1; // always accept a new threshold
 
 localparam int TIMESTAMP_WIDTH = SAMPLE_INDEX_WIDTH + CLOCK_WIDTH;
 
@@ -47,7 +49,7 @@ always_ff @(posedge clk) begin
     threshold_low <= '0;
     threshold_high <= '0;
   end else begin
-    if (config_in.valid) begin
+    if (config_in.ok) begin
       for (int i = 0; i < CHANNELS; i++) begin
         threshold_high[i] <= config_in.data[2*SAMPLE_WIDTH*i+SAMPLE_WIDTH+:SAMPLE_WIDTH];
         threshold_low[i] <= config_in.data[2*SAMPLE_WIDTH*i+:SAMPLE_WIDTH];

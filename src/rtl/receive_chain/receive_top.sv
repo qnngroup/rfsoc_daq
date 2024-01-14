@@ -16,20 +16,20 @@ module receive_top #(
   /////////////////////////////////////
   input wire ps_clk, ps_reset,
   // configuration registers
-  Axis_If.Slave_Stream ps_sample_discriminator_config, // 2*CHANNELS*SAMPLE_WIDTH bits
-  Axis_If.Slave_Stream ps_buffer_config, // $clog2($clog2(CHANNELS) + 1) bits, can only be updated when buffer is in IDLE state
-  Axis_If.Slave_Stream ps_buffer_start_stop, // 2 bits
-  Axis_If.Slave_Stream ps_channel_mux_config, // $clog2(2*CHANNELS)*CHANNELS bits
+  Axis_If.Slave ps_sample_discriminator_config, // 2*CHANNELS*SAMPLE_WIDTH bits
+  Axis_If.Slave ps_buffer_config, // $clog2($clog2(CHANNELS) + 1) bits, can only be updated when buffer is in IDLE state
+  Axis_If.Slave ps_buffer_start_stop, // 2 bits
+  Axis_If.Slave ps_channel_mux_config, // $clog2(2*CHANNELS)*CHANNELS bits
   // output register
-  Axis_If.Master_Full ps_buffer_timestamp_width, // 32 bits
+  Axis_If.Master ps_buffer_timestamp_width, // 32 bits
 
   /////////////////////////////////////
   // RFADC clock domain (256MHz)
   /////////////////////////////////////
   input wire adc_clk, adc_reset,
   // data pipeline
-  Axis_Parallel_If.Slave_Realtime adc_data_in,
-  Axis_If.Master_Full adc_dma_out,
+  Realtime_Parallel_If.Slave adc_data_in,
+  Axis_If.Master adc_dma_out,
   // trigger from transmit_top
   input wire adc_trigger_in
 );
@@ -110,13 +110,8 @@ axis_config_reg_cdc #(
 //////////////////////////////////////////////////////////////////////////
 // multiplexer takes in physical ADC channels + differentiator outputs and
 // produces logical channels
-Axis_Parallel_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES), .CHANNELS(2*CHANNELS)) adc_mux_input ();
-Axis_Parallel_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES), .CHANNELS(CHANNELS)) adc_mux_output ();
-
-assign adc_mux_input.ready = 1'b0; // unused; tie to 0 to suppress warning
-assign adc_mux_input.last = 1'b0; // unused; tie to 0 to suppress warning
-assign adc_mux_output.ready = 1'b0; // unused; tie to 0 to suppress warning
-assign adc_mux_output.last = 1'b0; // unused; tie to 0 to suppress warning
+Realtime_Parallel_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES), .CHANNELS(2*CHANNELS)) adc_mux_input ();
+Realtime_Parallel_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES), .CHANNELS(CHANNELS)) adc_mux_output ();
 
 genvar channel;
 generate
@@ -139,10 +134,8 @@ generate
     // differentiator_input.ready is ignored, since we're not applying backpressure
     assign adc_mux_input.data[CHANNELS + channel] = differentiator_output.data;
     assign adc_mux_input.valid[CHANNELS + channel] = differentiator_output.valid;
-    assign adc_mux_input.last = 1'b0; // unused; tie to 0 to suppress warning
     // sample discriminator won't apply backpressure, so make sure the differentiator always outputs data
     assign differentiator_output.ready = 1'b1;
-    assign differentiator_output.last = 1'b0; // unused; tie to 0 to suppress warning
 
     axis_differentiator #(
       .SAMPLE_WIDTH(SAMPLE_WIDTH),

@@ -52,7 +52,7 @@ Axis_If #(.DWIDTH(1+CHANNELS)) ps_trigger_config ();
 // Channel mux interface
 Axis_If #(.DWIDTH($clog2(3*CHANNELS)*CHANNELS)) ps_channel_mux_config ();
 // Outputs
-Axis_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(CHANNELS)) dac_data_out ();
+Realtime_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(CHANNELS)) dac_data_out ();
 logic dac_trigger_out;
 
 awg_pkg::util awg_util = new(
@@ -100,10 +100,10 @@ always @(posedge ps_clk) begin
     dds_phase_inc <= '0;
     tri_phase_inc <= '0;
   end else begin
-    if (ps_dds_phase_inc.valid) begin
+    if (ps_dds_phase_inc.ok) begin
       dds_phase_inc <= ps_dds_phase_inc.data;
     end
-    if (ps_tri_phase_inc.valid) begin
+    if (ps_tri_phase_inc.ok) begin
       tri_phase_inc <= ps_tri_phase_inc.data;
     end
   end
@@ -196,12 +196,12 @@ task automatic check_tri_output ();
     direction = UP;
     while (tri_received[channel].size() > 0) begin
       debug.display($sformatf(
-        "channel %0d: sample pair %x, %x (%0d, %0d)",
+        "channel %0d: sample pair %x, %x (%0f, %0f)",
         channel,
         tri_received[channel][$],
         last_sample,
-        tri_received[channel][$],
-        last_sample),
+        real'(sample_t'(tri_received[channel][$]))/(2.0**SAMPLE_WIDTH),
+        real'(sample_t'(last_sample))/(2.0**SAMPLE_WIDTH)),
         DEBUG
       );
       case (direction)
@@ -285,7 +285,7 @@ initial begin
 
   // configure the mux to select the AWG
   for (int channel = 0; channel < CHANNELS; channel++) begin
-    ps_channel_mux_config.data[channel*$clog2(2*CHANNELS)+:$clog2(2*CHANNELS)] <= channel;
+    ps_channel_mux_config.data[channel*$clog2(3*CHANNELS)+:$clog2(3*CHANNELS)] <= channel;
   end
 
   // configure the scale factor to be 1
@@ -324,7 +324,7 @@ initial begin
 
   // just send some basic data on the AWG to make sure it's producing something
   ps_awg_dma_in.data <= dma_words.pop_back();
-  ps_awg_dma_in.send_samples(ps_clk, dma_words.size(), 1'b0, 1'b0, 1'b0);
+  ps_awg_dma_in.send_samples(ps_clk, dma_words.size(), 1'b0, 1'b0);
   ps_awg_dma_in.last <= 1'b1;
   do @(posedge ps_clk); while (~ps_awg_dma_in.ok);
   ps_awg_dma_in.valid <= 1'b0;
@@ -417,13 +417,18 @@ initial begin
   ps_trigger_config.valid <= 1'b0;
 
   debug.display("finished configuring triangle wave generator", VERBOSE);
-  repeat (2) begin
-    while (dac_trigger_out !== 1'b1) @(posedge dac_clk);
-    for (int channel = 0; channel < CHANNELS; channel++) begin
-      for (int sample = 0; sample < PARALLEL_SAMPLES; sample++) begin
-        tri_received[channel].push_front(dac_data_out.data[channel][sample*SAMPLE_WIDTH+:SAMPLE_WIDTH]);
+  while (dac_trigger_out !== 1'b1) @(posedge dac_clk);
+  @(posedge dac_clk);
+  repeat (2000) begin
+    while (dac_trigger_out !== 1'b1) begin
+      for (int channel = 0; channel < CHANNELS; channel++) begin
+        for (int sample = 0; sample < PARALLEL_SAMPLES; sample++) begin
+          tri_received[channel].push_front(sample_t'(dac_data_out.data[channel][sample*SAMPLE_WIDTH+:SAMPLE_WIDTH]));
+        end
       end
+      @(posedge dac_clk);
     end
+    @(posedge dac_clk);
   end
 
   debug.display("checking triangle wave output", VERBOSE);

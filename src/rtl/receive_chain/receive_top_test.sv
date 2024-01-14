@@ -51,7 +51,7 @@ sparse_sample_buffer_pkg::util #(
 ) buf_util;
 
 // DUT data interfaces
-Axis_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(CHANNELS)) adc_data_in ();
+Realtime_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(CHANNELS)) adc_data_in ();
 Axis_If #(.DWIDTH(AXI_MM_WIDTH)) adc_dma_out ();
 // DUT configuration interfaces
 Axis_If #(.DWIDTH(CHANNELS*SAMPLE_WIDTH*2)) ps_sample_discriminator_config ();
@@ -338,7 +338,7 @@ initial begin
             // send a random number of samples, with in_valid_rand setting
             // whether or not valid should be continously high or randomly
             // toggled. the final arguments specify valid is reset and the ready signal is ignored
-            adc_data_in.send_samples(adc_clk, $urandom_range(50,500), in_valid_rand & 1'b1, 1'b1, 1'b1);
+            adc_data_in.send_samples(adc_clk, $urandom_range(50,500), in_valid_rand & 1'b1, 1'b1);
             repeat (10) @(posedge adc_clk);
             @(posedge ps_clk);
             stop_acq();

@@ -21,7 +21,7 @@ package awg_pkg;
     typedef virtual Axis_If #(.DWIDTH(64*CHANNELS))                burst_len_if;
     typedef virtual Axis_If #(.DWIDTH(2))                          start_stop_if;
     typedef virtual Axis_If #(.DWIDTH(2))                          transfer_error_if;
-    typedef virtual Axis_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(CHANNELS)) data_out_if;
+    typedef virtual Realtime_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(CHANNELS)) data_out_if;
 
     write_depth_if    v_dma_write_depth;
     trig_cfg_if       v_dma_trigger_out_config;
@@ -308,12 +308,14 @@ package awg_pkg;
       input logic [$clog2(DEPTH):0] write_depths [CHANNELS],
       input logic [63:0] burst_lengths [CHANNELS]
     );
+      debug.display("running DAC burst", sim_util_pkg::DEBUG);
       // start outputting DMA data
       v_dma_awg_start_stop.data <= 2'b10;
       v_dma_awg_start_stop.valid <= 1'b1;
       while (!v_dma_awg_start_stop.ok) @(posedge dma_clk);
       v_dma_awg_start_stop.valid <= 1'b0;
       @(posedge dma_clk);
+      debug.display("sent start command, waiting for DAC data to be valid", sim_util_pkg::DEBUG);
       
       // wait until we get data that's nonzero (we only send nonzero data so
       // it's easier to check this)

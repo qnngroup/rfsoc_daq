@@ -10,8 +10,8 @@ module axis_width_converter #(
   parameter int DWIDTH_OUT = 256
 ) (
   input wire clk, reset,
-  Axis_If.Slave_Full data_in,
-  Axis_If.Master_Full data_out
+  Axis_If.Slave data_in,
+  Axis_If.Master data_out
 );
 
 // merge both buffer outputs into a word that is AXI_MM_WIDTH bits
@@ -59,8 +59,8 @@ module axis_downsizer #(
   parameter int DOWN = 2
 ) (
   input wire clk, reset,
-  Axis_If.Slave_Full data_in,
-  Axis_If.Master_Full data_out
+  Axis_If.Slave data_in,
+  Axis_If.Master data_out
 );
 
 localparam int DWIDTH_OUT = DWIDTH/DOWN;
@@ -111,8 +111,8 @@ module axis_upsizer #(
   parameter int UP = 8
 ) (
   input wire clk, reset,
-  Axis_If.Slave_Full data_in,
-  Axis_If.Master_Full data_out
+  Axis_If.Slave data_in,
+  Axis_If.Master data_out
 );
 
 localparam DWIDTH_OUT = DWIDTH*UP;

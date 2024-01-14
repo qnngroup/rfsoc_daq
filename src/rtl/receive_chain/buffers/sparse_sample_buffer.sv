@@ -12,13 +12,16 @@ module sparse_sample_buffer #(
 ) (
   input wire clk, reset,
   output logic [31:0] timestamp_width, // output so that PS can correctly parse output data
-  Axis_Parallel_If.Slave_Realtime data_in, // all channels in parallel
-  Axis_If.Master_Full data_out,
-  Axis_If.Slave_Realtime sample_discriminator_config, // {threshold_high, threshold_low} for each channel
-  Axis_If.Slave_Stream buffer_config, // {banking_mode}, can only be updated when buffer is in IDLE state
-  Axis_If.Slave_Realtime buffer_start_stop, // {start, stop}
+  Realtime_Parallel_If.Slave data_in, // all channels in parallel
+  Axis_If.Master data_out,
+  Axis_If.Slave sample_discriminator_config, // {threshold_high, threshold_low} for each channel
+  Axis_If.Slave buffer_config, // {banking_mode}, can only be updated when buffer is in IDLE state
+  Axis_If.Slave buffer_start_stop, // {start, stop}
   input wire start_aux // auxiliary trigger for capture start
 );
+
+// always allow capture to be started/stopped
+assign buffer_start_stop.ready = 1'b1;
 
 localparam int SAMPLE_INDEX_WIDTH = $clog2(DATA_BUFFER_DEPTH*CHANNELS);
 localparam int TIMESTAMP_WIDTH = SAMPLE_WIDTH * ((SAMPLE_INDEX_WIDTH + APPROX_CLOCK_WIDTH + (SAMPLE_WIDTH - 1)) / SAMPLE_WIDTH);
@@ -28,8 +31,8 @@ assign timestamp_width = TIMESTAMP_WIDTH;
 logic [1:0] buffer_full;
 
 // discriminator outputs
-Axis_Parallel_If #(.DWIDTH(TIMESTAMP_WIDTH), .CHANNELS(CHANNELS)) disc_timestamps();
-Axis_Parallel_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES), .CHANNELS(CHANNELS)) disc_data();
+Realtime_Parallel_If #(.DWIDTH(TIMESTAMP_WIDTH), .CHANNELS(CHANNELS)) disc_timestamps();
+Realtime_Parallel_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES), .CHANNELS(CHANNELS)) disc_data();
 // config interfaces to timestamp and data buffers
 Axis_If #(.DWIDTH($clog2($clog2(CHANNELS)+1))) buffer_timestamp_config ();
 Axis_If #(.DWIDTH($clog2($clog2(CHANNELS)+1))) buffer_data_config ();
@@ -56,16 +59,9 @@ assign buffer_data_config.last = 1'b0; // unused; tie to 0 to suppress warnings
 assign buffer_timestamp_start_stop.data = buffer_start_stop.data;
 assign buffer_timestamp_start_stop.valid = buffer_start_stop.valid;
 assign buffer_timestamp_start_stop.last = 1'b0; // unused; tie to 0 to suppress warnings
-assign buffer_timestamp_start_stop.ready = 1'b0; // unused; tie to 0 to suppress warnings
 assign buffer_data_start_stop.data = buffer_start_stop.data;
 assign buffer_data_start_stop.valid = buffer_start_stop.valid;
 assign buffer_data_start_stop.last = 1'b0; // unused; tie to 0 to suppress warnings
-assign buffer_data_start_stop.ready = 1'b0; // unused; tie to 0 to suppress warnings
-
-assign disc_timestamps.ready = 1'b0; // unused; tie to 0 to suppress warnings
-assign disc_timestamps.last = 1'b0; // unused; tie to 0 to suppress warnings
-assign disc_data.ready = 1'b0; // unused; tie to 0 to suppress warnings
-assign disc_data.last = 1'b0; // unused; tie to 0 to suppress warnings
 
 logic start, start_d, start_aux_d;
 always_ff @(posedge clk) begin

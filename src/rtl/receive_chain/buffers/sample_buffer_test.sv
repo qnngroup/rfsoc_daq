@@ -35,7 +35,7 @@ logic start, stop;
 logic start_aux;
 logic [2:0] banking_mode;
 
-Axis_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(CHANNELS)) data_in ();
+Realtime_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(CHANNELS)) data_in ();
 Axis_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH)) data_out ();
 Axis_If #(.DWIDTH($clog2($clog2(CHANNELS)+1))) config_in ();
 Axis_If #(.DWIDTH(2)) start_stop ();
@@ -64,6 +64,7 @@ sample_buffer #(
 int sample_count [CHANNELS];
 logic [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0] data_sent [CHANNELS][$];
 logic [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0] data_received [$];
+int last_received [$];
 
 // send data to DUT and save sent/received data
 always @(posedge clk) begin
@@ -72,7 +73,7 @@ always @(posedge clk) begin
       sample_count[i] <= 0;
       data_in.data[i] <= '0;
     end else begin
-      if (data_in.ok[i]) begin
+      if (data_in.valid[i]) begin
         // send new data
         sample_count[i] <= sample_count[i] + 1;
         for (int j = 0; j < PARALLEL_SAMPLES; j++) begin
@@ -86,10 +87,17 @@ always @(posedge clk) begin
   // save all data in the same buffer and postprocess it later
   if (data_out.ok) begin
     data_received.push_front(data_out.data);
+    if (data_out.last) begin
+      last_received.push_front(data_received.size());
+    end
   end
 end
 
-task check_results(input int banking_mode, input bit missing_ok);
+task check_results(
+  input int banking_mode,
+  input bit missing_ok,
+  input int expected_last
+);
   logic [SAMPLE_WIDTH*PARALLEL_SAMPLES:0] temp_sample;
   int current_channel, n_samples;
   for (int i = 0; i < CHANNELS; i++) begin
@@ -105,6 +113,21 @@ task check_results(input int banking_mode, input bit missing_ok);
     data_received.size()),
     VERBOSE
   );
+  // check last
+  if (last_received.size() != 1) begin
+    debug.error($sformatf("expected a single tlast event, got %0d", last_received.size()));
+  end else begin
+    if ((last_received[$] != expected_last) & (~missing_ok)) begin
+      // if we have some samples missing, last won't be exactly equal to
+      // num_samples + 2
+      debug.error($sformatf(
+        "expected to receive tlast event on the %0d sample, got it on the %0d sample",
+        expected_last,
+        last_received[$])
+      );
+    end
+  end
+  while (last_received.size() > 0) last_received.pop_back();
   while (data_received.size() > 0) begin
     current_channel = data_received.pop_back();
     n_samples = data_received.pop_back();
@@ -188,7 +211,7 @@ endtask
 int samples_to_send;
 
 initial begin
-  debug.display("### testing sample_buffer ###", DEFAULT);
+  debug.display("### TESTING SAMPLE_BUFFER ###", DEFAULT);
   reset <= 1'b1;
   start <= 1'b0;
   stop <= 1'b0;
@@ -211,7 +234,7 @@ initial begin
             2: samples_to_send = (BUFFER_DEPTH / (1 << bank_mode))*CHANNELS; // fill all buffers
           endcase
           start_acq(start_type & 1'b1);
-          data_in.send_samples(clk, samples_to_send, in_valid_rand & 1'b1, 1'b1, 1'b1);
+          data_in.send_samples(clk, samples_to_send, in_valid_rand & 1'b1, 1'b1);
           repeat (10) @(posedge clk);
           stop_acq();
           data_out.do_readout(clk, 1'b1, 100000);
@@ -226,186 +249,11 @@ initial begin
           // fill up before the others are done, triggering a stop condition for
           // the other banks before they are full.
           // This results in "missing" samples that aren't saved
-          check_results(bank_mode, (samp_count == 2) & (in_valid_rand == 1));
+          check_results(bank_mode, (samp_count == 2) & (in_valid_rand == 1), samples_to_send*(1 << bank_mode) + 2*CHANNELS);
         end
       end
     end
   end
-  debug.finish();
-end
-
-endmodule
-
-// test for the individual banks
-`timescale 1ns / 1ps
-module sample_buffer_bank_test ();
-
-sim_util_pkg::debug debug = new(DEFAULT); // printing, error tracking
-
-logic clk = 0;
-localparam CLK_RATE_HZ = 100_000_000;
-always #(0.5s/CLK_RATE_HZ) clk = ~clk;
-
-logic reset;
-
-logic start, stop;
-logic full;
-
-Axis_If #(.DWIDTH(16)) data_in ();
-Axis_If #(.DWIDTH(16)) data_out ();
-
-sample_buffer_bank #(
-  .BUFFER_DEPTH(1024),
-  .PARALLEL_SAMPLES(2),
-  .SAMPLE_WIDTH(16)
-) dut_i (
-  .clk,
-  .reset,
-  .data_in,
-  .data_out,
-  .start,
-  .stop,
-  .full
-);
-
-int sample_count;
-logic [15:0] data_sent [$];
-logic [15:0] data_received [$];
-
-// send data to DUT and save data that was sent/received
-always @(posedge clk) begin
-  if (reset) begin
-    sample_count <= 0;
-    data_in.data <= '0;
-  end else begin
-    // send data
-    if (data_in.valid && data_in.ready) begin
-      sample_count <= sample_count + 1;
-      data_in.data <= $urandom_range(1<<16);
-    end
-    // save data that was sent/received
-    if (data_in.valid) begin
-      data_sent.push_front(data_in.data);
-    end
-    if (data_out.valid && data_out.ready) begin
-      data_received.push_front(data_out.data);
-    end
-  end
-end
-
-
-// check that the DUT correctly saved everything
-task check_results();
-  // pop first sample received since it is intended to be overwritten in
-  // multibank buffer
-  data_received.pop_back();
-  debug.display($sformatf("data_sent.size() = %0d", data_sent.size()), VERBOSE);
-  debug.display($sformatf("data_received.size() = %0d", data_received.size()), VERBOSE);
-  if ((data_sent.size() + 1) != data_received.size()) begin
-    debug.error($sformatf(
-      "mismatch in amount of sent/received data (sent %0d, received %0d)",
-      data_sent.size() + 1,
-      data_received.size())
-    );
-  end
-  if (data_received[$] != data_sent.size()) begin
-    debug.error($sformatf(
-      "incorrect sample count reported by buffer (sent %0d, reported %0d)",
-      data_sent.size(),
-      data_received[$])
-    );
-  end
-  data_received.pop_back(); // remove sample count
-  while (data_sent.size() > 0 && data_received.size() > 0) begin
-    // data from channel 0 can be reordered with data from channel 2
-    if (data_sent[$] != data_received[$]) begin
-      debug.error($sformatf(
-        "data mismatch error (received %x, sent %x)",
-        data_received[$],
-        data_sent[$])
-      );
-    end
-    data_sent.pop_back();
-    data_received.pop_back();
-  end
-endtask
-
-initial begin
-  debug.display("### TESTING SAMPLE_BUFFER_BANK ###", DEFAULT);
-  reset <= 1'b1;
-  start <= 1'b0;
-  stop <= 1'b0;
-  data_in.valid <= '0;
-  repeat (100) @(posedge clk);
-  reset <= 1'b0;
-  repeat (50) @(posedge clk);
-  // start
-  start <= 1'b1;
-  @(posedge clk);
-  start <= 1'b0;
-  repeat (100) @(posedge clk);
-  // send samples
-  data_in.send_samples(clk, 32, 1'b1, 1'b1, 1'b0);
-  data_in.send_samples(clk, 64, 1'b0, 1'b1, 1'b0);
-  data_in.send_samples(clk, 32, 1'b1, 1'b1, 1'b0);
-  repeat (50) @(posedge clk);
-  stop <= 1'b1;
-  @(posedge clk);
-  stop <= 1'b0;
-  data_out.do_readout(clk, 1'b1, 100000);
-  debug.display("checking results for test with a few samples", VERBOSE);
-  check_results();
-  // do more tests
-
-  // test with one sample
-  // start
-  start <= 1'b1;
-  @(posedge clk);
-  start <= 1'b0;
-  repeat (100) @(posedge clk);
-  // send samples
-  data_in.send_samples(clk, 1, 1'b0, 1'b1, 1'b0);
-  repeat (50) @(posedge clk);
-  stop <= 1'b1;
-  @(posedge clk);
-  stop <= 1'b0;
-  data_out.do_readout(clk, 1'b1, 1000);
-  debug.display("checking results for test with one sample", VERBOSE);
-  check_results();
-
-  // test with no samples
-  // start
-  start <= 1'b1;
-  @(posedge clk);
-  start <= 1'b0;
-  repeat (100) @(posedge clk);
-  // don't send samples
-  repeat (50) @(posedge clk);
-  stop <= 1'b1;
-  @(posedge clk);
-  stop <= 1'b0;
-  data_out.do_readout(clk, 1'b1, 1000);
-  debug.display("checking results for test with no samples", VERBOSE);
-  check_results();
-
-  // fill up buffer
-  // start
-  start <= 1'b1;
-  @(posedge clk);
-  start <= 1'b0;
-  repeat (100) @(posedge clk);
-  // send samples
-  data_in.send_samples(clk, 256, 1'b1, 1'b1, 1'b0);
-  data_in.send_samples(clk, 512, 1'b0, 1'b1, 1'b0);
-  data_in.send_samples(clk, 256, 1'b1, 1'b1, 1'b0);
-  repeat (50) @(posedge clk);
-  stop <= 1'b1;
-  @(posedge clk);
-  stop <= 1'b0;
-  data_out.do_readout(clk, 1'b1, 100000);
-  debug.display("checking results for test with 1024 samples (full buffer)", VERBOSE);
-  check_results();
-  repeat (500) @(posedge clk);
   debug.finish();
 end
 
