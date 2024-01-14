@@ -8,7 +8,7 @@ import awg_pkg::*;
 `timescale 1ns/1ps
 module transmit_top_test ();
 
-sim_util_pkg::debug debug = new(DEBUG);
+sim_util_pkg::debug debug = new(DEFAULT);
 
 logic dac_reset;
 logic dac_clk = 0;
@@ -192,8 +192,12 @@ task automatic check_tri_output ();
   sample_t last_sample;
   // actually check that we're producing the correct output
   for (int channel = 0; channel < CHANNELS; channel++) begin
-    last_sample = {1'b1, {(SAMPLE_WIDTH-1){1'b0}}};
-    direction = UP;
+    last_sample = tri_received[channel].pop_back();//{1'b1, {(SAMPLE_WIDTH-1){1'b0}}};
+    if (last_sample > tri_received[channel][$]) begin
+      direction = DOWN;
+    end else begin
+      direction = UP;
+    end
     while (tri_received[channel].size() > 0) begin
       debug.display($sformatf(
         "channel %0d: sample pair %x, %x (%0f, %0f)",
@@ -246,7 +250,17 @@ task automatic check_tri_output ();
   end
 endtask
 
+logic save_tri_data;
 
+always @(posedge dac_clk) begin
+  if (save_tri_data) begin
+    for (int channel = 0; channel < CHANNELS; channel++) begin
+      for (int sample = 0; sample < PARALLEL_SAMPLES; sample++) begin
+        tri_received[channel].push_front(sample_t'(dac_data_out.data[channel][sample*SAMPLE_WIDTH+:SAMPLE_WIDTH]));
+      end
+    end
+  end
+end
 
 initial begin
   debug.display("### TESTING TRANSMIT TOPLEVEL ###", DEFAULT);
@@ -277,6 +291,9 @@ initial begin
 
   // don't accept data from dma_error tracking output
   ps_awg_dma_error.ready <= 1'b0;
+ 
+  // don't save data from triangle wave gen
+  save_tri_data = 0;
 
   repeat (100) @(posedge ps_clk);
   ps_reset <= 1'b0;
@@ -418,18 +435,13 @@ initial begin
 
   debug.display("finished configuring triangle wave generator", VERBOSE);
   while (dac_trigger_out !== 1'b1) @(posedge dac_clk);
+  save_tri_data = 1;
   @(posedge dac_clk);
-  repeat (2000) begin
-    while (dac_trigger_out !== 1'b1) begin
-      for (int channel = 0; channel < CHANNELS; channel++) begin
-        for (int sample = 0; sample < PARALLEL_SAMPLES; sample++) begin
-          tri_received[channel].push_front(sample_t'(dac_data_out.data[channel][sample*SAMPLE_WIDTH+:SAMPLE_WIDTH]));
-        end
-      end
-      @(posedge dac_clk);
-    end
+  repeat (20) begin
+    while (dac_trigger_out !== 1'b1) @(posedge dac_clk);
     @(posedge dac_clk);
   end
+  save_tri_data = 0;
 
   debug.display("checking triangle wave output", VERBOSE);
   check_tri_output();
