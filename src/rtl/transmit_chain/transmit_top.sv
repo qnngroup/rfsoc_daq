@@ -11,7 +11,8 @@ module transmit_top #(
   parameter int DDS_QUANT_BITS = 20,
   // DAC prescaler parameters
   parameter int SCALE_WIDTH = 18,
-  parameter int SCALE_FRAC_BITS = 16,
+  parameter int OFFSET_WIDTH = 14,
+  parameter int SCALE_OFFSET_INT_BITS = 2,
   // AWG parameters
   parameter int AWG_DEPTH = 2048,
   parameter int AXI_MM_WIDTH = 128,
@@ -30,7 +31,7 @@ module transmit_top #(
   Axis_If.Master  ps_awg_dma_error, // 2 bits
 
   // DAC prescaler configuration
-  Axis_If.Slave   ps_scale_factor, // SCALE_WIDTH*CHANNELS
+  Axis_If.Slave   ps_scale_offset, // (SCALE_WIDTH+OFFSET_WIDTH)*CHANNELS
 
   // DDS configuration
   Axis_If.Slave   ps_dds_phase_inc, // DDS_PHASE_BITS*CHANNELS
@@ -54,21 +55,21 @@ module transmit_top #(
 ////////////////////////////////////////////////////////////////////////////////
 // CDC for configuration registers for DAC prescaler and DDS
 ////////////////////////////////////////////////////////////////////////////////
-Axis_If #(.DWIDTH(SCALE_WIDTH*CHANNELS)) dac_scale_factor ();
+Axis_If #(.DWIDTH((SCALE_WIDTH+OFFSET_WIDTH)*CHANNELS)) dac_scale_offset ();
 Axis_If #(.DWIDTH(DDS_PHASE_BITS*CHANNELS)) dac_dds_phase_inc ();
 Axis_If #(.DWIDTH(1+2*CHANNELS)) dac_trigger_config ();
 Axis_If #(.DWIDTH($clog2(CHANNELS*3)*CHANNELS)) dac_channel_mux_config ();
 
 // synchronize dac_prescaler scale factor
 axis_config_reg_cdc #(
-  .DWIDTH(SCALE_WIDTH*CHANNELS)
-) ps_to_dac_scale_factor_cdc_i (
+  .DWIDTH((SCALE_WIDTH+OFFSET_WIDTH)*CHANNELS)
+) ps_to_dac_scale_offset_cdc_i (
   .src_clk(ps_clk),
   .src_reset(ps_reset),
-  .src(ps_scale_factor),
+  .src(ps_scale_offset),
   .dest_clk(dac_clk),
   .dest_reset(dac_reset),
-  .dest(dac_scale_factor)
+  .dest(dac_scale_offset)
 );
 
 // synchronize DDS phase increment
@@ -170,12 +171,14 @@ triangle #(
 );
 
 // combine awg/tri triggers to send a single value to the ADC buffer
+logic [2*CHANNELS-1:0] dac_triggers_combined;
+assign dac_triggers_combined = {dac_tri_triggers, dac_awg_triggers};
 trigger_manager #(
   .CHANNELS(2*CHANNELS)
 ) trigger_manager_i (
   .clk(dac_clk),
   .reset(dac_reset),
-  .triggers_in({dac_tri_triggers, dac_awg_triggers}),
+  .triggers_in(dac_triggers_combined),
   .trigger_config(dac_trigger_config),
   .trigger_out(dac_trigger_out)
 );
@@ -201,28 +204,20 @@ axis_channel_mux #(
   .config_in(dac_channel_mux_config)
 );
 
-Axis_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(CHANNELS)) dac_prescaler_in ();
-Axis_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(CHANNELS)) dac_prescaler_out ();
-assign dac_prescaler_in.data = dac_mux_data_out.data;
-assign dac_prescaler_in.valid = dac_mux_data_out.valid;
-assign dac_data_out.valid = dac_prescaler_out.valid;
-assign dac_data_out.data = dac_prescaler_out.data;
-assign dac_prescaler_out.ready = '1; // always accept data from dac_prescaler
-
 // scaler
-dac_prescaler_multichannel #(
+dac_prescaler #(
   .PARALLEL_SAMPLES(PARALLEL_SAMPLES),
   .SAMPLE_WIDTH(SAMPLE_WIDTH),
-  .SAMPLE_FRAC_BITS(16),
+  .CHANNELS(CHANNELS),
   .SCALE_WIDTH(SCALE_WIDTH),
-  .SCALE_FRAC_BITS(SCALE_FRAC_BITS),
-  .CHANNELS(CHANNELS)
+  .OFFSET_WIDTH(OFFSET_WIDTH),
+  .SCALE_OFFSET_INT_BITS(SCALE_OFFSET_INT_BITS)
 ) dac_prescaler_i (
   .clk(dac_clk),
   .reset(dac_reset),
-  .data_out(dac_prescaler_out),
-  .data_in(dac_prescaler_in),
-  .scale_factor(dac_scale_factor)
+  .data_out(dac_data_out),
+  .data_in(dac_mux_data_out),
+  .scale_offset(dac_scale_offset)
 );
 
 endmodule

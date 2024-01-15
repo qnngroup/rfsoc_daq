@@ -20,8 +20,9 @@ module receive_top #(
   Axis_If.Slave ps_buffer_config, // $clog2($clog2(CHANNELS) + 1) bits, can only be updated when buffer is in IDLE state
   Axis_If.Slave ps_buffer_start_stop, // 2 bits
   Axis_If.Slave ps_channel_mux_config, // $clog2(2*CHANNELS)*CHANNELS bits
-  // output register
+  // output registers
   Axis_If.Master ps_buffer_timestamp_width, // 32 bits
+  Axis_If.Master ps_buffer_capture_done, // 1 bits
 
   /////////////////////////////////////
   // RFADC clock domain (256MHz)
@@ -34,8 +35,6 @@ module receive_top #(
   input wire adc_trigger_in
 );
 
-assign ps_buffer_timestamp_width.last = 1'b1; // always send just a packet as a single word
-
 //////////////////////////////////////////////////////////////////////////
 // PS clock domain (100MHz) -> RFADC clock domain (256MHz) CDC
 //////////////////////////////////////////////////////////////////////////
@@ -44,10 +43,7 @@ Axis_If #(.DWIDTH($clog2($clog2(CHANNELS)+1))) adc_buffer_config ();
 Axis_If #(.DWIDTH(2)) adc_buffer_start_stop ();
 Axis_If #(.DWIDTH($clog2(2*CHANNELS)*CHANNELS)) adc_channel_mux_config ();
 Axis_If #(.DWIDTH(32)) adc_buffer_timestamp_width ();
-
-assign adc_sample_discriminator_config.ready = 1'b1; // sample discriminator config is realtime
-assign adc_buffer_start_stop.ready = 1'b1; // realtime
-assign adc_channel_mux_config.ready = 1'b1; // realtime
+Axis_If #(.DWIDTH(1)) adc_buffer_capture_done ();
 
 axis_config_reg_cdc #(
   .DWIDTH(2*CHANNELS*SAMPLE_WIDTH)
@@ -89,11 +85,6 @@ axis_config_reg_cdc #(
   .dest_reset(adc_reset),
   .dest(adc_channel_mux_config)
 );
-// TODO clean this up
-Axis_If #(.DWIDTH(32)) ps_buffer_timestamp_width_stream ();
-assign ps_buffer_timestamp_width.data = ps_buffer_timestamp_width_stream.data;
-assign ps_buffer_timestamp_width.valid = ps_buffer_timestamp_width_stream.valid;
-assign ps_buffer_timestamp_width_stream.ready = ps_buffer_timestamp_width.ready;
 axis_config_reg_cdc #(
   .DWIDTH(32)
 ) adc_to_ps_buffer_timestamp_width_i (
@@ -102,7 +93,17 @@ axis_config_reg_cdc #(
   .src(adc_buffer_timestamp_width),
   .dest_clk(ps_clk),
   .dest_reset(ps_reset),
-  .dest(ps_buffer_timestamp_width_stream)
+  .dest(ps_buffer_timestamp_width)
+);
+axis_config_reg_cdc #(
+  .DWIDTH(1)
+) adc_to_ps_buffer_capture_done_i (
+  .src_clk(adc_clk),
+  .src_reset(adc_reset),
+  .src(adc_buffer_capture_done),
+  .dest_clk(ps_clk),
+  .dest_reset(ps_reset),
+  .dest(ps_buffer_capture_done)
 );
 
 //////////////////////////////////////////////////////////////////////////
@@ -169,6 +170,23 @@ axis_channel_mux #(
 logic [31:0] timestamp_width;
 assign adc_buffer_timestamp_width.data = timestamp_width;
 assign adc_buffer_timestamp_width.valid = 1'b1;
+assign adc_buffer_timestamp_width.last = 1'b1;
+
+logic capture_done, capture_done_d;
+always_ff @(posedge adc_clk) begin
+  capture_done_d <= capture_done;
+  if (adc_reset) begin
+    adc_buffer_capture_done.valid <= 1'b1;
+  end else begin
+    if (capture_done ^ capture_done_d) begin
+      adc_buffer_capture_done.valid <= 1'b1;
+    end else if (adc_buffer_capture_done.ok) begin
+      adc_buffer_capture_done.valid <= 1'b0;
+    end
+  end
+end
+assign adc_buffer_capture_done.data = capture_done;
+assign adc_buffer_capture_done.last = 1'b1;
 
 sparse_sample_buffer #(
   .CHANNELS(CHANNELS),
@@ -182,6 +200,7 @@ sparse_sample_buffer #(
   .clk(adc_clk),
   .reset(adc_reset),
   .timestamp_width,
+  .capture_done,
   .data_in(adc_mux_output),
   .data_out(adc_dma_out),
   .sample_discriminator_config(adc_sample_discriminator_config),

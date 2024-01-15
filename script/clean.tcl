@@ -2,7 +2,7 @@
 set dir [file dirname [file normalize [info script]]]
 
 # clean up project directory
-set proj_files [glob -nocomplain "$dir/../build/proj/*"]
+set proj_files [glob -nocomplain "$dir/../build/proj_$project_type/*"]
 if {[llength $proj_files] != 0} {
   file delete -force -- {*}$proj_files
 }

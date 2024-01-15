@@ -59,6 +59,7 @@ Axis_If #(.DWIDTH($clog2($clog2(CHANNELS)+1))) ps_buffer_config ();
 Axis_If #(.DWIDTH(2)) ps_buffer_start_stop ();
 Axis_If #(.DWIDTH(CHANNELS*MUX_SELECT_BITS)) ps_channel_mux_config ();
 Axis_If #(.DWIDTH(32)) ps_buffer_timestamp_width ();
+Axis_If #(.DWIDTH(1)) ps_buffer_capture_done ();
 
 // configuration signals
 logic ps_capture_start, ps_capture_stop, adc_trigger_in;
@@ -100,6 +101,7 @@ receive_top #(
   .ps_buffer_start_stop,
   .ps_channel_mux_config,
   .ps_buffer_timestamp_width,
+  .ps_buffer_capture_done,
   .adc_clk,
   .adc_reset,
   .adc_data_in,
@@ -187,7 +189,8 @@ task check_results(
   input int ps_banking_mode,
   input logic [CHANNELS-1:0][SAMPLE_WIDTH-1:0] threshold_high,
   input logic [CHANNELS-1:0][SAMPLE_WIDTH-1:0] threshold_low,
-  inout logic [CHANNELS-1:0][TIMESTAMP_WIDTH-SAMPLE_INDEX_WIDTH-1:0] timer
+  inout logic [CHANNELS-1:0][TIMESTAMP_WIDTH-SAMPLE_INDEX_WIDTH-1:0] timer,
+  input bit buffer_filled
 );
   // checks that:
   // - timestamps line up with when samples were sent
@@ -227,10 +230,13 @@ task check_results(
     timer,
     timestamps,
     samples,
-    expected
+    expected,
+    buffer_filled // don't accept any missing samples, since we're not doing a full-depth test
   );
 
 endtask
+
+int samples_to_send;
 
 initial begin
   debug.display("### RUNNING TEST FOR RECEIVE_TOP ###", DEFAULT);
@@ -325,6 +331,12 @@ initial begin
             @(posedge adc_clk);
             update_input_data <= 1'b0;
 
+            if ((amplitude_mode == 0) & (mux_select_mode == 0)) begin
+              samples_to_send = DATA_BUFFER_DEPTH*(8 >> bank_mode);
+            end else begin
+              samples_to_send = $urandom_range(50,500);
+            end
+
             if (start_type == 0) begin
               repeat (10) @(posedge adc_clk);
             end else begin
@@ -338,10 +350,40 @@ initial begin
             // send a random number of samples, with in_valid_rand setting
             // whether or not valid should be continously high or randomly
             // toggled. the final arguments specify valid is reset and the ready signal is ignored
-            adc_data_in.send_samples(adc_clk, $urandom_range(50,500), in_valid_rand & 1'b1, 1'b1);
+            adc_data_in.send_samples(adc_clk, samples_to_send - 10, in_valid_rand & 1'b1, 1'b1);
+            if (start_type == 1'b0) begin
+              // retrigger
+              start_acq(1'b0);
+            end
+            adc_data_in.send_samples(adc_clk, 10, in_valid_rand & 1'b1, 1'b1);
+            repeat (5) @(posedge ps_clk); // need to synchronize
+            if ((amplitude_mode == 0) & (mux_select_mode == 0)) begin
+              ps_buffer_capture_done.ready <= 1'b1;
+              do @(posedge ps_clk); while (~ps_buffer_capture_done.ok);
+              if (ps_buffer_capture_done.data !== 1'b0) begin
+                debug.error($sformatf(
+                  "expected capture_done to be low, but got %0d",
+                  ps_buffer_capture_done.data)
+                );
+              end
+              do @(posedge ps_clk); while (~ps_buffer_capture_done.ok);
+              if (ps_buffer_capture_done.data !== 1'b1) begin
+                debug.error($sformatf(
+                  "expected capture_done to be high, but got %0d",
+                  ps_buffer_capture_done.data)
+                );
+                stop_acq();
+              end
+              ps_buffer_capture_done.ready <= 1'b0;
+            end else begin
+              stop_acq();
+            end
             repeat (10) @(posedge adc_clk);
-            @(posedge ps_clk);
-            stop_acq();
+            if (start_type === 1'b0) begin
+              // make sure we can't accidentally retrigger capture
+              start_acq(1'b0);
+            end
+            repeat (10) @(posedge adc_clk);
             // readout over DMA interface with randomly toggling ready signal.
             // wait for last timeout is 100k clock cycles
             adc_dma_out.do_readout(adc_clk, 1'b1, 100000);
@@ -351,13 +393,13 @@ initial begin
             debug.display($sformatf("mux_select_mode                 = %0d", mux_select_mode), VERBOSE);
             if (mux_select_mode == 0) begin
               // check with raw_samples
-              check_results(raw_samples, bank_mode, threshold_high, threshold_low, timer);
+              check_results(raw_samples, bank_mode, threshold_high, threshold_low, timer, amplitude_mode == 0);
               for (int channel = 0; channel < CHANNELS; channel++) begin
                 while (differentiated_samples[channel].size() > 0) differentiated_samples[channel].pop_back();
               end
             end else begin
               // check with differentiated_samples
-              check_results(differentiated_samples, bank_mode, threshold_high, threshold_low, timer);
+              check_results(differentiated_samples, bank_mode, threshold_high, threshold_low, timer, 1'b0);
               for (int channel = 0; channel < CHANNELS; channel++) begin
                 while (raw_samples[channel].size() > 0) raw_samples[channel].pop_back();
               end

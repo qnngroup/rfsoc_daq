@@ -20,7 +20,8 @@ module daq_axis #(
   parameter DDS_QUANT_BITS = 20,
   // DAC prescaler parameters
   parameter SCALE_WIDTH = 18,
-  parameter SCALE_FRAC_BITS = 16,
+  parameter OFFSET_WIDTH = 14,
+  parameter SCALE_OFFSET_INT_BITS = 2,
   // AWG parameters
   parameter AWG_DEPTH = 2048,
   // Tri parameters
@@ -34,13 +35,14 @@ module daq_axis #(
     s_axis_buffer_start_stop:\
     s_axis_adc_mux_config:\
     m_axis_buffer_timestamp_width:\
+    m_axis_buffer_capture_done:\
     s_axis_lmh6401_config:\
     s_axis_awg_frame_depth:\
     s_axis_awg_burst_length:\
     s_axis_awg_trigger_out_config:\
     s_axis_awg_start_stop:\
     m_axis_awg_dma_error:\
-    s_axis_dac_scale_config:\
+    s_axis_dac_scale_offset_config:\
     s_axis_dds_phase_inc:\
     s_axis_tri_phase_inc:\
     s_axis_trigger_manager_config:\
@@ -102,6 +104,15 @@ module daq_axis #(
   output  wire                                    m_axis_buffer_timestamp_width_tlast,
   (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 m_axis_buffer_timestamp_width TREADY" *)
   input   wire                                    m_axis_buffer_timestamp_width_tready,
+  // buffer capture done
+  (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 m_axis_buffer_capture_done TDATA" *)
+  output  wire [31:0]                             m_axis_buffer_capture_done_tdata,
+  (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 m_axis_buffer_capture_done TVALID" *)
+  output  wire                                    m_axis_buffer_capture_done_tvalid,
+  (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 m_axis_buffer_capture_done TLAST" *)
+  output  wire                                    m_axis_buffer_capture_done_tlast,
+  (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 m_axis_buffer_capture_done TREADY" *)
+  input   wire                                    m_axis_buffer_capture_done_tready,
   // LMH6401 configuration
   (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 s_axis_lmh6401_config TDATA" *)
   input   wire [31:0]                             s_axis_lmh6401_config_tdata,
@@ -151,12 +162,12 @@ module daq_axis #(
   (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 m_axis_awg_dma_error TREADY" *)
   input   wire                                      m_axis_awg_dma_error_tready,
   // dac scale factor
-  (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 s_axis_dac_scale_config TDATA" *)
-  input   wire [159:0]                              s_axis_dac_scale_config_tdata,
-  (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 s_axis_dac_scale_config TVALID" *)
-  input   wire                                      s_axis_dac_scale_config_tvalid,
-  (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 s_axis_dac_scale_config TREADY" *)
-  output  wire                                      s_axis_dac_scale_config_tready,
+  (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 s_axis_dac_scale_offset_config TDATA" *)
+  input   wire [(SCALE_WIDTH+OFFSET_WIDTH)*CHANNELS-1:0]   s_axis_dac_scale_offset_config_tdata,
+  (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 s_axis_dac_scale_offset_config TVALID" *)
+  input   wire                                             s_axis_dac_scale_offset_config_tvalid,
+  (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 s_axis_dac_scale_offset_config TREADY" *)
+  output  wire                                             s_axis_dac_scale_offset_config_tready,
   // dds phase increment
   (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 s_axis_dds_phase_inc TDATA" *)
   input   wire [DDS_PHASE_BITS*CHANNELS-1:0]        s_axis_dds_phase_inc_tdata,
@@ -289,50 +300,34 @@ module daq_axis #(
   output  wire [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0]         m00_axis_dac_tdata,
   (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 m00_axis_dac TVALID" *)
   output  wire                                             m00_axis_dac_tvalid,
-  (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 m00_axis_dac TREADY" *)
-  input   wire                                             m00_axis_dac_tready,
   (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 m01_axis_dac TDATA" *)
   output  wire [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0]         m01_axis_dac_tdata,
   (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 m01_axis_dac TVALID" *)
   output  wire                                             m01_axis_dac_tvalid,
-  (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 m01_axis_dac TREADY" *)
-  input   wire                                             m01_axis_dac_tready,
   (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 m02_axis_dac TDATA" *)
   output  wire [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0]         m02_axis_dac_tdata,
   (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 m02_axis_dac TVALID" *)
   output  wire                                             m02_axis_dac_tvalid,
-  (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 m02_axis_dac TREADY" *)
-  input   wire                                             m02_axis_dac_tready,
   (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 m03_axis_dac TDATA" *)
   output  wire [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0]         m03_axis_dac_tdata,
   (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 m03_axis_dac TVALID" *)
   output  wire                                             m03_axis_dac_tvalid,
-  (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 m03_axis_dac TREADY" *)
-  input   wire                                             m03_axis_dac_tready,
   (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 m10_axis_dac TDATA" *)
   output  wire [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0]         m10_axis_dac_tdata,
   (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 m10_axis_dac TVALID" *)
   output  wire                                             m10_axis_dac_tvalid,
-  (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 m10_axis_dac TREADY" *)
-  input   wire                                             m10_axis_dac_tready,
   (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 m11_axis_dac TDATA" *)
   output  wire [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0]         m11_axis_dac_tdata,
   (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 m11_axis_dac TVALID" *)
   output  wire                                             m11_axis_dac_tvalid,
-  (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 m11_axis_dac TREADY" *)
-  input   wire                                             m11_axis_dac_tready,
   (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 m12_axis_dac TDATA" *)
   output  wire [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0]         m12_axis_dac_tdata,
   (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 m12_axis_dac TVALID" *)
   output  wire                                             m12_axis_dac_tvalid,
-  (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 m12_axis_dac TREADY" *)
-  input   wire                                             m12_axis_dac_tready,
   (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 m13_axis_dac TDATA" *)
   output  wire [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0]         m13_axis_dac_tdata,
   (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 m13_axis_dac TVALID" *)
   output  wire                                             m13_axis_dac_tvalid,
-  (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 m13_axis_dac TREADY" *)
-  input   wire                                             m13_axis_dac_tready,
 
   //////////////////////////////////////////////////////
   // SPI
@@ -343,21 +338,33 @@ module daq_axis #(
 );
 
 assign m_axis_awg_dma_error_tdata[31:2] = 30'b0; // unused bits
+assign m_axis_buffer_capture_done_tdata[31:2] = 30'b0; // unused bits
+
+// always accept ADC data
+assign s00_axis_adc_tready = 1'b1;
+assign s02_axis_adc_tready = 1'b1;
+assign s10_axis_adc_tready = 1'b1;
+assign s12_axis_adc_tready = 1'b1;
+assign s20_axis_adc_tready = 1'b1;
+assign s22_axis_adc_tready = 1'b1;
+assign s30_axis_adc_tready = 1'b1;
+assign s32_axis_adc_tready = 1'b1;
 
 daq_axis_sv #(
-  .SAMPLE_WIDTH        (SAMPLE_WIDTH),
-  .PARALLEL_SAMPLES    (PARALLEL_SAMPLES),
-  .CHANNELS            (CHANNELS),
-  .AXI_MM_WIDTH        (AXI_MM_WIDTH),
-  .TSTAMP_BUFFER_DEPTH (TSTAMP_BUFFER_DEPTH),
-  .DATA_BUFFER_DEPTH   (DATA_BUFFER_DEPTH),
-  .APPROX_CLOCK_WIDTH  (APPROX_CLOCK_WIDTH),
-  .DDS_PHASE_BITS      (DDS_PHASE_BITS),
-  .DDS_QUANT_BITS      (DDS_QUANT_BITS),
-  .SCALE_WIDTH         (SCALE_WIDTH),
-  .SCALE_FRAC_BITS     (SCALE_FRAC_BITS),
-  .AWG_DEPTH           (AWG_DEPTH),
-  .TRI_PHASE_BITS      (TRI_PHASE_BITS)
+  .SAMPLE_WIDTH           (SAMPLE_WIDTH),
+  .PARALLEL_SAMPLES       (PARALLEL_SAMPLES),
+  .CHANNELS               (CHANNELS),
+  .AXI_MM_WIDTH           (AXI_MM_WIDTH),
+  .TSTAMP_BUFFER_DEPTH    (TSTAMP_BUFFER_DEPTH),
+  .DATA_BUFFER_DEPTH      (DATA_BUFFER_DEPTH),
+  .APPROX_CLOCK_WIDTH     (APPROX_CLOCK_WIDTH),
+  .DDS_PHASE_BITS         (DDS_PHASE_BITS),
+  .DDS_QUANT_BITS         (DDS_QUANT_BITS),
+  .SCALE_WIDTH            (SCALE_WIDTH),
+  .OFFSET_WIDTH           (OFFSET_WIDTH),
+  .SCALE_OFFSET_INT_BITS  (SCALE_OFFSET_INT_BITS),
+  .AWG_DEPTH              (AWG_DEPTH),
+  .TRI_PHASE_BITS         (TRI_PHASE_BITS)
 ) daq_axis_sv_i (
   .ps_clk                                             (ps_clk),
   .ps_reset                                           (~ps_resetn),
@@ -382,6 +389,10 @@ daq_axis_sv #(
   .m_axis_buffer_timestamp_width_tvalid               (m_axis_buffer_timestamp_width_tvalid),
   .m_axis_buffer_timestamp_width_tlast                (m_axis_buffer_timestamp_width_tlast),
   .m_axis_buffer_timestamp_width_tready               (m_axis_buffer_timestamp_width_tready),
+  .m_axis_buffer_capture_done_tdata                   (m_axis_buffer_capture_done_tdata[1:0]),
+  .m_axis_buffer_capture_done_tvalid                  (m_axis_buffer_capture_done_tvalid),
+  .m_axis_buffer_capture_done_tlast                   (m_axis_buffer_capture_done_tlast),
+  .m_axis_buffer_capture_done_tready                  (m_axis_buffer_capture_done_tready),
   .s_axis_lmh6401_config_tdata                        (s_axis_lmh6401_config_tdata[16+$clog2(CHANNELS)-1:0]),
   .s_axis_lmh6401_config_tvalid                       (s_axis_lmh6401_config_tvalid),
   .s_axis_lmh6401_config_tready                       (s_axis_lmh6401_config_tready),
@@ -401,9 +412,9 @@ daq_axis_sv #(
   .m_axis_awg_dma_error_tvalid                        (m_axis_awg_dma_error_tvalid),
   .m_axis_awg_dma_error_tlast                         (m_axis_awg_dma_error_tlast),
   .m_axis_awg_dma_error_tready                        (m_axis_awg_dma_error_tready),
-  .s_axis_dac_scale_config_tdata                      (s_axis_dac_scale_config_tdata[SCALE_WIDTH*CHANNELS-1:0]),
-  .s_axis_dac_scale_config_tvalid                     (s_axis_dac_scale_config_tvalid),
-  .s_axis_dac_scale_config_tready                     (s_axis_dac_scale_config_tready),
+  .s_axis_dac_scale_offset_config_tdata               (s_axis_dac_scale_offset_config_tdata),
+  .s_axis_dac_scale_offset_config_tvalid              (s_axis_dac_scale_offset_config_tvalid),
+  .s_axis_dac_scale_offset_config_tready              (s_axis_dac_scale_offset_config_tready),
   .s_axis_dds_phase_inc_tdata                         (s_axis_dds_phase_inc_tdata),
   .s_axis_dds_phase_inc_tvalid                        (s_axis_dds_phase_inc_tvalid),
   .s_axis_dds_phase_inc_tready                        (s_axis_dds_phase_inc_tready),
@@ -420,28 +431,20 @@ daq_axis_sv #(
   .adc_reset                                          (~adc_resetn),
   .s00_axis_adc_tdata                                 (s00_axis_adc_tdata),
   .s00_axis_adc_tvalid                                (s00_axis_adc_tvalid),
-  .s00_axis_adc_tready                                (s00_axis_adc_tready),
   .s02_axis_adc_tdata                                 (s02_axis_adc_tdata),
   .s02_axis_adc_tvalid                                (s02_axis_adc_tvalid),
-  .s02_axis_adc_tready                                (s02_axis_adc_tready),
   .s10_axis_adc_tdata                                 (s10_axis_adc_tdata),
   .s10_axis_adc_tvalid                                (s10_axis_adc_tvalid),
-  .s10_axis_adc_tready                                (s10_axis_adc_tready),
   .s12_axis_adc_tdata                                 (s12_axis_adc_tdata),
   .s12_axis_adc_tvalid                                (s12_axis_adc_tvalid),
-  .s12_axis_adc_tready                                (s12_axis_adc_tready),
   .s20_axis_adc_tdata                                 (s20_axis_adc_tdata),
   .s20_axis_adc_tvalid                                (s20_axis_adc_tvalid),
-  .s20_axis_adc_tready                                (s20_axis_adc_tready),
   .s22_axis_adc_tdata                                 (s22_axis_adc_tdata),
   .s22_axis_adc_tvalid                                (s22_axis_adc_tvalid),
-  .s22_axis_adc_tready                                (s22_axis_adc_tready),
   .s30_axis_adc_tdata                                 (s30_axis_adc_tdata),
   .s30_axis_adc_tvalid                                (s30_axis_adc_tvalid),
-  .s30_axis_adc_tready                                (s30_axis_adc_tready),
   .s32_axis_adc_tdata                                 (s32_axis_adc_tdata),
   .s32_axis_adc_tvalid                                (s32_axis_adc_tvalid),
-  .s32_axis_adc_tready                                (s32_axis_adc_tready),
   .m_axis_dma_tdata                                   (m_axis_dma_tdata),
   .m_axis_dma_tvalid                                  (m_axis_dma_tvalid),
   .m_axis_dma_tlast                                   (m_axis_dma_tlast),
@@ -451,28 +454,20 @@ daq_axis_sv #(
   .dac_reset                                          (~dac_resetn),
   .m00_axis_dac_tdata                                 (m00_axis_dac_tdata),
   .m00_axis_dac_tvalid                                (m00_axis_dac_tvalid),
-  .m00_axis_dac_tready                                (m00_axis_dac_tready),
   .m01_axis_dac_tdata                                 (m01_axis_dac_tdata),
   .m01_axis_dac_tvalid                                (m01_axis_dac_tvalid),
-  .m01_axis_dac_tready                                (m01_axis_dac_tready),
   .m02_axis_dac_tdata                                 (m02_axis_dac_tdata),
   .m02_axis_dac_tvalid                                (m02_axis_dac_tvalid),
-  .m02_axis_dac_tready                                (m02_axis_dac_tready),
   .m03_axis_dac_tdata                                 (m03_axis_dac_tdata),
   .m03_axis_dac_tvalid                                (m03_axis_dac_tvalid),
-  .m03_axis_dac_tready                                (m03_axis_dac_tready),
   .m10_axis_dac_tdata                                 (m10_axis_dac_tdata),
   .m10_axis_dac_tvalid                                (m10_axis_dac_tvalid),
-  .m10_axis_dac_tready                                (m10_axis_dac_tready),
   .m11_axis_dac_tdata                                 (m11_axis_dac_tdata),
   .m11_axis_dac_tvalid                                (m11_axis_dac_tvalid),
-  .m11_axis_dac_tready                                (m11_axis_dac_tready),
   .m12_axis_dac_tdata                                 (m12_axis_dac_tdata),
   .m12_axis_dac_tvalid                                (m12_axis_dac_tvalid),
-  .m12_axis_dac_tready                                (m12_axis_dac_tready),
   .m13_axis_dac_tdata                                 (m13_axis_dac_tdata),
   .m13_axis_dac_tvalid                                (m13_axis_dac_tvalid),
-  .m13_axis_dac_tready                                (m13_axis_dac_tready),
   .lmh6401_cs_n                                       (lmh6401_cs_n),
   .lmh6401_sck                                        (lmh6401_sck),
   .lmh6401_sdi                                        (lmh6401_sdi)

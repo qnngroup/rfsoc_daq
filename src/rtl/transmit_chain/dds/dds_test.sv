@@ -10,6 +10,7 @@
 // phase_inc configuration to the observable output frequency change
 
 import sim_util_pkg::*;
+import dds_pkg::*;
 
 `timescale 1ns / 1ps
 module dds_test ();
@@ -21,6 +22,14 @@ localparam SAMPLE_WIDTH = 16;
 localparam QUANT_BITS = 8;
 localparam PARALLEL_SAMPLES = 4;
 localparam CHANNELS = 8;
+
+dds_pkg::util #(
+  .PHASE_BITS(PHASE_BITS),
+  .SAMPLE_WIDTH(SAMPLE_WIDTH),
+  .QUANT_BITS(QUANT_BITS),
+  .PARALLEL_SAMPLES(PARALLEL_SAMPLES),
+  .CHANNELS(CHANNELS)
+) dds_util = new;
 
 localparam LUT_ADDR_BITS = PHASE_BITS - QUANT_BITS;
 localparam LUT_DEPTH = 2**LUT_ADDR_BITS;
@@ -94,57 +103,6 @@ always @(posedge clk) begin
   end
 end
 
-task automatic check_output(
-  input multi_phase_t phase_inc
-);
-  phase_t phase, dphase;
-  sample_t expected;
-  for (int channel = 0; channel < CHANNELS; channel++) begin
-    debug.display($sformatf("checking output for channel %0d", channel), DEBUG);
-    // get close to a zero-crossing to get better estimate of the phase
-    while ((math.abs(received[channel][$]) > math.abs(received[channel][$-1]))
-            || (math.abs(received[channel][$]) > 12'hfff)) received[channel].pop_back();
-    if (received[channel].size() < 64) begin
-      debug.error("not enough values left to test, please increase number of samples captured");
-    end
-    // estimate initial phase
-    phase = phase_t'($acos((real'(sample_t'(received[channel][$])) + 0.5)
-                            / (2.0**(SAMPLE_WIDTH-1) - 0.5))/(2.0*PI)*(2.0**PHASE_BITS));
-    // phase difference between first and second sample
-    dphase = phase_t'($acos((real'(sample_t'(received[channel][$-1])) + 0.5)
-                            / (2.0**(SAMPLE_WIDTH-1) - 0.5))/(2.0*PI)*(2.0**PHASE_BITS)) - phase;
-    if (dphase > {1'b0, {(PHASE_BITS-1){1'b1}}}) begin
-      // if the difference in phase was negative, then we're on the wrong side of the unit circle
-      phase = phase_t'((2.0**PHASE_BITS) - real'(phase));
-    end
-    debug.display($sformatf(
-      "checking output with initial phase %x, phase_inc %x",
-      phase,
-      phase_inc[channel]),
-      VERBOSE
-    );
-    while (received[channel].size() > 0) begin
-      expected = sample_t'($floor((2.0**(SAMPLE_WIDTH-1) - 0.5)*$cos(2.0*PI/real'(2.0**PHASE_BITS)*real'(phase))-0.5));
-      if (math.abs(received[channel][$] - expected) > 3'h7) begin
-        debug.error($sformatf(
-          "mismatched sample value for phase = %x: expected %x got %x",
-          phase,
-          expected,
-          received[channel][$])
-        );
-      end
-      debug.display($sformatf(
-        "got phase/sample pair: %x, %x",
-        phase,
-        received[channel][$]),
-        DEBUG
-      );
-      phase = phase + phase_inc[channel];
-      received[channel].pop_back();
-    end
-  end
-endtask
-
 initial begin
   debug.display("### TESTING DDS SIGNAL GENERATOR ###", DEFAULT);
   reset <= 1'b1;
@@ -163,7 +121,7 @@ initial begin
     repeat (5) @(posedge clk);
     save_data <= 1'b1;
     repeat (1000) @(posedge clk);
-    check_output(phase_inc);
+    dds_util.check_output(debug, phase_inc, received, 16'h0007);
     save_data <= 1'b0;
   end
   debug.finish();

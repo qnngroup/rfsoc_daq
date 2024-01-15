@@ -41,11 +41,11 @@ set constraint_files [glob -nocomplain "$dir/../src/constraints/*"]
 source $dir/clean.tcl
 
 # create a project
+create_project proj_$project_type $dir/../build/proj_$project_type
 if { $project_type == "synth" } {
-  create_project proj $dir/../build/proj
   set_property board_part xilinx.com:zcu111:part0:1.4 [current_project]
 } elseif { $project_type == "sim" } {
-  create_project proj $dir/../build/proj
+  # do nothing
 } else {
   puts "Invalid project type, choose 'sim' or 'synth'"
 }

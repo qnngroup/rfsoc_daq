@@ -77,15 +77,13 @@ end
 
 // convert the phases into outputs
 logic [CHANNELS-1:0][PARALLEL_SAMPLES-1:0][PHASE_BITS-1:0] dac_out_full; // full-precision output
-logic [CHANNELS-1:0][2*PARALLEL_SAMPLES-1:0] dac_phase_MSB0;
-logic [CHANNELS-1:0][2*PARALLEL_SAMPLES-1:0] dac_phase_MSB1;
+logic [CHANNELS-1:0][PARALLEL_SAMPLES-1:0] dac_phase_MSB0;
+logic [CHANNELS-1:0][PARALLEL_SAMPLES-1:0] dac_phase_MSB1;
 always_comb begin
   for (int channel = 0; channel < CHANNELS; channel++) begin
     for (int sample = 0; sample < PARALLEL_SAMPLES; sample++) begin
       dac_phase_MSB1[channel][sample] = dac_sample_phase[channel][sample][PHASE_BITS-2];
-      dac_phase_MSB1[channel][PARALLEL_SAMPLES+sample] = dac_sample_phase_d[channel][sample][PHASE_BITS-2];
       dac_phase_MSB0[channel][sample] = dac_sample_phase[channel][sample][PHASE_BITS-1];
-      dac_phase_MSB0[channel][PARALLEL_SAMPLES+sample] = dac_sample_phase_d[channel][sample][PHASE_BITS-1];
       // not super accurate for large phase increment, but good enough if the
       // phase varies slowly (i.e. as long as you're not not trying to generate
       // triangle waves with a fundamental of 3GHz, you're fine)

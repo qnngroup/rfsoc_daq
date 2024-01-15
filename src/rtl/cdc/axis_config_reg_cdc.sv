@@ -15,17 +15,19 @@ module axis_config_reg_cdc #(
 ///////////////////////////////////////////////////
 // Source clock domain backpressure handling
 ///////////////////////////////////////////////////
-logic src_send, src_rcv;
+logic src_send, src_rcv, src_empty;
 logic [DWIDTH:0] src_packet; // extra bit for last flag
 // only allow new data if we aren't currently transferring data
-assign src.ready = ~(src_send | src_rcv);
+assign src.ready = ~(src_send | src_rcv) | src_empty;
 
 always_ff @(posedge src_clk) begin
   src_packet <= {src.last, src.data};
   if (src_reset) begin
+    src_empty <= 1'b1;
     src_send <= 1'b0;
   end else begin
     if (src.ok & ~src_rcv) begin
+      src_empty <= 1'b0;
       src_send <= 1'b1;
     end else if (src_send & src_rcv) begin
       src_send <= 1'b0;
@@ -49,15 +51,12 @@ always_ff @(posedge dest_clk) begin
   end else begin
     // once dest_out has data, dest_req is asserted
     // wait until ready goes high before sending ack
-    if (dest_req & dest.ready) begin
+    if (dest.ok) begin
+      dest.valid <= 1'b0; // reset valid after transfer occurs
       dest_ack <= 1'b1;
-      if (transfer_done) begin
-        // transfer occurred already, so deassert valid
-        dest.valid <= 1'b0;
-      end else begin
-        dest.valid <= 1'b1;
-        transfer_done <= 1'b1;
-      end
+      transfer_done <= 1'b1;
+    end else if (~transfer_done) begin
+      dest.valid <= dest_req;
     end else if (dest_ack & (~dest_req)) begin
       // transaction is done when ack is still high
       // but sync module deasserts req

@@ -22,7 +22,8 @@ module daq_axis_sv #(
   parameter int DDS_QUANT_BITS = 20,
   // DAC prescaler parameters
   parameter int SCALE_WIDTH = 18,
-  parameter int SCALE_FRAC_BITS = 16,
+  parameter int OFFSET_WIDTH = 14,
+  parameter int SCALE_OFFSET_INT_BITS = 2,
   // AWG parameters
   parameter int AWG_DEPTH = 2048,
   // Triangle wave parameters
@@ -61,6 +62,11 @@ module daq_axis_sv #(
   output  wire                                    m_axis_buffer_timestamp_width_tvalid,
   output  wire                                    m_axis_buffer_timestamp_width_tlast,
   input   wire                                    m_axis_buffer_timestamp_width_tready,
+  // buffer capture done out
+  output  wire                                    m_axis_buffer_capture_done_tdata,
+  output  wire                                    m_axis_buffer_capture_done_tvalid,
+  output  wire                                    m_axis_buffer_capture_done_tlast,
+  input   wire                                    m_axis_buffer_capture_done_tready,
   // LMH6401 configuration
   input   wire [16+$clog2(CHANNELS)-1:0]          s_axis_lmh6401_config_tdata,
   input   wire                                    s_axis_lmh6401_config_tvalid,
@@ -70,46 +76,46 @@ module daq_axis_sv #(
   // DAC CONFIGURATION
   //////////////////////////////////////////////////////
   // awg frame depth
-  input   wire [(1+$clog2(AWG_DEPTH))*CHANNELS-1:0] s_axis_awg_frame_depth_tdata,
-  input   wire                                      s_axis_awg_frame_depth_tvalid,
-  output  wire                                      s_axis_awg_frame_depth_tready,
+  input   wire [(1+$clog2(AWG_DEPTH))*CHANNELS-1:0]       s_axis_awg_frame_depth_tdata,
+  input   wire                                            s_axis_awg_frame_depth_tvalid,
+  output  wire                                            s_axis_awg_frame_depth_tready,
   // awg burst length
-  input   wire [64*CHANNELS-1:0]                    s_axis_awg_burst_length_tdata,
-  input   wire                                      s_axis_awg_burst_length_tvalid,
-  output  wire                                      s_axis_awg_burst_length_tready,
+  input   wire [64*CHANNELS-1:0]                          s_axis_awg_burst_length_tdata,
+  input   wire                                            s_axis_awg_burst_length_tvalid,
+  output  wire                                            s_axis_awg_burst_length_tready,
   // awg trigger output config
-  input   wire [2*CHANNELS-1:0]                     s_axis_awg_trigger_out_config_tdata,
-  input   wire                                      s_axis_awg_trigger_out_config_tvalid,
-  output  wire                                      s_axis_awg_trigger_out_config_tready,
+  input   wire [2*CHANNELS-1:0]                           s_axis_awg_trigger_out_config_tdata,
+  input   wire                                            s_axis_awg_trigger_out_config_tvalid,
+  output  wire                                            s_axis_awg_trigger_out_config_tready,
   // awg start/stop
-  input   wire [1:0]                                s_axis_awg_start_stop_tdata,
-  input   wire                                      s_axis_awg_start_stop_tvalid,
-  output  wire                                      s_axis_awg_start_stop_tready,
+  input   wire [1:0]                                      s_axis_awg_start_stop_tdata,
+  input   wire                                            s_axis_awg_start_stop_tvalid,
+  output  wire                                            s_axis_awg_start_stop_tready,
   // awg dma error
-  output  wire [1:0]                                m_axis_awg_dma_error_tdata,
-  output  wire                                      m_axis_awg_dma_error_tvalid,
-  output  wire                                      m_axis_awg_dma_error_tlast,
-  input   wire                                      m_axis_awg_dma_error_tready,
+  output  wire [1:0]                                      m_axis_awg_dma_error_tdata,
+  output  wire                                            m_axis_awg_dma_error_tvalid,
+  output  wire                                            m_axis_awg_dma_error_tlast,
+  input   wire                                            m_axis_awg_dma_error_tready,
   // dac scale factor
-  input   wire [SCALE_WIDTH*CHANNELS-1:0]           s_axis_dac_scale_config_tdata,
-  input   wire                                      s_axis_dac_scale_config_tvalid,
-  output  wire                                      s_axis_dac_scale_config_tready,
+  input   wire [(SCALE_WIDTH+OFFSET_WIDTH)*CHANNELS-1:0]  s_axis_dac_scale_offset_config_tdata,
+  input   wire                                            s_axis_dac_scale_offset_config_tvalid,
+  output  wire                                            s_axis_dac_scale_offset_config_tready,
   // dds phase increment
-  input   wire [DDS_PHASE_BITS*CHANNELS-1:0]        s_axis_dds_phase_inc_tdata,
-  input   wire                                      s_axis_dds_phase_inc_tvalid,
-  output  wire                                      s_axis_dds_phase_inc_tready,
+  input   wire [DDS_PHASE_BITS*CHANNELS-1:0]              s_axis_dds_phase_inc_tdata,
+  input   wire                                            s_axis_dds_phase_inc_tvalid,
+  output  wire                                            s_axis_dds_phase_inc_tready,
   // triangle wave phase increment
-  input   wire [TRI_PHASE_BITS*CHANNELS-1:0]        s_axis_tri_phase_inc_tdata,
-  input   wire                                      s_axis_tri_phase_inc_tvalid,
-  output  wire                                      s_axis_tri_phase_inc_tready,
+  input   wire [TRI_PHASE_BITS*CHANNELS-1:0]              s_axis_tri_phase_inc_tdata,
+  input   wire                                            s_axis_tri_phase_inc_tvalid,
+  output  wire                                            s_axis_tri_phase_inc_tready,
   // trigger manager config
-  input   wire [2*CHANNELS:0]                       s_axis_trigger_manager_config_tdata,
-  input   wire                                      s_axis_trigger_manager_config_tvalid,
-  output  wire                                      s_axis_trigger_manager_config_tready,
+  input   wire [2*CHANNELS:0]                             s_axis_trigger_manager_config_tdata,
+  input   wire                                            s_axis_trigger_manager_config_tvalid,
+  output  wire                                            s_axis_trigger_manager_config_tready,
   // TX channel mux config
-  input   wire [$clog2(3*CHANNELS)*CHANNELS-1:0]    s_axis_dac_mux_config_tdata,
-  input   wire                                      s_axis_dac_mux_config_tvalid,
-  output  wire                                      s_axis_dac_mux_config_tready,
+  input   wire [$clog2(3*CHANNELS)*CHANNELS-1:0]          s_axis_dac_mux_config_tdata,
+  input   wire                                            s_axis_dac_mux_config_tvalid,
+  output  wire                                            s_axis_dac_mux_config_tready,
 
   //////////////////////////////////////////////////////
   // ADC SIGNAL PATH
@@ -118,28 +124,20 @@ module daq_axis_sv #(
   // adc data in
   input   wire [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0]  s00_axis_adc_tdata,
   input   wire                                      s00_axis_adc_tvalid,
-  output  wire                                      s00_axis_adc_tready,
   input   wire [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0]  s02_axis_adc_tdata,
   input   wire                                      s02_axis_adc_tvalid,
-  output  wire                                      s02_axis_adc_tready,
   input   wire [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0]  s10_axis_adc_tdata,
   input   wire                                      s10_axis_adc_tvalid,
-  output  wire                                      s10_axis_adc_tready,
   input   wire [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0]  s12_axis_adc_tdata,
   input   wire                                      s12_axis_adc_tvalid,
-  output  wire                                      s12_axis_adc_tready,
   input   wire [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0]  s20_axis_adc_tdata,
   input   wire                                      s20_axis_adc_tvalid,
-  output  wire                                      s20_axis_adc_tready,
   input   wire [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0]  s22_axis_adc_tdata,
   input   wire                                      s22_axis_adc_tvalid,
-  output  wire                                      s22_axis_adc_tready,
   input   wire [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0]  s30_axis_adc_tdata,
   input   wire                                      s30_axis_adc_tvalid,
-  output  wire                                      s30_axis_adc_tready,
   input   wire [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0]  s32_axis_adc_tdata,
   input   wire                                      s32_axis_adc_tvalid,
-  output  wire                                      s32_axis_adc_tready,
 
   // dma output (Sparse sample buffer -- TODO rewrite with split clock domains
   // for buffer write and read so that this doesn't need an external CDC FIFO)
@@ -156,28 +154,20 @@ module daq_axis_sv #(
   // dac data out
   output  wire [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0]  m00_axis_dac_tdata,
   output  wire                                      m00_axis_dac_tvalid,
-  input   wire                                      m00_axis_dac_tready,
   output  wire [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0]  m01_axis_dac_tdata,
   output  wire                                      m01_axis_dac_tvalid,
-  input   wire                                      m01_axis_dac_tready,
   output  wire [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0]  m02_axis_dac_tdata,
   output  wire                                      m02_axis_dac_tvalid,
-  input   wire                                      m02_axis_dac_tready,
   output  wire [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0]  m03_axis_dac_tdata,
   output  wire                                      m03_axis_dac_tvalid,
-  input   wire                                      m03_axis_dac_tready,
   output  wire [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0]  m10_axis_dac_tdata,
   output  wire                                      m10_axis_dac_tvalid,
-  input   wire                                      m10_axis_dac_tready,
   output  wire [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0]  m11_axis_dac_tdata,
   output  wire                                      m11_axis_dac_tvalid,
-  input   wire                                      m11_axis_dac_tready,
   output  wire [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0]  m12_axis_dac_tdata,
   output  wire                                      m12_axis_dac_tvalid,
-  input   wire                                      m12_axis_dac_tready,
   output  wire [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0]  m13_axis_dac_tdata,
   output  wire                                      m13_axis_dac_tvalid,
-  input   wire                                      m13_axis_dac_tready,
 
   //////////////////////////////////////////////////////
   // SPI
@@ -198,7 +188,7 @@ Axis_If #(.DWIDTH(2*CHANNELS)) ps_awg_trigger_out_config ();
 Axis_If #(.DWIDTH(2)) ps_awg_start_stop ();
 Axis_If #(.DWIDTH(2)) ps_awg_dma_error ();
 // DAC prescaler interface
-Axis_If #(.DWIDTH(SCALE_WIDTH*CHANNELS)) ps_dac_scale_factor ();
+Axis_If #(.DWIDTH((SCALE_WIDTH+OFFSET_WIDTH)*CHANNELS)) ps_dac_scale_offset ();
 // DDS interface
 Axis_If #(.DWIDTH(DDS_PHASE_BITS*CHANNELS)) ps_dds_phase_inc ();
 // Tri interface
@@ -208,7 +198,7 @@ Axis_If #(.DWIDTH(1+2*CHANNELS)) ps_trigger_manager_config ();
 // Channel mux interface
 Axis_If #(.DWIDTH($clog2(3*CHANNELS)*CHANNELS)) ps_dac_mux_config ();
 // Outputs
-Axis_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(CHANNELS)) dac_data_out ();
+Realtime_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(CHANNELS)) dac_data_out ();
 logic dac_trigger_out, adc_trigger_in;
 
 // connect DMA interface
@@ -239,9 +229,9 @@ assign m_axis_awg_dma_error_tvalid = ps_awg_dma_error.valid;
 assign m_axis_awg_dma_error_tlast = ps_awg_dma_error.last;
 assign ps_awg_dma_error.ready = m_axis_awg_dma_error_tready;
 
-assign ps_dac_scale_factor.data = s_axis_dac_scale_config_tdata;
-assign ps_dac_scale_factor.valid = s_axis_dac_scale_config_tvalid;
-assign s_axis_dac_scale_config_tready = ps_dac_scale_factor.ready;
+assign ps_dac_scale_offset.data = s_axis_dac_scale_offset_config_tdata;
+assign ps_dac_scale_offset.valid = s_axis_dac_scale_offset_config_tvalid;
+assign s_axis_dac_scale_offset_config_tready = ps_dac_scale_offset.ready;
 
 assign ps_dds_phase_inc.data = s_axis_dds_phase_inc_tdata;
 assign ps_dds_phase_inc.valid = s_axis_dds_phase_inc_tvalid;
@@ -276,7 +266,6 @@ assign m10_axis_dac_tvalid = dac_data_out.valid[4];
 assign m11_axis_dac_tvalid = dac_data_out.valid[5];
 assign m12_axis_dac_tvalid = dac_data_out.valid[6];
 assign m13_axis_dac_tvalid = dac_data_out.valid[7];
-assign dac_data_out.ready = '1; // don't apply backpressure
 
 // CDC to pass trigger to ADC
 xpm_cdc_pulse #(
@@ -301,7 +290,8 @@ transmit_top #(
   .DDS_PHASE_BITS(DDS_PHASE_BITS),
   .DDS_QUANT_BITS(DDS_QUANT_BITS),
   .SCALE_WIDTH(SCALE_WIDTH),
-  .SCALE_FRAC_BITS(SCALE_FRAC_BITS),
+  .OFFSET_WIDTH(OFFSET_WIDTH),
+  .SCALE_OFFSET_INT_BITS(SCALE_OFFSET_INT_BITS),
   .AWG_DEPTH(AWG_DEPTH),
   .TRI_PHASE_BITS(TRI_PHASE_BITS),
   .AXI_MM_WIDTH(AXI_MM_WIDTH)
@@ -314,7 +304,7 @@ transmit_top #(
   .ps_awg_trigger_out_config,
   .ps_awg_start_stop,
   .ps_awg_dma_error,
-  .ps_scale_factor(ps_dac_scale_factor),
+  .ps_scale_offset(ps_dac_scale_offset),
   .ps_dds_phase_inc,
   .ps_tri_phase_inc,
   .ps_trigger_config(ps_trigger_manager_config),
@@ -328,7 +318,7 @@ transmit_top #(
 //////////////////////////////////////////////////////
 // RECEIVE TOP
 //////////////////////////////////////////////////////
-Axis_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(CHANNELS)) adc_data_in ();
+Realtime_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(CHANNELS)) adc_data_in ();
 Axis_If #(.DWIDTH(AXI_MM_WIDTH)) adc_dma_out ();
 // DUT configuration interfaces
 Axis_If #(.DWIDTH(CHANNELS*SAMPLE_WIDTH*2)) ps_sample_discriminator_config ();
@@ -336,6 +326,7 @@ Axis_If #(.DWIDTH($clog2($clog2(CHANNELS)+1))) ps_buffer_config ();
 Axis_If #(.DWIDTH(2)) ps_buffer_start_stop ();
 Axis_If #(.DWIDTH(CHANNELS*$clog2(2*CHANNELS))) ps_channel_mux_config ();
 Axis_If #(.DWIDTH(32)) ps_buffer_timestamp_width ();
+Axis_If #(.DWIDTH(1)) ps_buffer_capture_done ();
 Axis_If #(.DWIDTH(16+$clog2(CHANNELS))) ps_lmh6401_config ();
 
 // connect DMA interface
@@ -367,6 +358,11 @@ assign m_axis_buffer_timestamp_width_tvalid = ps_buffer_timestamp_width.valid;
 assign m_axis_buffer_timestamp_width_tlast = ps_buffer_timestamp_width.last;
 assign ps_buffer_timestamp_width.ready = m_axis_buffer_timestamp_width_tready;
 
+assign m_axis_buffer_capture_done_tdata = ps_buffer_capture_done.data;
+assign m_axis_buffer_capture_done_tvalid = ps_buffer_capture_done.valid;
+assign m_axis_buffer_capture_done_tlast = ps_buffer_capture_done.last;
+assign ps_buffer_capture_done.ready = m_axis_buffer_capture_done_tready;
+
 assign ps_lmh6401_config.data = s_axis_lmh6401_config_tdata;
 assign ps_lmh6401_config.valid = s_axis_lmh6401_config_tvalid;
 assign s_axis_lmh6401_config_tready = ps_lmh6401_config.ready;
@@ -388,14 +384,6 @@ assign adc_data_in.valid[4] = s20_axis_adc_tvalid;
 assign adc_data_in.valid[5] = s22_axis_adc_tvalid;
 assign adc_data_in.valid[6] = s30_axis_adc_tvalid;
 assign adc_data_in.valid[7] = s32_axis_adc_tvalid;
-assign s00_axis_adc_tready = 1'b1;
-assign s02_axis_adc_tready = 1'b1;
-assign s10_axis_adc_tready = 1'b1;
-assign s12_axis_adc_tready = 1'b1;
-assign s20_axis_adc_tready = 1'b1;
-assign s22_axis_adc_tready = 1'b1;
-assign s30_axis_adc_tready = 1'b1;
-assign s32_axis_adc_tready = 1'b1;
 
 receive_top #(
   .CHANNELS(CHANNELS),
@@ -413,6 +401,7 @@ receive_top #(
   .ps_buffer_start_stop,
   .ps_channel_mux_config,
   .ps_buffer_timestamp_width,
+  .ps_buffer_capture_done,
   .adc_clk,
   .adc_reset,
   .adc_data_in,

@@ -125,7 +125,8 @@ package sparse_sample_buffer_pkg;
       inout logic [CHANNELS-1:0][TIMESTAMP_WIDTH-SAMPLE_INDEX_WIDTH-1:0] timer,
       inout logic [TIMESTAMP_WIDTH-1:0] timestamps [CHANNELS][$],
       inout logic [DATA_WIDTH-1:0] samples [CHANNELS][$],
-      inout logic [DATA_WIDTH-1:0] expected_samples [CHANNELS][$]
+      inout logic [DATA_WIDTH-1:0] expected_samples [CHANNELS][$],
+      input bit buffer_filled
     );
       // signals for checking correct operation of the DUT
       logic is_high;
@@ -197,7 +198,7 @@ package sparse_sample_buffer_pkg;
         // are reset before each trial. Therefore is_high is reset.
         is_high = 0;
         sample_index = 0; // index of sample in received samples buffer
-        while (expected_samples[channel].size() > 0) begin
+        while ((expected_samples[channel].size() > 0) & (buffer_filled ? (samples[channel].size() > 0) : 1'b1)) begin
           debug.display($sformatf(
             "processing sample %0d from channel %0d: samp = %0x, timer = %0x",
             expected_samples[channel].size(),
@@ -248,7 +249,7 @@ package sparse_sample_buffer_pkg;
           timer[channel] = timer[channel] + 1'b1;
         end
         // check to make sure we didn't miss any data
-        if (timestamps[channel].size() > 0) begin
+        if ((timestamps[channel].size() > 0) & (~buffer_filled)) begin
           debug.error($sformatf(
             "too many timestamps leftover for channel %0d with banking mode %0d (got %0d, expected 0)",
             channel,
@@ -263,7 +264,7 @@ package sparse_sample_buffer_pkg;
             timestamps[channel].pop_back()
           ), sim_util_pkg::DEBUG);
         end
-        if (samples[channel].size() > 0) begin
+        if ((samples[channel].size() > 0) && (~buffer_filled)) begin
           debug.error($sformatf(
             "too many samples leftover for channel %0d with banking mode %0d (got %0d, expected 0)",
             channel,
@@ -279,8 +280,24 @@ package sparse_sample_buffer_pkg;
           ), sim_util_pkg::DEBUG);
         end
         // should not be any leftover expected_samples samples, since the while loop
-        // won't terminate until expected_samples[channel] is empty. therefore don't
-        // bother checking
+        // won't terminate until expected_samples[channel] is empty.
+        // however, if buffer_filled is true, then we might have some leftover
+        // flush out remaining samples
+        if ((~buffer_filled) & (expected_samples[channel].size() > 0)) begin
+          debug.error($sformatf(
+            "too many expected samples leftover (%0d) for channel %0d, didn't expect any missing samples",
+            expected_samples[channel].size(),
+            channel)
+          );
+        end
+        while (expected_samples[channel].size() > 0) begin
+          debug.display($sformatf(
+            "extra sample %x",
+            expected_samples[channel].pop_back()),
+            sim_util_pkg::DEBUG
+          );
+          timer[channel] = timer[channel] + 1'b1;
+        end
       end
       for (int channel = 0; channel < CHANNELS; channel++) begin
         debug.display($sformatf(

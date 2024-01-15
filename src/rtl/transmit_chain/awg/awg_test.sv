@@ -47,7 +47,13 @@ Axis_If #(.DWIDTH(2)) dma_transfer_error ();
 Realtime_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(CHANNELS)) dac_data_out ();
 logic [CHANNELS-1:0] dac_trigger;
 
-awg_pkg::util util = new(
+awg_pkg::util #(
+  .DEPTH(DEPTH),
+  .AXI_MM_WIDTH(AXI_MM_WIDTH),
+  .PARALLEL_SAMPLES(PARALLEL_SAMPLES),
+  .SAMPLE_WIDTH(SAMPLE_WIDTH),
+  .CHANNELS(CHANNELS)
+) util = new(
   dma_write_depth,
   dma_trigger_out_config,
   dma_awg_burst_length,

@@ -12,15 +12,17 @@ module sparse_sample_buffer #(
 ) (
   input wire clk, reset,
   output logic [31:0] timestamp_width, // output so that PS can correctly parse output data
+  output logic capture_done,
   Realtime_Parallel_If.Slave data_in, // all channels in parallel
   Axis_If.Master data_out,
   Axis_If.Slave sample_discriminator_config, // {threshold_high, threshold_low} for each channel
+  // banking mode (0: 1 channel, 1: 2 channels, 2: 4 channels, 3: 8 channels)
   Axis_If.Slave buffer_config, // {banking_mode}, can only be updated when buffer is in IDLE state
   Axis_If.Slave buffer_start_stop, // {start, stop}
   input wire start_aux // auxiliary trigger for capture start
 );
 
-// always allow capture to be started/stopped
+// always allow capture to be started/stopped manually
 assign buffer_start_stop.ready = 1'b1;
 
 localparam int SAMPLE_INDEX_WIDTH = $clog2(DATA_BUFFER_DEPTH*CHANNELS);
@@ -63,19 +65,59 @@ assign buffer_data_start_stop.data = buffer_start_stop.data;
 assign buffer_data_start_stop.valid = buffer_start_stop.valid;
 assign buffer_data_start_stop.last = 1'b0; // unused; tie to 0 to suppress warnings
 
-logic start, start_d, start_aux_d;
+(* MARK_DEBUG = "TRUE" *)
+logic start;
+(* MARK_DEBUG = "TRUE" *)
+logic start_aux_d;
 always_ff @(posedge clk) begin
   if (reset) begin
     start <= '0;
-    start_d <= '0;
     start_aux_d <= '0;
   end else begin
-    start_d <= start;
     start_aux_d <= start_aux;
-    if (buffer_start_stop.valid) begin
+    if (buffer_start_stop.ok) begin
       start <= buffer_start_stop.data[1];
+    end else begin
+      start <= 1'b0; // reset start so we just get a pulse (sample_buffer does the same thing)
     end
   end
+end
+
+(* MARK_DEBUG = "TRUE" *)
+logic trigger_enabled; // TODO actually put this logic inside the sample buffer / buffer_bank
+
+(* MARK_DEBUG = "TRUE" *)
+logic capture_done_dbg;
+assign capture_done_dbg = capture_done;
+
+assign capture_done = |buffer_full;
+always_ff @(posedge clk) begin
+  if (reset) begin
+    trigger_enabled <= 1'b1;
+  end else begin
+    if (data_out.last & data_out.ok) begin
+      trigger_enabled <= 1'b1;
+    end else if ((start_aux & ~start_aux_d) | start) begin // if we start a capture, reset trigger enable
+      trigger_enabled <= 1'b0;
+    end
+  end
+end
+
+(* MARK_DEBUG = "TRUE" *)
+logic dma_valid_dbg;
+(* MARK_DEBUG = "TRUE" *)
+logic dma_ready_dbg;
+(* MARK_DEBUG = "TRUE" *)
+logic dma_last_dbg;
+
+assign dma_valid_dbg = data_out.valid;
+assign dma_ready_dbg = data_out.ready;
+assign dma_last_dbg = data_out.last;
+
+(* MARK_DEBUG = "TRUE" *)
+logic triggered_start;
+always_ff @(posedge clk) begin
+  triggered_start <= trigger_enabled & start_aux & ~start_aux_d;
 end
 
 sample_discriminator #(
@@ -91,7 +133,7 @@ sample_discriminator #(
   .data_out(disc_data),
   .timestamps_out(disc_timestamps),
   .config_in(sample_discriminator_config),
-  .reset_state((start & ~start_d) | (start_aux & ~start_aux_d)) // reset sample_index count and is_high whenever a new capture is started
+  .reset_state(start | triggered_start) // reset sample_index count and is_high whenever a new capture is started
 );
 
 sample_buffer #(
@@ -107,7 +149,7 @@ sample_buffer #(
   .config_in(buffer_data_config),
   .start_stop(buffer_data_start_stop),
   .stop_aux(buffer_full[0]), // stop saving data when timestamp buffer is full
-  .start_aux(start_aux & ~start_aux_d), // start capture on rising edge of start_aux
+  .start_aux(triggered_start), // start capture on rising edge of start_aux, but only if buffer is empty
   .capture_started(),
   .buffer_full(buffer_full[1])
 );
@@ -125,7 +167,7 @@ sample_buffer #(
   .config_in(buffer_timestamp_config),
   .start_stop(buffer_timestamp_start_stop),
   .stop_aux(buffer_full[1]), // stop saving timestamps when data buffer is full
-  .start_aux(start_aux & ~start_aux_d), // start capture on rising edge of start_aux
+  .start_aux(triggered_start), // start capture on rising edge of start_aux, but only if buffer is empty
   .capture_started(),
   .buffer_full(buffer_full[0])
 );

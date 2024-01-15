@@ -1,18 +1,65 @@
-set_property -dict { PACKAGE_PIN AP5   IOSTANDARD LVCMOS18 } [get_ports sck]; # ADCIO_00
-set_property -dict { PACKAGE_PIN AP6   IOSTANDARD LVCMOS18 } [get_ports sdi]; # ADCIO_01
-set_property -dict { PACKAGE_PIN AR7   IOSTANDARD LVCMOS18 } [get_ports { cs_n[0] }]; # ADCIO_03
-set_property -dict { PACKAGE_PIN AV7   IOSTANDARD LVCMOS18 } [get_ports { cs_n[1] }]; # ADCIO_04
-set_property -dict { PACKAGE_PIN AU7   IOSTANDARD LVCMOS18 } [get_ports { cs_n[2] }]; # ADCIO_05
-set_property -dict { PACKAGE_PIN AV8   IOSTANDARD LVCMOS18 } [get_ports { cs_n[3] }]; # ADCIO_06
-set_property -dict { PACKAGE_PIN AU8   IOSTANDARD LVCMOS18 } [get_ports { cs_n[4] }]; # ADCIO_07
-set_property -dict { PACKAGE_PIN AT6   IOSTANDARD LVCMOS18 } [get_ports { cs_n[5] }]; # ADCIO_08
-set_property -dict { PACKAGE_PIN AT7   IOSTANDARD LVCMOS18 } [get_ports { cs_n[6] }]; # ADCIO_09
-set_property -dict { PACKAGE_PIN AU5   IOSTANDARD LVCMOS18 } [get_ports { cs_n[7] }]; # ADCIO_10
-set_property -dict { PACKAGE_PIN AU3   IOSTANDARD LVCMOS18 } [get_ports { ADCIO[12] }];
-set_property -dict { PACKAGE_PIN AU4   IOSTANDARD LVCMOS18 } [get_ports { ADCIO[13] }];
-set_property -dict { PACKAGE_PIN AV5   IOSTANDARD LVCMOS18 } [get_ports { ADCIO[14] }];
-set_property -dict { PACKAGE_PIN AV6   IOSTANDARD LVCMOS18 } [get_ports { ADCIO[15] }];
-set_property -dict { PACKAGE_PIN AU1   IOSTANDARD LVCMOS18 } [get_ports { ADCIO[16] }];
-set_property -dict { PACKAGE_PIN AU2   IOSTANDARD LVCMOS18 } [get_ports { ADCIO[17] }];
-set_property -dict { PACKAGE_PIN AV2   IOSTANDARD LVCMOS18 } [get_ports { ADCIO[18] }];
-set_property -dict { PACKAGE_PIN AV3   IOSTANDARD LVCMOS18 } [get_ports { ADCIO[19] }];
+set_property -dict {PACKAGE_PIN AP5 IOSTANDARD LVCMOS18} [get_ports sck]
+set_property -dict {PACKAGE_PIN AP6 IOSTANDARD LVCMOS18} [get_ports sdi]
+set_property -dict {PACKAGE_PIN AR7 IOSTANDARD LVCMOS18} [get_ports {cs_n[0]}]
+set_property -dict {PACKAGE_PIN AV7 IOSTANDARD LVCMOS18} [get_ports {cs_n[1]}]
+set_property -dict {PACKAGE_PIN AU7 IOSTANDARD LVCMOS18} [get_ports {cs_n[2]}]
+set_property -dict {PACKAGE_PIN AV8 IOSTANDARD LVCMOS18} [get_ports {cs_n[3]}]
+set_property -dict {PACKAGE_PIN AU8 IOSTANDARD LVCMOS18} [get_ports {cs_n[4]}]
+set_property -dict {PACKAGE_PIN AT6 IOSTANDARD LVCMOS18} [get_ports {cs_n[5]}]
+set_property -dict {PACKAGE_PIN AT7 IOSTANDARD LVCMOS18} [get_ports {cs_n[6]}]
+set_property -dict {PACKAGE_PIN AU5 IOSTANDARD LVCMOS18} [get_ports {cs_n[7]}]
+set_property -dict {PACKAGE_PIN AU3 IOSTANDARD LVCMOS18} [get_ports {ADCIO[12]}]
+set_property -dict {PACKAGE_PIN AU4 IOSTANDARD LVCMOS18} [get_ports {ADCIO[13]}]
+set_property -dict {PACKAGE_PIN AV5 IOSTANDARD LVCMOS18} [get_ports {ADCIO[14]}]
+set_property -dict {PACKAGE_PIN AV6 IOSTANDARD LVCMOS18} [get_ports {ADCIO[15]}]
+set_property -dict {PACKAGE_PIN AU1 IOSTANDARD LVCMOS18} [get_ports {ADCIO[16]}]
+set_property -dict {PACKAGE_PIN AU2 IOSTANDARD LVCMOS18} [get_ports {ADCIO[17]}]
+set_property -dict {PACKAGE_PIN AV2 IOSTANDARD LVCMOS18} [get_ports {ADCIO[18]}]
+set_property -dict {PACKAGE_PIN AV3 IOSTANDARD LVCMOS18} [get_ports {ADCIO[19]}]
+
+create_debug_core u_ila_0 ila
+set_property ALL_PROBE_SAME_MU true [get_debug_cores u_ila_0]
+set_property ALL_PROBE_SAME_MU_CNT 4 [get_debug_cores u_ila_0]
+set_property C_ADV_TRIGGER true [get_debug_cores u_ila_0]
+set_property C_DATA_DEPTH 1024 [get_debug_cores u_ila_0]
+set_property C_EN_STRG_QUAL true [get_debug_cores u_ila_0]
+set_property C_INPUT_PIPE_STAGES 6 [get_debug_cores u_ila_0]
+set_property C_TRIGIN_EN false [get_debug_cores u_ila_0]
+set_property C_TRIGOUT_EN false [get_debug_cores u_ila_0]
+set_property port_width 1 [get_debug_ports u_ila_0/clk]
+connect_debug_port u_ila_0/clk [get_nets [list top_i/usp_rf_data_converter_0/inst/i_top_usp_rf_data_converter_0_0_bufg_gt_ctrl/clk_adc0]]
+set_property PROBE_TYPE DATA_AND_TRIGGER [get_debug_ports u_ila_0/probe0]
+set_property port_width 1 [get_debug_ports u_ila_0/probe0]
+connect_debug_port u_ila_0/probe0 [get_nets [list top_i/daq_axis_0/inst/daq_axis_sv_i/receive_top_i/buffer_i/capture_done_dbg]]
+create_debug_port u_ila_0 probe
+set_property PROBE_TYPE DATA_AND_TRIGGER [get_debug_ports u_ila_0/probe1]
+set_property port_width 1 [get_debug_ports u_ila_0/probe1]
+connect_debug_port u_ila_0/probe1 [get_nets [list top_i/daq_axis_0/inst/daq_axis_sv_i/receive_top_i/buffer_i/dma_last_dbg]]
+create_debug_port u_ila_0 probe
+set_property PROBE_TYPE DATA_AND_TRIGGER [get_debug_ports u_ila_0/probe2]
+set_property port_width 1 [get_debug_ports u_ila_0/probe2]
+connect_debug_port u_ila_0/probe2 [get_nets [list top_i/daq_axis_0/inst/daq_axis_sv_i/receive_top_i/buffer_i/dma_ready_dbg]]
+create_debug_port u_ila_0 probe
+set_property PROBE_TYPE DATA_AND_TRIGGER [get_debug_ports u_ila_0/probe3]
+set_property port_width 1 [get_debug_ports u_ila_0/probe3]
+connect_debug_port u_ila_0/probe3 [get_nets [list top_i/daq_axis_0/inst/daq_axis_sv_i/receive_top_i/buffer_i/dma_valid_dbg]]
+create_debug_port u_ila_0 probe
+set_property PROBE_TYPE DATA_AND_TRIGGER [get_debug_ports u_ila_0/probe4]
+set_property port_width 1 [get_debug_ports u_ila_0/probe4]
+connect_debug_port u_ila_0/probe4 [get_nets [list top_i/daq_axis_0/inst/daq_axis_sv_i/receive_top_i/buffer_i/start]]
+create_debug_port u_ila_0 probe
+set_property PROBE_TYPE DATA_AND_TRIGGER [get_debug_ports u_ila_0/probe5]
+set_property port_width 1 [get_debug_ports u_ila_0/probe5]
+connect_debug_port u_ila_0/probe5 [get_nets [list top_i/daq_axis_0/inst/daq_axis_sv_i/receive_top_i/buffer_i/start_aux_d]]
+create_debug_port u_ila_0 probe
+set_property PROBE_TYPE DATA_AND_TRIGGER [get_debug_ports u_ila_0/probe6]
+set_property port_width 1 [get_debug_ports u_ila_0/probe6]
+connect_debug_port u_ila_0/probe6 [get_nets [list top_i/daq_axis_0/inst/daq_axis_sv_i/receive_top_i/buffer_i/trigger_enabled]]
+create_debug_port u_ila_0 probe
+set_property PROBE_TYPE DATA_AND_TRIGGER [get_debug_ports u_ila_0/probe7]
+set_property port_width 1 [get_debug_ports u_ila_0/probe7]
+connect_debug_port u_ila_0/probe7 [get_nets [list top_i/daq_axis_0/inst/daq_axis_sv_i/receive_top_i/buffer_i/triggered_start]]
+set_property C_CLK_INPUT_FREQ_HZ 300000000 [get_debug_cores dbg_hub]
+set_property C_ENABLE_CLK_DIVIDER false [get_debug_cores dbg_hub]
+set_property C_USER_SCAN_CHAIN 1 [get_debug_cores dbg_hub]
+connect_debug_port dbg_hub/clk [get_nets clk]

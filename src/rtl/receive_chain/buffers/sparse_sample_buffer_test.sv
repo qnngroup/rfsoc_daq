@@ -50,6 +50,7 @@ Axis_If #(.DWIDTH(CHANNELS*SAMPLE_WIDTH*2)) sample_discriminator_config();
 logic capture_start, capture_stop, start_aux;
 logic [$clog2($clog2(CHANNELS)+1)-1:0] banking_mode;
 logic [CHANNELS-1:0][SAMPLE_WIDTH-1:0] threshold_high, threshold_low;
+logic capture_done;
 
 always_comb begin
   for (int i = 0; i < CHANNELS; i++) begin
@@ -72,6 +73,7 @@ sparse_sample_buffer #(
   .clk,
   .reset,
   .timestamp_width(),
+  .capture_done,
   .data_in,
   .data_out,
   .sample_discriminator_config,
@@ -121,7 +123,8 @@ task check_results(
   input logic [CHANNELS-1:0][SAMPLE_WIDTH-1:0] threshold_high,
   input logic [CHANNELS-1:0][SAMPLE_WIDTH-1:0] threshold_low,
   inout logic [CHANNELS-1:0][TIMESTAMP_WIDTH-SAMPLE_INDEX_WIDTH-1:0] timer,
-  input int max_transfer_count
+  input int max_transfer_count,
+  input bit buffer_filled
 );
   // checks that:
   // - timestamps line up with when samples were sent
@@ -178,7 +181,8 @@ task check_results(
     timer,
     timestamps,
     samples,
-    data_sent
+    data_sent,
+    buffer_filled
   );
 
 endtask
@@ -296,11 +300,37 @@ initial begin
           repeat (10) @(posedge clk);
           start_acq(start_type & 1'b1);
 
-          samples_to_send = $urandom_range(50,500);
+          if (amplitude_mode == 0) begin
+            // send enough samples to fill up buffer exactly
+            samples_to_send = DATA_BUFFER_DEPTH*(8 >> bank_mode);
+          end else begin
+            samples_to_send = $urandom_range(50,500);
+          end
 
-          data_in.send_samples(clk, samples_to_send, in_valid_rand & 1'b1, 1'b1);
+          data_in.send_samples(clk, samples_to_send - 10, in_valid_rand & 1'b1, 1'b1);
+          if (start_type === 1'b0) begin
+            // retrigger start to make sure we can't accidentally trigger over
+            // the current capture before it's read out
+            start_acq(1'b0);
+          end
+          data_in.send_samples(clk, 10, in_valid_rand & 1'b1, 1'b1);
           repeat (10) @(posedge clk);
-          stop_acq();
+          if (amplitude_mode == 0) begin
+            // check that capture_done is asserted
+            if (capture_done !== 1'b1) begin
+              debug.error("expected capture to be done, but it's not");
+              stop_acq();
+            end
+          end else begin
+            stop_acq();
+          end
+          repeat (10) @(posedge clk);
+          if (start_type === 1'b0) begin
+            // retrigger start to make sure we can't accidentally retrigger
+            // capture before readout of the previous capture
+            start_acq(1'b0);
+          end
+          repeat (10) @(posedge clk);
           data_out.do_readout(clk, 1'b1, 100000);
           debug.display($sformatf("checking results amplitude_mode = %0d", amplitude_mode), VERBOSE);
           debug.display($sformatf("banking mode                    = %0d", bank_mode), VERBOSE);
@@ -310,7 +340,8 @@ initial begin
             threshold_high,
             threshold_low,
             timer,
-            samples_to_send*(1 << bank_mode) + 2*CHANNELS + TSTAMP_BUFFER_DEPTH*(1 << bank_mode) + 2*CHANNELS
+            samples_to_send*(1 << bank_mode) + 2*CHANNELS + TSTAMP_BUFFER_DEPTH*(1 << bank_mode) + 2*CHANNELS,
+            amplitude_mode == 0 
           );
         end
       end

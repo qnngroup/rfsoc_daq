@@ -28,7 +28,8 @@ localparam int DDS_PHASE_BITS = 32;
 localparam int DDS_QUANT_BITS = 20;
 // DAC prescaler parameters
 localparam int SCALE_WIDTH = 18;
-localparam int SCALE_FRAC_BITS = 16;
+localparam int OFFSET_WIDTH = 14;
+localparam int SCALE_OFFSET_INT_BITS = 2;
 // AWG parameters
 localparam int AWG_DEPTH = 256;
 localparam int AXI_MM_WIDTH = 128;
@@ -43,7 +44,7 @@ Axis_If #(.DWIDTH(64*CHANNELS)) ps_awg_burst_length ();
 Axis_If #(.DWIDTH(2)) ps_awg_start_stop ();
 Axis_If #(.DWIDTH(2)) ps_awg_dma_error ();
 // DAC prescaler interface
-Axis_If #(.DWIDTH(SCALE_WIDTH*CHANNELS)) ps_scale_factor ();
+Axis_If #(.DWIDTH((SCALE_WIDTH+OFFSET_WIDTH)*CHANNELS)) ps_scale_offset ();
 // DDS interface
 Axis_If #(.DWIDTH(DDS_PHASE_BITS*CHANNELS)) ps_dds_phase_inc ();
 Axis_If #(.DWIDTH(TRI_PHASE_BITS*CHANNELS)) ps_tri_phase_inc ();
@@ -55,7 +56,13 @@ Axis_If #(.DWIDTH($clog2(3*CHANNELS)*CHANNELS)) ps_channel_mux_config ();
 Realtime_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(CHANNELS)) dac_data_out ();
 logic dac_trigger_out;
 
-awg_pkg::util awg_util = new(
+awg_pkg::util #(
+  .DEPTH(AWG_DEPTH),
+  .AXI_MM_WIDTH(AXI_MM_WIDTH),
+  .PARALLEL_SAMPLES(PARALLEL_SAMPLES),
+  .SAMPLE_WIDTH(SAMPLE_WIDTH),
+  .CHANNELS(CHANNELS)
+) awg_util = new(
   ps_awg_frame_depth,
   ps_awg_trigger_out_config,
   ps_awg_burst_length,
@@ -69,6 +76,14 @@ typedef logic signed [SAMPLE_WIDTH-1:0] sample_t;
 typedef logic [DDS_PHASE_BITS-1:0] phase_t;
 typedef logic [CHANNELS-1:0][DDS_PHASE_BITS-1:0] dds_phase_t;
 typedef logic [CHANNELS-1:0][TRI_PHASE_BITS-1:0] tri_phase_t;
+
+dds_pkg::util #(
+  .PHASE_BITS(DDS_PHASE_BITS),
+  .SAMPLE_WIDTH(SAMPLE_WIDTH),
+  .QUANT_BITS(DDS_QUANT_BITS),
+  .PARALLEL_SAMPLES(PARALLEL_SAMPLES),
+  .CHANNELS(CHANNELS)
+) dds_util = new;
 
 sim_util_pkg::math #(sample_t) math; // abs, max functions on sample_t
 
@@ -116,7 +131,8 @@ transmit_top #(
   .DDS_PHASE_BITS(DDS_PHASE_BITS),
   .DDS_QUANT_BITS(DDS_QUANT_BITS),
   .SCALE_WIDTH(SCALE_WIDTH),
-  .SCALE_FRAC_BITS(SCALE_FRAC_BITS),
+  .OFFSET_WIDTH(OFFSET_WIDTH),
+  .SCALE_OFFSET_INT_BITS(SCALE_OFFSET_INT_BITS),
   .AWG_DEPTH(AWG_DEPTH),
   .TRI_PHASE_BITS(TRI_PHASE_BITS),
   .AXI_MM_WIDTH(AXI_MM_WIDTH)
@@ -129,7 +145,7 @@ transmit_top #(
   .ps_awg_burst_length,
   .ps_awg_start_stop,
   .ps_awg_dma_error,
-  .ps_scale_factor,
+  .ps_scale_offset,
   .ps_dds_phase_inc,
   .ps_tri_phase_inc,
   .ps_trigger_config,
@@ -159,33 +175,10 @@ always @(posedge ps_clk) begin
   end
 end
 
-logic [4:0][CHANNELS-1:0] dac_awg_triggers_pipe;
+logic [5:0][CHANNELS-1:0] dac_awg_triggers_pipe;
 always @(posedge dac_clk) begin
-  dac_awg_triggers_pipe <= {dac_awg_triggers_pipe[3:0], dut_i.dac_awg_triggers};
+  dac_awg_triggers_pipe <= {dac_awg_triggers_pipe[4:0], dut_i.dac_awg_triggers};
 end
-
-task automatic check_dds_output();
-  dds_phase_t phase;
-  sample_t expected;
-  phase = '0;
-  for (int channel = 0; channel < CHANNELS; channel++) begin
-    while (dds_received[channel].size() > 0) begin
-      expected = sample_t'($floor((2.0**(SAMPLE_WIDTH-1) - 0.5)*$cos((2.0*PI/2.0**DDS_PHASE_BITS)*real'(phase[channel])) - 0.5));
-      // we won't get the phase exactly right
-      if (math.abs(dds_received[channel][$] - expected) > 6'h3f) begin
-        debug.error($sformatf(
-          "channel %0d: mismatched sample value for phase = %x: expected %x got %x",
-          channel,
-          phase[channel],
-          expected,
-          dds_received[channel][$])
-        );
-      end
-      phase[channel] = phase[channel] + dds_phase_inc[channel];
-      dds_received[channel].pop_back();
-    end
-  end
-endtask
 
 task automatic check_tri_output ();
   enum {UP, DOWN} direction;
@@ -273,7 +266,7 @@ initial begin
   ps_awg_trigger_out_config.data <= '0;
   ps_awg_burst_length.data <= '0;
   ps_awg_start_stop.data <= '0;
-  ps_scale_factor.data <= '0;
+  ps_scale_offset.data <= '0;
   ps_dds_phase_inc.data <= '0;
   ps_tri_phase_inc.data <= '0;
   ps_trigger_config.data <= '0;
@@ -283,7 +276,7 @@ initial begin
   ps_awg_trigger_out_config.valid <= 1'b0;
   ps_awg_burst_length.valid <= 1'b0;
   ps_awg_start_stop.valid <= 1'b0;
-  ps_scale_factor.valid <= 1'b0;
+  ps_scale_offset.valid <= 1'b0;
   ps_dds_phase_inc.valid <= 1'b0;
   ps_tri_phase_inc.valid <= 1'b0;
   ps_trigger_config.valid <= 1'b0;
@@ -305,20 +298,22 @@ initial begin
     ps_channel_mux_config.data[channel*$clog2(3*CHANNELS)+:$clog2(3*CHANNELS)] <= channel;
   end
 
-  // configure the scale factor to be 1
+  // configure the scale factor to be 1 and offset to be 0
   for (int channel = 0; channel < CHANNELS; channel++) begin
-    ps_scale_factor.data[channel*SCALE_WIDTH+:SCALE_WIDTH] <= 1 << SCALE_FRAC_BITS;
+    ps_scale_offset.data[channel*(SCALE_WIDTH+OFFSET_WIDTH)+:SCALE_WIDTH+OFFSET_WIDTH] <= {'0, 1'b1, {(SCALE_WIDTH + OFFSET_WIDTH - SCALE_OFFSET_INT_BITS){1'b0}}};
   end
 
   // configure the trigger manager to output a trigger from whenever awg_trigger_out[0] fires
   ps_trigger_config.data <= {'0, 1'b1};
 
   ps_channel_mux_config.valid <= 1'b1;
-  ps_scale_factor.valid <= 1'b1;
-  ps_trigger_config.valid <= 1'b1;
-  @(posedge ps_clk);
+  do @(posedge ps_clk); while (~ps_channel_mux_config.ok);
   ps_channel_mux_config.valid <= 1'b0;
-  ps_scale_factor.valid <= 1'b0;
+  ps_scale_offset.valid <= 1'b1;
+  do @(posedge ps_clk); while (~ps_scale_offset.ok);
+  ps_scale_offset.valid <= 1'b0;
+  ps_trigger_config.valid <= 1'b1;
+  do @(posedge ps_clk); while (~ps_trigger_config.ok);
   ps_trigger_config.valid <= 1'b0;
 
   // configure the AWG
@@ -356,7 +351,7 @@ initial begin
     debug,
     dac_clk,
     ps_clk,
-    dac_awg_triggers_pipe[4],
+    dac_awg_triggers_pipe[5],
     trigger_arrivals,
     samples_received,
     write_depths,
@@ -387,9 +382,10 @@ initial begin
   end
 
   ps_dds_phase_inc.valid <= 1'b1;
-  ps_channel_mux_config.valid <= 1'b1;
-  @(posedge ps_clk);
+  do @(posedge ps_clk); while (~ps_dds_phase_inc.ok);
   ps_dds_phase_inc.valid <= 1'b0;
+  ps_channel_mux_config.valid <= 1'b1;
+  do @(posedge ps_clk); while (~ps_channel_mux_config.ok);
   ps_channel_mux_config.valid <= 1'b0;
 
   debug.display("finished configuring DDS", VERBOSE);
@@ -399,7 +395,7 @@ initial begin
   repeat (4) @(posedge dac_clk); // extra latency with 0 phase increment but nonzero output
   // nonzero data now
   debug.display("collecting DDS data", VERBOSE);
-  repeat (100) begin
+  repeat (1000) begin
     for (int channel = 0; channel < CHANNELS; channel++) begin
       for (int sample = 0; sample < PARALLEL_SAMPLES; sample++) begin
         dds_received[channel].push_front(dac_data_out.data[channel][sample*SAMPLE_WIDTH+:SAMPLE_WIDTH]);
@@ -409,7 +405,7 @@ initial begin
   end
   debug.display("checking DDS data", VERBOSE);
   // check to make sure that data matches what we'd expect
-  check_dds_output();
+  dds_util.check_output(debug, dds_phase_inc, dds_received, 16'h007f);
 
   debug.display("finished testing DDS", VERBOSE);
 
@@ -426,11 +422,13 @@ initial begin
   ps_trigger_config.data <= {'0, 1'b1, {CHANNELS{1'b0}}};
   
   ps_tri_phase_inc.valid <= 1'b1;
-  ps_channel_mux_config.valid <= 1'b1;
-  ps_trigger_config.valid <= 1'b1;
-  @(posedge ps_clk);
+  do @(posedge ps_clk); while (~ps_tri_phase_inc.ok);
   ps_tri_phase_inc.valid <= 1'b0;
+  ps_channel_mux_config.valid <= 1'b1;
+  do @(posedge ps_clk); while (~ps_channel_mux_config.ok);
   ps_channel_mux_config.valid <= 1'b0;
+  ps_trigger_config.valid <= 1'b1;
+  do @(posedge ps_clk); while (~ps_trigger_config.ok);
   ps_trigger_config.valid <= 1'b0;
 
   debug.display("finished configuring triangle wave generator", VERBOSE);
@@ -438,8 +436,7 @@ initial begin
   save_tri_data = 1;
   @(posedge dac_clk);
   repeat (20) begin
-    while (dac_trigger_out !== 1'b1) @(posedge dac_clk);
-    @(posedge dac_clk);
+    do @(posedge dac_clk); while (dac_trigger_out !== 1'b1);
   end
   save_tri_data = 0;
 
