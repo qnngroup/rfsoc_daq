@@ -26,7 +26,7 @@ localparam int DDS_QUANT_BITS = 20;
 // DAC prescaler parameters
 localparam int SCALE_WIDTH = 18;
 localparam int OFFSET_WIDTH = 14;
-localparam int SCALE_OFFSET_INT_BITS = 2;
+localparam int SCALE_INT_BITS = 2;
 // AWG parameters
 localparam int AWG_DEPTH = 256;
 localparam int AXI_MM_WIDTH = 128;
@@ -129,7 +129,7 @@ transmit_top #(
   .DDS_QUANT_BITS(DDS_QUANT_BITS),
   .SCALE_WIDTH(SCALE_WIDTH),
   .OFFSET_WIDTH(OFFSET_WIDTH),
-  .SCALE_OFFSET_INT_BITS(SCALE_OFFSET_INT_BITS),
+  .SCALE_INT_BITS(SCALE_INT_BITS),
   .AWG_DEPTH(AWG_DEPTH),
   .TRI_PHASE_BITS(TRI_PHASE_BITS),
   .AXI_MM_WIDTH(AXI_MM_WIDTH)
@@ -299,7 +299,7 @@ initial begin
 
   // configure the scale factor to be 1 and offset to be 0
   for (int channel = 0; channel < CHANNELS; channel++) begin
-    ps_scale_offset.data[channel*(SCALE_WIDTH+OFFSET_WIDTH)+:SCALE_WIDTH+OFFSET_WIDTH] <= {'0, 1'b1, {(SCALE_WIDTH + OFFSET_WIDTH - SCALE_OFFSET_INT_BITS){1'b0}}};
+    ps_scale_offset.data[channel*(SCALE_WIDTH+OFFSET_WIDTH)+:SCALE_WIDTH+OFFSET_WIDTH] <= {'0, 1'b1, {(SCALE_WIDTH + OFFSET_WIDTH - SCALE_INT_BITS){1'b0}}};
   end
 
   // configure the trigger manager to output a trigger from whenever awg_trigger_out[0] fires

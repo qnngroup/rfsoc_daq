@@ -13,7 +13,7 @@ module transmit_top #(
   // DAC prescaler parameters
   parameter int SCALE_WIDTH = 18,
   parameter int OFFSET_WIDTH = 14,
-  parameter int SCALE_OFFSET_INT_BITS = 2,
+  parameter int SCALE_INT_BITS = 2,
   // AWG parameters
   parameter int AWG_DEPTH = 2048,
   parameter int AXI_MM_WIDTH = 128,
@@ -212,7 +212,7 @@ dac_prescaler #(
   .CHANNELS(CHANNELS),
   .SCALE_WIDTH(SCALE_WIDTH),
   .OFFSET_WIDTH(OFFSET_WIDTH),
-  .SCALE_OFFSET_INT_BITS(SCALE_OFFSET_INT_BITS)
+  .SCALE_INT_BITS(SCALE_INT_BITS)
 ) dac_prescaler_i (
   .clk(dac_clk),
   .reset(dac_reset),

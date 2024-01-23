@@ -22,7 +22,7 @@ module daq_axis #(
   // DAC prescaler parameters
   parameter SCALE_WIDTH = 18,
   parameter OFFSET_WIDTH = 14,
-  parameter SCALE_OFFSET_INT_BITS = 2,
+  parameter SCALE_INT_BITS = 2,
   // AWG parameters
   parameter AWG_DEPTH = 2048,
   // Tri parameters
@@ -363,7 +363,7 @@ daq_axis_sv #(
   .DDS_QUANT_BITS         (DDS_QUANT_BITS),
   .SCALE_WIDTH            (SCALE_WIDTH),
   .OFFSET_WIDTH           (OFFSET_WIDTH),
-  .SCALE_OFFSET_INT_BITS  (SCALE_OFFSET_INT_BITS),
+  .SCALE_INT_BITS         (SCALE_INT_BITS),
   .AWG_DEPTH              (AWG_DEPTH),
   .TRI_PHASE_BITS         (TRI_PHASE_BITS)
 ) daq_axis_sv_i (

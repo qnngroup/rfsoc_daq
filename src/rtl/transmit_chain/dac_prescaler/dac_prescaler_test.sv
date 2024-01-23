@@ -25,10 +25,9 @@ localparam int PARALLEL_SAMPLES = 4;
 localparam int CHANNELS = 2;
 localparam int SCALE_WIDTH = 18;
 localparam int OFFSET_WIDTH = 14;
-localparam int SCALE_OFFSET_INT_BITS = 2;
+localparam int SCALE_INT_BITS = 2;
 
-localparam int SCALE_FRAC_BITS = SCALE_WIDTH - SCALE_OFFSET_INT_BITS;
-localparam int OFFSET_FRAC_BITS = OFFSET_WIDTH - SCALE_OFFSET_INT_BITS;
+localparam int SCALE_FRAC_BITS = SCALE_WIDTH - SCALE_INT_BITS;
 
 // signed int types for samples and scale factors
 typedef logic signed [SAMPLE_WIDTH-1:0] int_t;
@@ -76,7 +75,7 @@ always @(posedge clk) begin
           sent_data[channel].push_front(int_t'(data_in_if.data[channel][i*SAMPLE_WIDTH+:SAMPLE_WIDTH]));
           sent_scale[channel].push_front(sc_int_t'(scale_factor[channel]));
           sent_offset[channel].push_front(os_int_t'(offset_amount[channel]));
-          expected[channel].push_front(int_t'((d_in/(2.0**SAMPLE_WIDTH) * scale/(2.0**SCALE_FRAC_BITS) + offset/(2.0**OFFSET_FRAC_BITS))* 2.0**SAMPLE_WIDTH));
+          expected[channel].push_front(int_t'((d_in/(2.0**SAMPLE_WIDTH) * scale/(2.0**SCALE_FRAC_BITS) + offset/(2.0**OFFSET_WIDTH))* 2.0**SAMPLE_WIDTH));
         end
       end
       // save data we got
@@ -110,12 +109,17 @@ task check_results();
     // casting to uint_t seems to perform a rounding operation, so the test data may be slightly too large
     while (received[channel].size() > 0 && expected[channel].size() > 0) begin
       debug.display($sformatf(
-        "processing data, scale = %x, offset = %x, sent_data = %x, expected = %x, received = %x",
+        "processing data, scale = %x (%0f), offset = %x (%0f), sent_data = %x (%0f), expected = %x (%0f), received = %x (%0f)",
         sent_scale[channel][$],
+        real'(sent_scale[channel][$])/(2.0**SCALE_FRAC_BITS),
         sent_offset[channel][$],
+        real'(sent_offset[channel][$])/(2.0**OFFSET_WIDTH),
         sent_data[channel][$],
+        real'(sent_data[channel][$])/(2.0**SAMPLE_WIDTH),
         expected[channel][$],
-        received[channel][$]),
+        real'(expected[channel][$])/(2.0**SAMPLE_WIDTH),
+        received[channel][$],
+        real'(received[channel][$])/(2.0**SAMPLE_WIDTH)),
         sim_util_pkg::DEBUG
       );
       if (math.abs(expected[channel][$] - received[channel][$]) > 1) begin
@@ -140,7 +144,7 @@ dac_prescaler #(
   .CHANNELS(CHANNELS),
   .SCALE_WIDTH(SCALE_WIDTH),
   .OFFSET_WIDTH(OFFSET_WIDTH),
-  .SCALE_OFFSET_INT_BITS(SCALE_OFFSET_INT_BITS)
+  .SCALE_INT_BITS(SCALE_INT_BITS)
 ) dut_i (
   .clk,
   .reset,
@@ -156,15 +160,43 @@ initial begin
   data_in_if.valid <= '0;
   repeat (500) @(posedge clk);
   reset <= 1'b0;
-  for (int channel = 0; channel < CHANNELS; channel++) begin
-    scale_factor[channel] <= sc_int_t'($urandom_range(32'h3ffff));
-    offset_amount[channel] <= os_int_t'($urandom_range(32'h3fff));
-  end
   repeat(5) @(posedge clk);
 
-  // send a bunch of data with no backpressure
-  debug.display("testing without backpressure and random data valid", sim_util_pkg::VERBOSE);
-  repeat (5) begin
+  debug.display("setting scale = 0, offset = non-zero", sim_util_pkg::VERBOSE);
+  // send zero scale factor with non-zero offset
+  repeat (20) begin
+    // don't send any data while we're changing scale factor
+    data_in_if.valid <= '0;
+    for (int channel = 0; channel < CHANNELS; channel++) begin
+      scale_factor[channel] <= '0;
+      offset_amount[channel] <= os_int_t'($urandom_range(32'h3fff));
+    end
+    repeat (5) @(posedge clk);
+    data_in_if.send_samples(clk, 20, 1'b0, 1'b1);
+    repeat (50) @(posedge clk);
+    data_in_if.send_samples(clk, 20, 1'b1, 1'b1);
+    repeat (50) @(posedge clk);
+  end
+
+  debug.display("setting scale = non-zero, offset = 0", sim_util_pkg::VERBOSE);
+  // send non-zero scale factor with zero offset
+  repeat (20) begin
+    // don't send any data while we're changing scale factor
+    data_in_if.valid <= '0;
+    for (int channel = 0; channel < CHANNELS; channel++) begin
+      scale_factor[channel] <= sc_int_t'($urandom_range(32'h3ffff));
+      offset_amount[channel] <= '0;
+    end
+    repeat (5) @(posedge clk);
+    data_in_if.send_samples(clk, 20, 1'b0, 1'b1);
+    repeat (50) @(posedge clk);
+    data_in_if.send_samples(clk, 20, 1'b1, 1'b1);
+    repeat (50) @(posedge clk);
+  end
+
+  // send non-zero scale factor with non-zero offset
+  debug.display("setting scale = non-zero, offset = non-zero", sim_util_pkg::VERBOSE);
+  repeat (20) begin
     // don't send any data while we're changing scale factor
     data_in_if.valid <= '0;
     for (int channel = 0; channel < CHANNELS; channel++) begin

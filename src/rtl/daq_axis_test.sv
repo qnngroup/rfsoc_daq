@@ -18,7 +18,7 @@ localparam int DDS_PHASE_BITS = 32;
 localparam int DDS_QUANT_BITS = 20;
 localparam int SCALE_WIDTH = 18;
 localparam int OFFSET_WIDTH = 14;
-localparam int SCALE_OFFSET_INT_BITS = 2;
+localparam int SCALE_INT_BITS = 2;
 localparam int AWG_DEPTH = 2048;
 localparam int TRI_PHASE_BITS = 32;
 
@@ -88,7 +88,7 @@ daq_axis #(
   .DDS_QUANT_BITS(DDS_QUANT_BITS),
   .SCALE_WIDTH(SCALE_WIDTH),
   .OFFSET_WIDTH(OFFSET_WIDTH),
-  .SCALE_OFFSET_INT_BITS(SCALE_OFFSET_INT_BITS),
+  .SCALE_INT_BITS(SCALE_INT_BITS),
   .AWG_DEPTH(AWG_DEPTH),
   .TRI_PHASE_BITS(TRI_PHASE_BITS)
 ) dut_i (
