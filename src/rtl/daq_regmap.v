@@ -1,8 +1,7 @@
 // daq_regmap.v - Reed Foster
 // DAQ toplevel with register map interface for configuring signal chain submodules
 
-module daq_regmap #(
-) (
+module daq_regmap (
   input s_axi_ps_clk, // 150 MHz
   input s_axi_ps_aresetn,
 
@@ -73,4 +72,4 @@ module daq_regmap #(
   input           m01_axis_dac_tready
 );
 
-endmodule;
+endmodule

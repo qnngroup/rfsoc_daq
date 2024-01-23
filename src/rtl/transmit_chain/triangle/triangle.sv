@@ -1,6 +1,7 @@
 // triangle.sv - Reed Foster
 // Triangle wave generator, useful for IV measurements
 
+`timescale 1ns/1ps
 module triangle #(
   parameter int PHASE_BITS = 32, // ~ 2 Hz resolution at 6 GS/s
   parameter int CHANNELS = 8,
@@ -78,7 +79,7 @@ end
 // convert the phases into outputs
 logic [CHANNELS-1:0][PARALLEL_SAMPLES-1:0][PHASE_BITS-1:0] dac_out_full; // full-precision output
 logic [CHANNELS-1:0][PARALLEL_SAMPLES-1:0] dac_phase_MSB0;
-logic [CHANNELS-1:0][PARALLEL_SAMPLES-1:0] dac_phase_MSB1;
+logic [CHANNELS-1:0][PARALLEL_SAMPLES-1:0] dac_phase_MSB1, dac_phase_MSB1_d;
 always_comb begin
   for (int channel = 0; channel < CHANNELS; channel++) begin
     for (int sample = 0; sample < PARALLEL_SAMPLES; sample++) begin
@@ -93,12 +94,14 @@ end
 // if some, but not all signals are in the second quadrant (01) and all signals are either
 // in the first or second quadrant (0X), then
 always_ff @(posedge dac_clk) begin
+  dac_phase_MSB1_d <= dac_phase_MSB1;
   for (int channel = 0; channel < CHANNELS; channel++) begin
     // make sure all of the following are met to send a trigger:
     // - we're on a rising edge (dac_phase_MSB0 is zero for all samples)
     // - some of the samples are in the upper half (dac_phase_MSB1 has nonzero bits)
-    // - not all of the samples are in the upper half (dac_phase_MSB1 has zero bits)
-    dac_trigger[channel] <= (&(~dac_phase_MSB0[channel])) & (|dac_phase_MSB1[channel]) & (~(&dac_phase_MSB1[channel]));
+    // - some samples in this cycle or previous cycle are in the lower half
+    // ({dac_phase_MSB1, dac_phase_MSB1_d} has zero bits)
+    dac_trigger[channel] <= (&(~dac_phase_MSB0[channel])) & (|dac_phase_MSB1[channel]) & (~(&{dac_phase_MSB1[channel],dac_phase_MSB1_d[channel]}));
   end
 end
 

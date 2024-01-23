@@ -12,9 +12,6 @@ module axis_x2_test ();
 
 sim_util_pkg::debug debug = new(DEFAULT); // printing, error tracking
 
-typedef logic signed [SAMPLE_WIDTH-1:0] sample_t;
-sim_util_pkg::math #(sample_t) math; // abs, max functions on signed sample type
-
 logic reset;
 logic clk = 0;
 localparam CLK_RATE_HZ = 100_000_000;
@@ -24,6 +21,9 @@ localparam int SAMPLE_WIDTH = 16;
 localparam int PARALLEL_SAMPLES = 2;
 localparam int SAMPLE_FRAC_BITS = 14;
 localparam int SAMPLE_INT_BITS = SAMPLE_WIDTH - SAMPLE_FRAC_BITS;
+
+typedef logic signed [SAMPLE_WIDTH-1:0] sample_t;
+sim_util_pkg::math #(sample_t) math; // abs, max functions on signed sample type
 
 Axis_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES)) data_out_if();
 Axis_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES)) data_in_if();
