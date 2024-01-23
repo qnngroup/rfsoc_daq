@@ -9,13 +9,10 @@
 // straightforward to implement by tracking the latency from changing the
 // phase_inc configuration to the observable output frequency change
 
-import sim_util_pkg::*;
-import dds_pkg::*;
-
 `timescale 1ns / 1ps
 module dds_test ();
 
-sim_util_pkg::debug debug = new(DEFAULT); // printing, error tracking
+sim_util_pkg::debug debug = new(sim_util_pkg::DEFAULT); // printing, error tracking
 
 localparam PHASE_BITS = 24;
 localparam SAMPLE_WIDTH = 16;
@@ -47,14 +44,6 @@ always #(0.5s/CLK_RATE_HZ) clk = ~clk;
 
 Axis_If #(.DWIDTH(CHANNELS*PHASE_BITS)) phase_inc_in();
 Realtime_Parallel_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES), .CHANNELS(CHANNELS)) data_out();
-
-// easier debugging in waveform view
-sample_t cos_out_split [PARALLEL_SAMPLES];
-always_comb begin
-  for (int i = 0; i < PARALLEL_SAMPLES; i++) begin
-    cos_out_split[i] <= data_out.data[SAMPLE_WIDTH*i+:SAMPLE_WIDTH];
-  end
-end
 
 dds #(
   .PHASE_BITS(PHASE_BITS),
@@ -104,7 +93,7 @@ always @(posedge clk) begin
 end
 
 initial begin
-  debug.display("### TESTING DDS SIGNAL GENERATOR ###", DEFAULT);
+  debug.display("### TESTING DDS SIGNAL GENERATOR ###", sim_util_pkg::DEFAULT);
   reset <= 1'b1;
   phase_inc_prev <= '0;
   save_data <= 1'b0;

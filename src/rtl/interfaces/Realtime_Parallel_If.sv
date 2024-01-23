@@ -19,6 +19,8 @@ modport Slave (
   input   data
 );
 
+/* verilator lint_off MULTIDRIVEN */
+
 // Similar to Axis_Parallel_If interface send_samples method.
 // Doesn't use ready signal
 task automatic send_samples(
@@ -35,7 +37,7 @@ task automatic send_samples(
     samples_sent[i] = 0;
   end
   valid <= '1; // enable all channels
-  while (~done) begin
+  while (~done !== '0) begin
     @(posedge clk);
     for (int i = 0; i < CHANNELS; i++) begin
       if (valid[i]) begin
@@ -47,7 +49,7 @@ task automatic send_samples(
       end
     end
     if (rand_arrivals) begin
-      valid <= $urandom_range((1 << CHANNELS) - 1) & (~done);
+      valid <= CHANNELS'($urandom_range((1 << CHANNELS) - 1)) & (~done);
     end
   end
   if (reset_valid) begin
@@ -55,5 +57,7 @@ task automatic send_samples(
     @(posedge clk);
   end
 endtask
+
+/* verilator lint_off MULTIDRIVEN */
 
 endinterface

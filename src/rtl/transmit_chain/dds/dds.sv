@@ -1,6 +1,8 @@
 // dds.sv - Reed Foster
 // Direct Digital Synthesis module, uses phase dithering with a maximal LFSR
 // to achieve high spectral purity.
+
+`timescale 1ns/1ps
 module dds #(
   parameter int PHASE_BITS = 32,
   parameter int SAMPLE_WIDTH = 16,
@@ -29,7 +31,7 @@ generate
     logic signed [SAMPLE_WIDTH-1:0] lut [LUT_DEPTH];
     initial begin
       for (int i = 0; i < LUT_DEPTH; i = i + 1) begin
-        lut[i] = signed'(int'($floor($cos(2*PI/(LUT_DEPTH)*i)*(2**(SAMPLE_WIDTH-1) - 0.5) - 0.5)));
+        lut[i] = SAMPLE_WIDTH'(signed'(int'($floor($cos(2*PI/(LUT_DEPTH)*i)*(2**(SAMPLE_WIDTH-1) - 0.5) - 0.5))));
       end
     end
     
@@ -61,7 +63,7 @@ generate
             // phase_inc[1] = 2*phase_in_in.data
             // ...
             // the final entry in phase_inc is used to update the cycle_phase
-            phase_inc[i] <= phase_inc_in.data[channel*PHASE_BITS+:PHASE_BITS] * (i + 1);
+            phase_inc[i] <= PHASE_BITS'(phase_inc_in.data[channel*PHASE_BITS+:PHASE_BITS] * (i + 1));
           end
         end
         // increment cycle_phase
@@ -89,26 +91,36 @@ generate
       .data_out(lfsr)
     );
     
-    logic [PARALLEL_SAMPLES-1:0][PHASE_BITS-1:0] phase_dithered;
+    logic [PARALLEL_SAMPLES-1:0][PHASE_BITS-1:0] phase_dithered, phase_dithered_d;
     logic [PARALLEL_SAMPLES-1:0][LUT_ADDR_BITS-1:0] phase_quant;
+    if (QUANT_BITS > 16) begin
+      always_comb begin
+        for (int i = 0; i < PARALLEL_SAMPLES; i++) begin
+          // if the number of bits that are quantized is more than the
+          // LFSR width, left-shift the LFSR output so that it has the
+          // correct amplitude
+          assign phase_dithered[i] = {{(PHASE_BITS-QUANT_BITS){1'b0}}, lfsr[i], {(QUANT_BITS - 16){1'b0}}} + sample_phase[i];
+        end
+      end
+    end else begin
+      always_comb begin
+        for (int i = 0; i < PARALLEL_SAMPLES; i++) begin
+          // otherwise, right shift the LFSR
+          assign phase_dithered[i] = {{(PHASE_BITS-QUANT_BITS){1'b0}}, lfsr[i][QUANT_BITS-1:0]} + sample_phase[i];
+        end
+      end
+    end
+
     always_ff @(posedge clk) begin
       if (reset) begin
         data_out.data[channel] <= '0;
         phase_quant <= '0;
-        phase_dithered <= '0;
+        phase_dithered_d <= '0;
       end else begin
+        phase_dithered_d <= phase_dithered;
         for (int i = 0; i < PARALLEL_SAMPLES; i++) begin
-          if (QUANT_BITS > 16) begin
-            // if the number of bits that are quantized is more than the
-            // LFSR width, left-shift the LFSR output so that it has the
-            // correct amplitude
-            phase_dithered[i] <= {lfsr[i], {(QUANT_BITS - 16){1'b0}}} + sample_phase[i];
-          end else begin
-            // otherwise, right shift the LFSR
-            phase_dithered[i] <= lfsr[i][QUANT_BITS-1:0] + sample_phase[i];
-          end
           // quantize the phase, then perform the lookup
-          phase_quant[i] <= phase_dithered[i][PHASE_BITS-1:QUANT_BITS];
+          phase_quant[i] <= phase_dithered_d[i][PHASE_BITS-1:QUANT_BITS];
           data_out.data[channel][SAMPLE_WIDTH*i+:SAMPLE_WIDTH] <= lut[phase_quant[i]];
         end
       end

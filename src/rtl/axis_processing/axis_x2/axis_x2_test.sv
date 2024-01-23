@@ -5,12 +5,10 @@
 // at the end of the test to verify operation. Computes expected quantities
 // using systemverilog multiplication with reals and typecasting.
 
-import sim_util_pkg::*;
-
 `timescale 1ns / 1ps
 module axis_x2_test ();
 
-sim_util_pkg::debug debug = new(DEFAULT); // printing, error tracking
+sim_util_pkg::debug debug = new(sim_util_pkg::DEFAULT); // printing, error tracking
 
 logic reset;
 logic clk = 0;
@@ -62,8 +60,8 @@ always @(posedge clk) begin
 end
 
 task check_results();
-  debug.display($sformatf("received.size() = %0d", received.size()), VERBOSE);
-  debug.display($sformatf("expected.size() = %0d", expected.size()), VERBOSE);
+  debug.display($sformatf("received.size() = %0d", received.size()), sim_util_pkg::VERBOSE);
+  debug.display($sformatf("expected.size() = %0d", expected.size()), sim_util_pkg::VERBOSE);
   if (received.size() != expected.size()) begin
     debug.error("mismatched sizes; got a different number of samples than expected");
   end
@@ -81,8 +79,8 @@ task check_results();
     received.pop_back();
     expected.pop_back();
   end
-  debug.display($sformatf("last_received.size() = %0d", last_received.size()), VERBOSE);
-  debug.display($sformatf("last_expected.size() = %0d", last_expected.size()), VERBOSE);
+  debug.display($sformatf("last_received.size() = %0d", last_received.size()), sim_util_pkg::VERBOSE);
+  debug.display($sformatf("last_expected.size() = %0d", last_expected.size()), sim_util_pkg::VERBOSE);
   if (last_expected.size() != last_received.size()) begin
     debug.error($sformatf(
       "mismatched number of last signals: got %0d, expected %0d",
@@ -111,7 +109,7 @@ axis_x2 #(
 );
 
 initial begin
-  debug.display("### TESTING AXIS X^2 ###", DEFAULT);
+  debug.display("### TESTING AXIS X^2 ###", sim_util_pkg::DEFAULT);
   reset <= 1'b1;
   data_in_if.valid <= 1'b0;
   data_out_if.ready <= 1'b1;

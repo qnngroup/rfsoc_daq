@@ -2,6 +2,7 @@
 // Toplevel for transmit signal chain, generates data from either DDS signal
 // generator or from AWG arbitrary generator and sends the data tothe RFDAC
 
+`timescale 1ns/1ps
 module transmit_top #(
   parameter int CHANNELS = 8,
   parameter int PARALLEL_SAMPLES = 16,
@@ -24,7 +25,7 @@ module transmit_top #(
 
   // AWG PS interfaces
   Axis_If.Slave   ps_awg_dma_in, // DMA interface
-  Axis_If.Slave   ps_awg_frame_depth, // (1+$clog2(DEPTH))*CHANNELS bits
+  Axis_If.Slave   ps_awg_frame_depth, // $clog2(DEPTH)*CHANNELS bits
   Axis_If.Slave   ps_awg_trigger_out_config, // 2*CHANNELS bits
   Axis_If.Slave   ps_awg_burst_length, // 64*CHANNELS bits
   Axis_If.Slave   ps_awg_start_stop, // 2 bits

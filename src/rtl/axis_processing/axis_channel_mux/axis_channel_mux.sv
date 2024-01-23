@@ -4,6 +4,7 @@
 //   physical ADC channels, such as finite-difference derivatives or filters
 // - used to multiplex multiple signal sources to physical DAC channels
 
+`timescale 1ns/1ps
 module axis_channel_mux #(
   parameter int PARALLEL_SAMPLES = 16, // 4.096 GS/s @ 256 MHz
   parameter int SAMPLE_WIDTH = 16, // 12-bit ADC
@@ -29,7 +30,7 @@ logic [OUTPUT_CHANNELS-1:0][SELECT_BITS-1:0] source_select;
 always_ff @(posedge clk) begin
   if (reset) begin
     for (int out_channel = 0; out_channel < OUTPUT_CHANNELS; out_channel++) begin
-      source_select[out_channel] <= out_channel; // map raw physical channels directly to logical channels
+      source_select[out_channel] <= SELECT_BITS'(out_channel); // map raw physical channels directly to logical channels
     end
   end else begin
     if (config_in.ok) begin

@@ -3,33 +3,31 @@
 // by saving all sent/received data and comparing each subword at the end of
 // the test
 
-import sim_util_pkg::*;
-
 `timescale 1ns / 1ps
 module axis_width_converter_test ();
 
 sim_util_pkg::math #(int) math; // abs, max functions on ints
-sim_util_pkg::debug debug = new(DEFAULT); // printing, error tracking
+sim_util_pkg::debug debug = new(sim_util_pkg::DEFAULT); // printing, error tracking
 
 logic reset;
 logic clk = 0;
 localparam CLK_RATE_HZ = 100_000_000;
 always #(0.5s/CLK_RATE_HZ) clk = ~clk;
 
-localparam int DWIDTH_DOWN_IN = 256;
-localparam int DWIDTH_UP_IN = 16;
-localparam int DWIDTH_COMB_IN = 24;
-localparam int DWIDTH_COMB_OUT = 32;
-localparam int DOWN = 4;
-localparam int UP = 8;
+localparam [31:0] DWIDTH_DOWN_IN = 256;
+localparam [31:0] DWIDTH_UP_IN = 16;
+localparam [31:0] DWIDTH_COMB_IN = 24;
+localparam [31:0] DWIDTH_COMB_OUT = 32;
+localparam [31:0] DOWN = 4;
+localparam [31:0] UP = 8;
 
 // these are needed for the test
-localparam int COMB_UP = 4;
-localparam int COMB_DOWN = 3;
+localparam [31:0] COMB_UP = 4;
+localparam [31:0] COMB_DOWN = 3;
 
 // choose a standard datawidth for all of the DUTs that can fit the largest
 // signal (input or output)
-localparam int DWIDTH = math.max(math.max(math.max(DWIDTH_DOWN_IN, DWIDTH_UP_IN*UP), DWIDTH_COMB_OUT), DWIDTH_COMB_IN);
+localparam int DWIDTH = (DWIDTH_DOWN_IN > DWIDTH_UP_IN*UP) ? ((DWIDTH_DOWN_IN > DWIDTH_COMB_OUT) ? ((DWIDTH_DOWN_IN > DWIDTH_COMB_IN) ? DWIDTH_DOWN_IN : DWIDTH_COMB_IN) : DWIDTH_COMB_OUT) : DWIDTH_UP_IN*UP;
 
 Axis_If #(.DWIDTH(DWIDTH_DOWN_IN)) downsizer_in ();
 Axis_If #(.DWIDTH(DWIDTH_DOWN_IN/DOWN)) downsizer_out ();
@@ -97,17 +95,18 @@ logic [DWIDTH-1:0] received [5][$];
 int last_sent [5][$]; // size of sent whenever last is present
 int last_received [5][$]; // size of received whenever last is present
 
-logic [1:0][4:0][DWIDTH-1:0] data;
-assign downsizer_in.data = data[0][0];
-assign upsizer_in.data = data[0][1];
-assign comb_in.data = data[0][2];
-assign nochange_comb_in.data = data[0][3];
-assign comb_up2_in.data = data[0][4];
-assign data[1][0] = downsizer_out.data;
-assign data[1][1] = upsizer_out.data;
-assign data[1][2] = comb_out.data;
-assign data[1][3] = nochange_comb_out.data;
-assign data[1][4] = comb_up2_out.data;
+logic [4:0][DWIDTH-1:0] data_in;
+logic [4:0][DWIDTH-1:0] data_out;
+assign downsizer_in.data = data_in[0];
+assign upsizer_in.data = data_in[1];
+assign comb_in.data = data_in[2];
+assign nochange_comb_in.data = data_in[3];
+assign comb_up2_in.data = data_in[4];
+assign data_out[0] = downsizer_out.data;
+assign data_out[1] = upsizer_out.data;
+assign data_out[2] = comb_out.data;
+assign data_out[3] = nochange_comb_out.data;
+assign data_out[4] = comb_up2_out.data;
 
 logic [1:0][4:0] ok;
 assign ok[0][0] = downsizer_in.ok;
@@ -135,53 +134,54 @@ assign comb_in.valid = in_valid[2];
 assign nochange_comb_in.valid = in_valid[3];
 assign comb_up2_in.valid = in_valid[4];
 
-logic [1:0][4:0] last;
-assign downsizer_in.last = last[0][0];
-assign upsizer_in.last = last[0][1];
-assign comb_in.last = last[0][2];
-assign nochange_comb_in.last = last[0][3];
-assign comb_up2_in.last = last[0][4];
-assign last[1][0] = downsizer_out.last;
-assign last[1][1] = upsizer_out.last;
-assign last[1][2] = comb_out.last;
-assign last[1][3] = nochange_comb_out.last;
-assign last[1][4] = comb_up2_out.last;
+logic [4:0] last_in;
+logic [4:0] last_out;
+assign downsizer_in.last = last_in[0];
+assign upsizer_in.last = last_in[1];
+assign comb_in.last = last_in[2];
+assign nochange_comb_in.last = last_in[3];
+assign comb_up2_in.last = last_in[4];
+assign last_out[0] = downsizer_out.last;
+assign last_out[1] = upsizer_out.last;
+assign last_out[2] = comb_out.last;
+assign last_out[3] = nochange_comb_out.last;
+assign last_out[4] = comb_up2_out.last;
 
-localparam [1:0][4:0][31:0] NUM_WORDS = '{
-  '{2, 1, COMB_UP, UP, 1},      // output words
-  '{1, 1, COMB_DOWN, 1, DOWN}   // input words
+localparam [1:0][4:0][31:0] NUM_WORDS = {
+  {32'd2, 32'd1, COMB_UP, UP, 32'd1},      // output words
+  {32'd1, 32'd1, COMB_DOWN, 32'd1, DOWN}   // input words
 };
 
-localparam [4:0][31:0] WORD_SIZE = '{
-  16,                       // comb_up2_dut_i
+localparam [4:0][31:0] WORD_SIZE = {
+  32'd16,                   // comb_up2_dut_i
   DWIDTH_COMB_IN,           // nochange
   DWIDTH_COMB_IN/COMB_DOWN, // both
   DWIDTH_UP_IN,             // upsizer
   DWIDTH_DOWN_IN/DOWN       // downsizer
 };
 
-localparam MAX_WORD_SIZE = math.max(math.max(math.max(math.max(WORD_SIZE[0],WORD_SIZE[1]),WORD_SIZE[2]),WORD_SIZE[3]),WORD_SIZE[4]);
+localparam MAX_WORD_SIZE = (WORD_SIZE[0] > WORD_SIZE[1]) ? ((WORD_SIZE[0] > WORD_SIZE[2]) ? ((WORD_SIZE[0] > WORD_SIZE[3]) ? ((WORD_SIZE[0] > WORD_SIZE[4]) ? WORD_SIZE[0] : WORD_SIZE[4]) : WORD_SIZE[3]) : WORD_SIZE[2]) : WORD_SIZE[1];
 logic [MAX_WORD_SIZE-1:0] sent_word, received_word;
 
 // update data and track sent/received samples
 always_ff @(posedge clk) begin
   if (reset) begin
-    data[1] <= '0;
+    data_in <= '0;
   end else begin
     for (int dut = 0; dut < 5; dut++) begin // select which dut is active
       // inputs
       if (ok[0][dut]) begin
         for (int word = 0; word < DWIDTH/8; word++) begin
-          data[0][dut][word*8+:8] <= $urandom_range(0,8'hff);
+          data_in[dut][word*8+:8] <= $urandom_range(0,8'hff);
         end
         // save data that was sent, split up into individual "words"
         for (int word = 0; word < NUM_WORDS[0][dut]; word++) begin
           for (int i = 0; i < WORD_SIZE[dut]; i++) begin
-            sent_word[i] = data[0][dut][word*WORD_SIZE[dut]+i];
+            sent_word[i] = data_in[dut][word*WORD_SIZE[dut]+i];
           end
           sent[dut].push_front(sent_word & ((1 << WORD_SIZE[dut]) - 1));
         end
-        if (last[0][dut]) begin
+        if (last_in[dut]) begin
           last_sent[dut].push_front(sent[dut].size());
         end
       end
@@ -190,11 +190,11 @@ always_ff @(posedge clk) begin
         // save data that was received, split up into individual "words"
         for (int word = 0; word < NUM_WORDS[1][dut]; word++) begin
           for (int i = 0; i < WORD_SIZE[dut]; i++) begin
-            received_word[i] = data[1][dut][word*WORD_SIZE[dut]+i];
+            received_word[i] = data_out[dut][word*WORD_SIZE[dut]+i];
           end
           received[dut].push_front(received_word & ((1 << WORD_SIZE[dut]) - 1));
         end
-        if (last[1][dut]) begin
+        if (last_out[dut]) begin
           last_received[dut].push_front(received[dut].size());
         end
       end
@@ -228,23 +228,23 @@ task check_dut(input int dut_select);
   int max_extra_samples;
   unique case (dut_select)
     0: begin
-      debug.display("checking downsizer", VERBOSE);
+      debug.display("checking downsizer", sim_util_pkg::VERBOSE);
       max_extra_samples = 0;
     end
     1: begin
-      debug.display("checking upsizer", VERBOSE);
+      debug.display("checking upsizer", sim_util_pkg::VERBOSE);
       max_extra_samples = UP - 1;
     end
     2: begin
-      debug.display("checking combination up:down", VERBOSE);
+      debug.display("checking combination up:down", sim_util_pkg::VERBOSE);
       max_extra_samples = COMB_UP*COMB_DOWN - 1;
     end
     3: begin
-      debug.display("checking nochange combination up:down (1:1)", VERBOSE);
+      debug.display("checking nochange combination up:down (1:1)", sim_util_pkg::VERBOSE);
       max_extra_samples = 0;
     end
     4: begin
-      debug.display("checking combination up:down (1:2)", VERBOSE);
+      debug.display("checking combination up:down (1:2)", sim_util_pkg::VERBOSE);
       max_extra_samples = 1;
     end
   endcase
@@ -252,32 +252,32 @@ task check_dut(input int dut_select);
     "sent[%0d].size() = %0d",
     dut_select,
     sent[dut_select].size()),
-    DEBUG
+    sim_util_pkg::DEBUG
   );
   debug.display($sformatf(
     "received[%0d].size() = %0d",
     dut_select,
     received[dut_select].size()),
-    DEBUG
+    sim_util_pkg::DEBUG
   );
   debug.display($sformatf(
     "last_sent[%0d].size() = %0d",
     dut_select,
     last_sent[dut_select].size()),
-    DEBUG
+    sim_util_pkg::DEBUG
   );
   debug.display($sformatf(
     "last_received[%0d].size() = %0d",
     dut_select,
     last_received[dut_select].size()),
-    DEBUG
+    sim_util_pkg::DEBUG
   );
   while (last_sent[dut_select].size() > 0 && last_received[dut_select].size() > 0) begin
     debug.display($sformatf(
       "last_sent, last_received: %0d, %0d",
       last_sent[dut_select][$],
       last_received[dut_select][$]),
-      DEBUG
+      sim_util_pkg::DEBUG
     );
     last_sent[dut_select].pop_back();
     last_received[dut_select].pop_back();
@@ -327,11 +327,9 @@ initial begin
   // reset input valid
   in_valid <= '0;
   // reset input last
-  last[0] <= '0;
+  last_in <= '0;
   // set readout mode to off for all DUTs(readout disabled)
   readout_mode <= '0;
-  // reset input data
-  data[0] <= '0;
 
   repeat (50) @(posedge clk);
   reset <= 1'b0;
@@ -340,11 +338,11 @@ initial begin
   // do test
   for (int dut = 0; dut < 5; dut++) begin
     unique case (dut)
-      0: debug.display("### TESTING AXIS DOWNSIZER ###", DEFAULT);
-      1: debug.display("### TESTING AXIS UPSIZER ###", DEFAULT);
-      2: debug.display("### TESTING AXIS COMBINED UPSIZER/DOWNSIZER ###", DEFAULT);
-      3: debug.display("### TESTING AXIS COMBINED UPSIZER/DOWNSIZER WITH NO WIDTH CHANGE (I.E. 1:1) ###", DEFAULT);
-      4: debug.display("### TESTING AXIS COMBINED UPSIZER/DOWNSIZER WITH 1:2 WIDTH ###", DEFAULT);
+      0: debug.display("### TESTING AXIS DOWNSIZER ###", sim_util_pkg::DEFAULT);
+      1: debug.display("### TESTING AXIS UPSIZER ###", sim_util_pkg::DEFAULT);
+      2: debug.display("### TESTING AXIS COMBINED UPSIZER/DOWNSIZER ###", sim_util_pkg::DEFAULT);
+      3: debug.display("### TESTING AXIS COMBINED UPSIZER/DOWNSIZER WITH NO WIDTH CHANGE (I.E. 1:1) ###", sim_util_pkg::DEFAULT);
+      4: debug.display("### TESTING AXIS COMBINED UPSIZER/DOWNSIZER WITH 1:2 WIDTH ###", sim_util_pkg::DEFAULT);
     endcase
     repeat (50) begin
       for (int j = 1; j <= 2; j++) begin
@@ -380,15 +378,15 @@ initial begin
             comb_up2_in.send_samples(clk, $urandom_range(3,100), 1'b1, 1'b1);
           end
         endcase
-        last[0][dut] <= 1'b1;
+        last_in[dut] <= 1'b1;
         in_valid[dut] <= 1'b1;
         // wait until last is actually registered by the DUT before deasserting it
         do begin @(posedge clk); end while (!ok[0][dut]);
-        last[0][dut] <= 1'b0;
+        last_in[dut] <= 1'b0;
         in_valid[dut] <= 1'b0;
 
         // read out everything, waiting until last signal on DUT output
-        do begin @(posedge clk); end while (!(last[1][dut] && ok[1][dut]));
+        do begin @(posedge clk); end while (!(last_out[dut] && ok[1][dut]));
         // check the output data matches the input
         check_dut(dut);
         repeat (100) @(posedge clk);

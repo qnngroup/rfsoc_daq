@@ -2,6 +2,7 @@
 // Clock domain crossing for module configuration registers that use
 // AXI-stream
 
+`timescale 1ns/1ps
 module axis_config_reg_cdc #(
   parameter int DWIDTH = 16
 ) (

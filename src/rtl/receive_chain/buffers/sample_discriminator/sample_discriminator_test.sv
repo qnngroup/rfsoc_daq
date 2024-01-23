@@ -9,13 +9,10 @@
 // threshold that arrived before any data below the low threshold is also
 // saved; i.e. it tests for the correct hysteresis behavior).
 
-import sim_util_pkg::*;
-import sample_discriminator_pkg::*;
-
 `timescale 1ns / 1ps
 module sample_discriminator_test();
 
-sim_util_pkg::debug debug = new(DEFAULT); // printing, error tracking
+sim_util_pkg::debug debug = new(sim_util_pkg::DEFAULT); // printing, error tracking
 
 logic clk = 0;
 localparam CLK_RATE_HZ = 100_000_000;
@@ -102,19 +99,19 @@ task check_results (
       "data_sent[%0d].size() = %0d",
       i,
       data_sent[i].size()),
-      VERBOSE 
+      sim_util_pkg::VERBOSE 
     );
     debug.display($sformatf(
       "data_received[%0d].size() = %0d",
       i,
       data_received[i].size()),
-      VERBOSE
+      sim_util_pkg::VERBOSE
     );
     debug.display($sformatf(
       "timestamps_received[%0d].size() = %0d",
       i,
       timestamps_received[i].size()),
-      VERBOSE
+      sim_util_pkg::VERBOSE
     );
     if (data_sent[i].size() < data_received[i].size()) begin
       debug.error("more data received than sent. this is not possible");
@@ -159,24 +156,24 @@ task check_results (
       data_sent[i].pop_back();
       timer[i] = timer[i] + 1'b1;
     end
-    debug.display("after processing:", VERBOSE);
+    debug.display("after processing:", sim_util_pkg::VERBOSE);
     debug.display($sformatf(
       "data_sent[%0d].size() = %0d",
       i,
       data_sent[i].size()),
-      VERBOSE
+      sim_util_pkg::VERBOSE
     );
     debug.display($sformatf(
       "data_received[%0d].size() = %0d",
       i,
       data_received[i].size()),
-      VERBOSE
+      sim_util_pkg::VERBOSE
     );
     debug.display($sformatf(
       "timestamps_received[%0d].size() = %0d",
       i,
       timestamps_received[i].size()),
-      VERBOSE
+      sim_util_pkg::VERBOSE
     );
   end
 endtask
@@ -186,7 +183,7 @@ logic [CHANNELS-1:0][SAMPLE_INDEX_WIDTH-1:0] sample_index;
 logic [CHANNELS-1:0] is_high;
 
 initial begin
-  debug.display("### TESTING SAMPLE DISCRIMINATOR ###", DEFAULT);
+  debug.display("### TESTING SAMPLE DISCRIMINATOR ###", sim_util_pkg::DEFAULT);
   reset <= 1'b1;
   for (int i = 0; i < CHANNELS; i++) begin
     data_range_low[i] <= '0;
@@ -219,8 +216,8 @@ initial begin
     repeat (50) @(posedge clk);
     data_in.send_samples(clk, 10, 1'b0, 1'b1);
     repeat (50) @(posedge clk);
-    debug.display("testing run with all data above thresholds", VERBOSE);
-    debug.display("first sample will be zero", VERBOSE);
+    debug.display("testing run with all data above thresholds", sim_util_pkg::VERBOSE);
+    debug.display("first sample will be zero", sim_util_pkg::VERBOSE);
     check_results(threshold_low, threshold_high, timer, sample_index, is_high);
     
     // send a bunch of data, some below and some above the threshold on channel 0
@@ -237,8 +234,8 @@ initial begin
     repeat (50) @(posedge clk);
     data_in.send_samples(clk, 100, 1'b0, 1'b1);
     repeat (50) @(posedge clk);
-    debug.display("testing run with channel 0 straddling thresholds", VERBOSE);
-    debug.display("and channel 1 above thresholds", VERBOSE);
+    debug.display("testing run with channel 0 straddling thresholds", sim_util_pkg::VERBOSE);
+    debug.display("and channel 1 above thresholds", sim_util_pkg::VERBOSE);
     check_results(threshold_low, threshold_high, timer, sample_index, is_high);
 
     // send a bunch of data below the threshold
@@ -256,7 +253,7 @@ initial begin
     repeat (50) @(posedge clk);
     data_in.send_samples(clk, 400, 1'b0, 1'b1);
     repeat (50) @(posedge clk);
-    debug.display("testing run with all data below thresholds", VERBOSE);
+    debug.display("testing run with all data below thresholds", sim_util_pkg::VERBOSE);
     check_results(threshold_low, threshold_high, timer, sample_index, is_high);
 
     // send a bunch of data close to the threshold
@@ -274,7 +271,7 @@ initial begin
     repeat (50) @(posedge clk);
     data_in.send_samples(clk, 400, 1'b0, 1'b1);
     repeat (50) @(posedge clk);
-    debug.display("testing run with both channels straddling thresholds", VERBOSE);
+    debug.display("testing run with both channels straddling thresholds", sim_util_pkg::VERBOSE);
     check_results(threshold_low, threshold_high, timer, sample_index, is_high);
 
     // reset state of counter and is_high

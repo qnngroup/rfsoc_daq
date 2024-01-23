@@ -1,14 +1,11 @@
 // triangle_test.sv - Reed Foster
 // Test triangle wave generator
 
-import sim_util_pkg::*;
-
 `timescale 1ns/1ps
 
 module triangle_test ();
 
-sim_util_pkg::debug debug = new(DEFAULT);
-sim_util_pkg::math #(int) math;
+sim_util_pkg::debug debug = new(sim_util_pkg::DEFAULT);
 
 logic dac_reset;
 logic dac_clk = 0;
@@ -50,6 +47,9 @@ typedef logic signed [SAMPLE_WIDTH-1:0] sample_t;
 sample_t samples_received [CHANNELS][$];
 logic save_data;
 
+sim_util_pkg::math #(int) math_int;
+sim_util_pkg::math #(sample_t) math_samp;
+
 assign phase_increment = {CHANNELS{32'h00080000}};
 
 always @(posedge dac_clk) begin
@@ -68,7 +68,7 @@ task automatic check_results ();
   int sample_count;
   // actually check that we're producing the correct output
   for (int channel = 0; channel < CHANNELS; channel++) begin
-    debug.display($sformatf("channel %0d: trigger_times.size() = %0d", channel, trigger_times[channel].size()), DEBUG);
+    debug.display($sformatf("channel %0d: trigger_times.size() = %0d", channel, trigger_times[channel].size()), sim_util_pkg::DEBUG);
     last_sample = {1'b1, {(SAMPLE_WIDTH-1){1'b0}}};
     sample_count = 0;
     direction = UP;
@@ -80,9 +80,9 @@ task automatic check_results ();
         last_sample,
         samples_received[channel][$],
         last_sample),
-        DEBUG
+        sim_util_pkg::DEBUG
       );
-      if (math.abs(int'(sample_t'(samples_received[channel][$]) - sample_t'(last_sample))) > 2*phase_increment[channel][PHASE_BITS-1-:SAMPLE_WIDTH]) begin
+      if (math_samp.abs(sample_t'(samples_received[channel][$]) - sample_t'(last_sample)) > 2*phase_increment[channel][PHASE_BITS-1-:SAMPLE_WIDTH]) begin
         debug.error($sformatf(
         "channel %0d: sample pair with incorrect difference %x, %x; phase_inc = %x",
         channel,
@@ -114,13 +114,13 @@ task automatic check_results ();
               channel,
               samples_received[channel][$],
               last_sample),
-              DEBUG
+              sim_util_pkg::DEBUG
             );
             // check for trigger if we crossed zero
             // if the trigger time is within PARALLEL_SAMPLES of the actual
             // time, then that's okay
             if (trigger_times[channel].size() > 0) begin
-              if (math.abs(trigger_times[channel][$] - sample_count) > PARALLEL_SAMPLES) begin
+              if (math_int.abs(trigger_times[channel][$] - sample_count) > PARALLEL_SAMPLES) begin
                 debug.error($sformatf(
                   "channel %0d: got incorrect trigger time, current sample count is %0d, but trigger_time is %0d",
                   channel,
@@ -172,7 +172,7 @@ task automatic check_results ();
 endtask
 
 initial begin
-  debug.display("### TESTING TRIANGLE WAVE GENERATOR ###", DEFAULT);
+  debug.display("### TESTING TRIANGLE WAVE GENERATOR ###", sim_util_pkg::DEFAULT);
   ps_reset <= 1'b1;
   dac_reset <= 1'b1;
   ps_phase_inc.valid <= 1'b0;

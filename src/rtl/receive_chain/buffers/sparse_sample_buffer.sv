@@ -1,6 +1,8 @@
 // sparse_sample_buffer - Reed Foster
 // performs threshold-based sample discrimination on multiple channels and
 // saves the results (raw data and timestamps) in a banked sample buffer
+
+`timescale 1ns/1ps
 module sparse_sample_buffer #(
   parameter int CHANNELS = 2, // number of input channels
   parameter int TSTAMP_BUFFER_DEPTH = 1024, // depth of timestamp buffer

@@ -1,6 +1,8 @@
 // axis_differentiator.sv - Reed Foster
 // computes first-order finite difference to approximate time derivative of
 // input signal
+
+`timescale 1ns/1ps
 module axis_differentiator #(
   parameter int SAMPLE_WIDTH = 16,
   parameter int PARALLEL_SAMPLES = 2
@@ -43,7 +45,7 @@ always_ff @(posedge clk) begin
         // for the 0th parallel sample, it's previous neighbor arrived in the
         // last clock cycle, so we need to use data_in_reg_d
         // otherwise, just subtract the i-1th parallel sample
-        diff[i] <= data_in_reg[i] - ((i == 0) ? data_in_reg_d : data_in_reg[i-1]); // 1Q16
+        diff[i] <= (SAMPLE_WIDTH+1)'(data_in_reg[i]) - ((i == 0) ? (SAMPLE_WIDTH+1)'(data_in_reg_d) : (SAMPLE_WIDTH+1)'(data_in_reg[i-1])); // 1Q16
         // round and truncate
         diff_d[i] <= diff[i][SAMPLE_WIDTH-:SAMPLE_WIDTH]; // 1Q15
         data_out.data[i*SAMPLE_WIDTH+:SAMPLE_WIDTH] <= diff_d[i];

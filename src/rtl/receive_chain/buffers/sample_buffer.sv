@@ -27,6 +27,8 @@
 //    (every bank output has to go to the same area for multiplexing, leading
 //    to large routing delays: ~2ns to go 1/4 of the way across the chip,
 //    which blows the slack budget in one go)
+
+`timescale 1ns/1ps
 module sample_buffer #(
   parameter int CHANNELS = 8, // number of ADC channels
   parameter int BUFFER_DEPTH = 8192, // maximum capacity across all channels
@@ -53,7 +55,7 @@ assign start_stop.ready = 1'b1; // don't apply backpressure, always allow start/
 // e.g. for 16 channels: single-channel mode, dual-channel, 4-channel, 8-channel, and 16-channel modes
 localparam int N_BANKING_MODES = $clog2(CHANNELS) + 1;
 logic [$clog2(N_BANKING_MODES)-1:0] banking_mode;
-logic [$clog2(CHANNELS):0] n_active_channels; // extra bit so we can represent n from [0,...CHANNELS]
+logic [$clog2(CHANNELS+1)-1:0] n_active_channels; // will have an extra bit so we can represent n from [0,...CHANNELS]
 assign n_active_channels = 1'b1 << banking_mode;
 logic start, stop;
 assign capture_started = start;
@@ -162,7 +164,7 @@ always_ff @(posedge clk) begin
     if (start) begin
       bank_select <= '0;
     end else if (all_banks_out.ok[bank_select] && all_banks_out.last[bank_select]) begin
-      if (bank_select == CHANNELS - 1) begin
+      if (bank_select == $clog2(CHANNELS)'(CHANNELS - 1)) begin
         bank_select <= '0;
       end else begin
         bank_select <= bank_select + 1'b1;
@@ -182,7 +184,7 @@ always_ff @(posedge clk) begin
       data_out.data <= all_banks_out.data[bank_select];
       data_out.valid <= all_banks_out.valid[bank_select];
       // only take last signal from the final bank, and only when the final bank is selected
-      data_out.last <= (bank_select == CHANNELS - 1) && all_banks_out.last[bank_select];
+      data_out.last <= (bank_select == $clog2(CHANNELS)'(CHANNELS - 1)) && all_banks_out.last[bank_select];
     end
   end
 end
@@ -190,7 +192,7 @@ end
 // only supply a ready signal to the bank currently selected for readout
 always_comb begin
   for (int i = 0; i < CHANNELS; i++) begin
-    if (i == bank_select) begin
+    if ($clog2(CHANNELS)'(i) == bank_select) begin
       all_banks_out.ready[i] = data_out.ready;
     end else begin
       all_banks_out.ready[i] = 1'b0; // stall all other banks until we're done reading out the current one
@@ -209,9 +211,13 @@ generate
 
     logic first_sample;
 
+    logic [$clog2(CHANNELS+1)-1:0] channel_id;
+
+    assign channel_id = $clog2(CHANNELS+1)'(i) % n_active_channels;
+
     // connect bank_out to all_banks_out
     // mux first sample from the bank with the channel ID
-    assign all_banks_out.data[i] = first_sample ? (i % n_active_channels) : bank_out.data;
+    assign all_banks_out.data[i] = first_sample ? (SAMPLE_WIDTH*PARALLEL_SAMPLES)'(channel_id) : bank_out.data;
     assign all_banks_out.valid[i] = bank_out.valid;
     assign all_banks_out.last[i] = bank_out.last;
     assign bank_out.ready = all_banks_out.ready[i];
@@ -237,18 +243,18 @@ generate
     logic valid_d; // match latency of registered data input
     // when chaining banks in series, which bank should the current bank i wait for
     always_comb begin
-      if ((n_active_channels != CHANNELS) && (i >= n_active_channels)) begin
+      if ((n_active_channels != $clog2(CHANNELS+1)'(CHANNELS)) && ($clog2(CHANNELS+1)'(i) >= n_active_channels)) begin
         // if the banking mode is not fully-independent (i.e. fewer than the
         // maximum number of channels are in use), then only activate the
         // current bank if previous banks are full
-        bank_in.valid = valid_d & (banks_full[i - n_active_channels] | banks_full_latch[i - n_active_channels]);
+        bank_in.valid = valid_d & (banks_full[$clog2(CHANNELS)'($clog2(CHANNELS+1)'(i) - n_active_channels)] | banks_full_latch[$clog2(CHANNELS)'($clog2(CHANNELS+1)'(i) - n_active_channels)]);
       end else begin
         bank_in.valid = valid_d;
       end
     end
     always_ff @(posedge clk) begin
-      bank_in.data <= data_in.data[i % n_active_channels];
-      valid_d <= data_in.valid[i % n_active_channels];
+      bank_in.data <= data_in.data[$clog2(CHANNELS)'(channel_id)];
+      valid_d <= data_in.valid[$clog2(CHANNELS)'(channel_id)];
     end
   end
 endgenerate

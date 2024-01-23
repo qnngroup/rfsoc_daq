@@ -1,8 +1,6 @@
 // dds_pkg.sv - Reed Foster
 // utilities for testing DDS module
 
-import sim_util_pkg::*;
-
 package dds_pkg;
 
   class util #(
@@ -32,7 +30,7 @@ package dds_pkg;
         debug.display($sformatf("checking output for channel %0d", channel), sim_util_pkg::DEBUG);
         // get close to a zero-crossing to get better estimate of the phase
         while ((math.abs(received[channel][$]) > math.abs(received[channel][$-1]))
-                || (math.abs(received[channel][$]) > 12'hfff)) received[channel].pop_back();
+                || (math.abs(received[channel][$]) > {'0, 12'hfff})) received[channel].pop_back();
         if (received[channel].size() < 64) begin
           debug.error("not enough values left to test, please increase number of samples captured");
         end

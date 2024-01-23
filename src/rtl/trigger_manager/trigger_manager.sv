@@ -1,5 +1,6 @@
 // trigger_manager.sv - Reed Foster
 
+`timescale 1ns/1ps
 module trigger_manager #(
   parameter int CHANNELS = 8
 ) (

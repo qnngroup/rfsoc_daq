@@ -4,12 +4,10 @@
 // Output is compared to input bit-by-bit at the end of the test by comparing
 // queues of sent bits and received bits
 
-import sim_util_pkg::*;
-
 `timescale 1ns / 1ps
 module lmh6401_spi_test();
 
-sim_util_pkg::debug debug = new(DEFAULT); // printing, error tracking
+sim_util_pkg::debug debug = new(sim_util_pkg::DEFAULT); // printing, error tracking
 
 logic clk = 0;
 localparam CLK_RATE_HZ = 100_000_000;
@@ -81,13 +79,13 @@ task check_results();
       "received[%0d].size() = %0d",
       channel,
       received[channel].size()),
-      VERBOSE
+      sim_util_pkg::VERBOSE
     );
     debug.display($sformatf(
       "sent[%0d].size() = %0d",
       channel,
       sent[channel].size()),
-      VERBOSE
+      sim_util_pkg::VERBOSE
     );
     if (received[channel].size() != sent[channel].size()) begin
       debug.error($sformatf(
@@ -123,7 +121,7 @@ lmh6401_spi #(
 );
 
 initial begin
-  debug.display("### RUNNING TEST FOR LMH6401_SPI ###", DEFAULT);
+  debug.display("### RUNNING TEST FOR LMH6401_SPI ###", sim_util_pkg::DEFAULT);
   reset <= 1'b1;
   command_in.valid <= '0;
   repeat (500) @(posedge clk);

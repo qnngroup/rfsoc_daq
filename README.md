@@ -28,40 +28,38 @@ Each unit test should create an instance of the `sim_util_pkg::debug` class to t
 The `sim_util_pkg::debug` class offers 3 levels of verbosity: `DEFAULT` (lowest verbosity, good for regression tests or sanity checks), `VERBOSE` (medium verbosity), and `DEBUG` (highest verbosity, good if something is going wrong).
 
 ```
-sim_util_pkg::debug debug = new(DEFAULT);
+sim_util_pkg::debug debug = new(sim_util_pkg::DEFAULT);
 ```
 
 The method `sim_util_pkg::debug.display(string msg, verbosity_t verbosity)` allows print statements to be generated at differing verbosity levels.
 For example, if the method were called like so:
 
 ```
-debug.display("Running test my_module_test", DEFAULT);
+debug.display("Running test my_module_test", sim_util_pkg::DEFAULT);
 ```
 
 then the message `Running test for module my_module` would always be printed out, regardless of what verbosity setting the instance `debug` is initialized with.
 However, if the method were called like this
 
 ```
-debug.display("Signal in submodule my_module_test.dut.dut_submodule is x", VERBOSE);
+debug.display("Signal in submodule my_module_test.dut.dut_submodule is x", sim_util_pkg::VERBOSE);
 ```
 
 then the message would only be printed if the `debug` was initialized with a verbosity setting of `VERBOSE` or `DEBUG`.
 That is:
 
 ```
-sim_util_pkg::debug debug = new(VERBOSE);
+sim_util_pkg::debug debug = new(sim_util_pkg::VERBOSE);
 // or
-sim_util_pkg::debug debug = new(DEBUG);
+sim_util_pkg::debug debug = new(sim_util_pkg::DEBUG);
 ```
 
 Here's a template:
 ```
-import sim_util_pkg::*;
-
 `timescale 1ns / 1ps
 module my_module_test ();
 
-sim_util_pkg::debug debug = new(DEFAULT);
+sim_util_pkg::debug debug = new(sim_util_pkg::DEFAULT);
 
 logic reset;
 logic clk = 0;
@@ -69,11 +67,11 @@ localparam CLK_RATE_HZ = 100_000_000;
 always #(0.5s/CLK_RATE_HZ) clk = ~clk;
 
 initial begin
-  debug.display("### RUNNING TEST FOR MY_MODULE ", DEFAULT);
+  debug.display("### RUNNING TEST FOR MY_MODULE ", sim_util_pkg::DEFAULT);
   // run test
   ...
 
-  debug.display("super verbose debug information to help debug when module breaks", DEBUG);
+  debug.display("super verbose debug information to help debug when module breaks", sim_util_pkg::DEBUG);
   ...
 
   // check for an error, and report if so
@@ -88,9 +86,18 @@ end
 endmodule
 ```
 
+### Linting your module
+
+To make sure you don't have any syntax errors and don't have sloppy coding practices, run the linter (`./script/lint.sh` from the repository root).
+There are a couple violations that are ignored:
+ - `INITIALDLY` in `*_test.sv`, `*_If.sv`, and `*/verif/*.sv` (this allows for the use of blocking assignments in initial blocks for code used in simulation, which is standard).
+ - `MULTITOP` (this allows all of the modules to be linted)
+ - `WIDTHEXPAND`, `WIDTHTRUNC`, and `WIDTHCONCAT` in `*_test.sv` and `*/verif/*.sv` (this allows for sloppier comparison/assignment regarding bitwidths of quantities in simulation-only code)
+
+
 ### Testing your module
 
-Run `$ script/unit.sh my_module_test`. The script can be run from any directory, but it's preferrable to run it from either the repository root or the script directory to avoid cluttering other directories with Vivado log/journal files.
+Run `$ script/unit.sh my_module_test`. The script can be run from any directory, but it's preferrable to run it from either the repository root or the script directory to avoid cluttering other directories with Vivado log/journal files (the script will automatically clean any Vivado log files created in the repository root or in the script directory).
 
 Also note that the unit test script can take a variable number of arguments, allowing for debugging of multiple modules simultaneously:
 

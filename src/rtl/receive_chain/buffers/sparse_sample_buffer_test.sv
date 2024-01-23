@@ -4,14 +4,11 @@
 // (i.e. timestamps first, then data, and for each bank, outputting the
 // corresponding channel index and sample quantity stored in that bank)
 
-import sim_util_pkg::*;
-import sample_discriminator_pkg::*;
-
 `timescale 1ns / 1ps
 module sparse_sample_buffer_test ();
 
 sim_util_pkg::math #(int) math; // abs, max functions on integers
-sim_util_pkg::debug debug = new(DEFAULT); // printing, error tracking
+sim_util_pkg::debug debug = new(sim_util_pkg::DEFAULT); // printing, error tracking
 
 logic clk = 0;
 localparam CLK_RATE_HZ = 100_000_000;
@@ -139,9 +136,9 @@ task check_results(
 
   // first report the size of the buffers
   for (int i = 0; i < CHANNELS; i++) begin
-    debug.display($sformatf("data_sent[%0d].size() = %0d", i, data_sent[i].size()), VERBOSE);
+    debug.display($sformatf("data_sent[%0d].size() = %0d", i, data_sent[i].size()), sim_util_pkg::VERBOSE);
   end
-  debug.display($sformatf("data_received.size() = %0d", data_received.size()), VERBOSE);
+  debug.display($sformatf("data_received.size() = %0d", data_received.size()), sim_util_pkg::VERBOSE);
 
   // make sure that last arrived before max_transfer_count samples
   if (last_received.size() !== 1) begin
@@ -164,10 +161,10 @@ task check_results(
   // organize DMA output into data structures for easier analysis
   ///////////////////////////////////////////////////////////////////
   buf_util.parse_buffer_output(data_received, timestamps, samples);
-  debug.display("parsed data_received:", VERBOSE);
+  debug.display("parsed data_received:", sim_util_pkg::VERBOSE);
   for (int i = 0; i < CHANNELS; i++) begin
-    debug.display($sformatf("timestamps[%0d].size() = %0d", i, timestamps[i].size()), VERBOSE);
-    debug.display($sformatf("samples[%0d].size() = %0d", i, samples[i].size()), VERBOSE);
+    debug.display($sformatf("timestamps[%0d].size() = %0d", i, timestamps[i].size()), sim_util_pkg::VERBOSE);
+    debug.display($sformatf("samples[%0d].size() = %0d", i, samples[i].size()), sim_util_pkg::VERBOSE);
   end
 
   //////////////////////////////////////
@@ -221,7 +218,7 @@ endtask
 int samples_to_send;
 
 initial begin
-  debug.display("### RUNNING TEST FOR SPARSE_SAMPLE_BUFFER ###", DEFAULT);
+  debug.display("### RUNNING TEST FOR SPARSE_SAMPLE_BUFFER ###", sim_util_pkg::DEFAULT);
   reset <= 1'b1;
   capture_start <= 1'b0;
   capture_stop <= 1'b0;
@@ -332,9 +329,9 @@ initial begin
           end
           repeat (10) @(posedge clk);
           data_out.do_readout(clk, 1'b1, 100000);
-          debug.display($sformatf("checking results amplitude_mode = %0d", amplitude_mode), VERBOSE);
-          debug.display($sformatf("banking mode                    = %0d", bank_mode), VERBOSE);
-          debug.display($sformatf("samples sent with rand_valid    = %0d", in_valid_rand), VERBOSE);
+          debug.display($sformatf("checking results amplitude_mode = %0d", amplitude_mode), sim_util_pkg::VERBOSE);
+          debug.display($sformatf("banking mode                    = %0d", bank_mode), sim_util_pkg::VERBOSE);
+          debug.display($sformatf("samples sent with rand_valid    = %0d", in_valid_rand), sim_util_pkg::VERBOSE);
           check_results(
             bank_mode,
             threshold_high,

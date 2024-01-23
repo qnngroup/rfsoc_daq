@@ -38,7 +38,7 @@ logic [CHANNELS-1:0][PHASE_BITS-1:0] dac_cycle_phase;
 
 localparam int LATENCY = 2;
 logic [LATENCY-1:0] dac_data_valid;
-assign dac_data_out.valid = {CHANNELS{dac_data_valid[LATENCY-1:0]}};
+assign dac_data_out.valid = {CHANNELS{dac_data_valid[LATENCY-1]}};
 
 always_ff @(posedge dac_clk) begin
   if (dac_reset) begin

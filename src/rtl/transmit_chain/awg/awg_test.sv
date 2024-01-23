@@ -12,14 +12,11 @@
 //  - tests with random-length frame
 //  - tests with a random-length burst
 
-import sim_util_pkg::*;
-import awg_pkg::*;
-
 `timescale 1ns/1ps
 
 module awg_test ();
 
-sim_util_pkg::debug debug = new(DEFAULT);
+sim_util_pkg::debug debug = new(sim_util_pkg::DEFAULT);
 
 parameter int DEPTH = 256;
 parameter int AXI_MM_WIDTH = 128;
@@ -38,7 +35,7 @@ localparam DMA_CLK_RATE_HZ = 100_000_000;
 always #(0.5s/DMA_CLK_RATE_HZ) dma_clk = ~dma_clk;
 
 Axis_If #(.DWIDTH(AXI_MM_WIDTH)) dma_data_in ();
-Axis_If #(.DWIDTH((1+$clog2(DEPTH))*CHANNELS)) dma_write_depth ();
+Axis_If #(.DWIDTH($clog2(DEPTH)*CHANNELS)) dma_write_depth ();
 Axis_If #(.DWIDTH(2*CHANNELS)) dma_trigger_out_config ();
 Axis_If #(.DWIDTH(64*CHANNELS)) dma_awg_burst_length ();
 Axis_If #(.DWIDTH(2)) dma_awg_start_stop ();
@@ -83,7 +80,7 @@ awg #(
   .dac_trigger
 );
 
-logic [$clog2(DEPTH):0] write_depths [CHANNELS];
+logic [$clog2(DEPTH)-1:0] write_depths [CHANNELS];
 logic [63:0] burst_lengths [CHANNELS];
 logic [1:0] trigger_modes [CHANNELS];
 logic [SAMPLE_WIDTH-1:0] samples_to_send [CHANNELS][$];
@@ -102,7 +99,7 @@ always @(posedge dma_clk) begin
 end
 
 initial begin
-  debug.display("### TESTING ARBITRARY WAVEFORM GENERATOR ###", DEFAULT);
+  debug.display("### TESTING ARBITRARY WAVEFORM GENERATOR ###", sim_util_pkg::DEFAULT);
 
   dac_reset <= 1'b1;
   dma_reset <= 1'b1;
@@ -124,7 +121,7 @@ initial begin
     burst_lengths[channel] = $urandom_range(1, 4);
     trigger_modes[channel] = $urandom_range(0, 2);
   end
-  write_depths[0] = DEPTH; // test max-depth
+  write_depths[0] = DEPTH - 1; // test max-depth
  
   for (int start_repeat_count = 0; start_repeat_count < 5; start_repeat_count += 1 + 2*start_repeat_count) begin
     for (int rand_valid = 0; rand_valid < 2; rand_valid++) begin
@@ -134,7 +131,7 @@ initial begin
           start_repeat_count,
           tlast_check,
           rand_valid),
-          VERBOSE
+          sim_util_pkg::VERBOSE
         );
         // set registers to configure the DUT
         util.configure_dut(
@@ -173,7 +170,7 @@ initial begin
         dma_data_in.valid <= 1'b0;
         dma_data_in.last <= 1'b0;
 
-        debug.display("done sending samples over DMA", DEBUG);
+        debug.display("done sending samples over DMA", sim_util_pkg::DEBUG);
 
         util.check_transfer_error(debug, dma_clk, tlast_check);
         
@@ -213,7 +210,7 @@ initial begin
               debug.display($sformatf(
                 "tlast_check = %0d, so not going to check output data since it will be garbage",
                 tlast_check),
-                VERBOSE
+                sim_util_pkg::VERBOSE
               );
             end
             // clear receive queues

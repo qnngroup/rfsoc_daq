@@ -1,13 +1,10 @@
 // receive_top_test.sv - Reed Foster
 // verifies data from ADC is saved correctly
 
-import sim_util_pkg::*;
-import sample_discriminator_pkg::*;
-
 `timescale 1ns / 1ps
 module receive_top_test ();
 
-sim_util_pkg::debug debug = new(DEFAULT); // printing, error tracking
+sim_util_pkg::debug debug = new(sim_util_pkg::DEFAULT); // printing, error tracking
 
 logic adc_reset;
 logic adc_clk = 0;
@@ -205,18 +202,18 @@ task check_results(
 
   // first report the size of the buffers
   for (int i = 0; i < CHANNELS; i++) begin
-    debug.display($sformatf("expected[%0d].size() = %0d", i, expected[i].size()), VERBOSE);
+    debug.display($sformatf("expected[%0d].size() = %0d", i, expected[i].size()), sim_util_pkg::VERBOSE);
   end
-  debug.display($sformatf("data_received.size() = %0d", data_received.size()), VERBOSE);
+  debug.display($sformatf("data_received.size() = %0d", data_received.size()), sim_util_pkg::VERBOSE);
 
   ///////////////////////////////////////////////////////////////////
   // organize DMA output into data structures for easier analysis
   ///////////////////////////////////////////////////////////////////
   buf_util.parse_buffer_output(data_received, timestamps, samples);
-  debug.display("parsed data_received:", VERBOSE);
+  debug.display("parsed data_received:", sim_util_pkg::VERBOSE);
   for (int i = 0; i < CHANNELS; i++) begin
-    debug.display($sformatf("timestamps[%0d].size() = %0d", i, timestamps[i].size()), VERBOSE);
-    debug.display($sformatf("samples[%0d].size() = %0d", i, samples[i].size()), VERBOSE);
+    debug.display($sformatf("timestamps[%0d].size() = %0d", i, timestamps[i].size()), sim_util_pkg::VERBOSE);
+    debug.display($sformatf("samples[%0d].size() = %0d", i, samples[i].size()), sim_util_pkg::VERBOSE);
   end
 
   //////////////////////////////////////
@@ -239,7 +236,7 @@ endtask
 int samples_to_send;
 
 initial begin
-  debug.display("### RUNNING TEST FOR RECEIVE_TOP ###", DEFAULT);
+  debug.display("### RUNNING TEST FOR RECEIVE_TOP ###", sim_util_pkg::DEFAULT);
   adc_reset <= 1'b1;
   ps_reset <= 1'b1;
   ps_capture_start <= 1'b0;
@@ -387,10 +384,10 @@ initial begin
             // readout over DMA interface with randomly toggling ready signal.
             // wait for last timeout is 100k clock cycles
             adc_dma_out.do_readout(adc_clk, 1'b1, 100000);
-            debug.display($sformatf("checking results amplitude_mode = %0d", amplitude_mode), VERBOSE);
-            debug.display($sformatf("banking mode                    = %0d", bank_mode), VERBOSE);
-            debug.display($sformatf("samples sent with rand_valid    = %0d", in_valid_rand), VERBOSE);
-            debug.display($sformatf("mux_select_mode                 = %0d", mux_select_mode), VERBOSE);
+            debug.display($sformatf("checking results amplitude_mode = %0d", amplitude_mode), sim_util_pkg::VERBOSE);
+            debug.display($sformatf("banking mode                    = %0d", bank_mode), sim_util_pkg::VERBOSE);
+            debug.display($sformatf("samples sent with rand_valid    = %0d", in_valid_rand), sim_util_pkg::VERBOSE);
+            debug.display($sformatf("mux_select_mode                 = %0d", mux_select_mode), sim_util_pkg::VERBOSE);
             if (mux_select_mode == 0) begin
               // check with raw_samples
               check_results(raw_samples, bank_mode, threshold_high, threshold_low, timer, amplitude_mode == 0);

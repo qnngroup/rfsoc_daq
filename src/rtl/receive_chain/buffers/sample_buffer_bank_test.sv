@@ -1,12 +1,10 @@
 // sample_buffer_bank_test.sv - Reed Foster
 // test for the individual banks
 
-import sim_util_pkg::*;
-
 `timescale 1ns / 1ps
 module sample_buffer_bank_test ();
 
-sim_util_pkg::debug debug = new(DEFAULT); // printing, error tracking
+sim_util_pkg::debug debug = new(sim_util_pkg::DEFAULT); // printing, error tracking
 
 logic clk = 0;
 localparam CLK_RATE_HZ = 100_000_000;
@@ -17,8 +15,11 @@ logic reset;
 logic start, stop;
 logic full;
 
-Axis_If #(.DWIDTH(16)) data_in ();
-Axis_If #(.DWIDTH(16)) data_out ();
+localparam int PARALLEL_SAMPLES = 2;
+localparam int SAMPLE_WIDTH = 16;
+
+Axis_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH)) data_in ();
+Axis_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH)) data_out ();
 
 sample_buffer_bank #(
   .BUFFER_DEPTH(1024),
@@ -31,12 +32,13 @@ sample_buffer_bank #(
   .data_out,
   .start,
   .stop,
-  .full
+  .full,
+  .first()
 );
 
 int sample_count;
-logic [15:0] data_sent [$];
-logic [15:0] data_received [$];
+logic [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0] data_sent [$];
+logic [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0] data_received [$];
 int last_received [$];
 
 // send data to DUT and save data that was sent/received
@@ -48,7 +50,9 @@ always @(posedge clk) begin
     // send data
     if (data_in.ok) begin
       sample_count <= sample_count + 1;
-      data_in.data <= $urandom_range(1<<16);
+      for (int sample = 0; sample < PARALLEL_SAMPLES; sample++) begin
+        data_in.data[sample*SAMPLE_WIDTH+:SAMPLE_WIDTH] <= SAMPLE_WIDTH'($urandom_range({SAMPLE_WIDTH{1'b1}}));
+      end
     end
     // save data that was sent/received
     if (data_in.ok) begin
@@ -78,8 +82,8 @@ task check_results();
   // pop first sample received since it is intended to be overwritten in
   // multibank buffer
   data_received.pop_back();
-  debug.display($sformatf("data_sent.size() = %0d", data_sent.size()), VERBOSE);
-  debug.display($sformatf("data_received.size() = %0d", data_received.size()), VERBOSE);
+  debug.display($sformatf("data_sent.size() = %0d", data_sent.size()), sim_util_pkg::VERBOSE);
+  debug.display($sformatf("data_received.size() = %0d", data_received.size()), sim_util_pkg::VERBOSE);
   if ((data_sent.size() + 1) != data_received.size()) begin
     debug.error($sformatf(
       "mismatch in amount of sent/received data (sent %0d, received %0d)",
@@ -110,7 +114,7 @@ task check_results();
 endtask
 
 initial begin
-  debug.display("### TESTING SAMPLE_BUFFER_BANK ###", DEFAULT);
+  debug.display("### TESTING SAMPLE_BUFFER_BANK ###", sim_util_pkg::DEFAULT);
   reset <= 1'b1;
   start <= 1'b0;
   stop <= 1'b0;
@@ -132,7 +136,7 @@ initial begin
   @(posedge clk);
   stop <= 1'b0;
   data_out.do_readout(clk, 1'b1, 100000);
-  debug.display("checking results for test with a few samples", VERBOSE);
+  debug.display("checking results for test with a few samples", sim_util_pkg::VERBOSE);
   check_results();
   // do more tests
 
@@ -149,7 +153,7 @@ initial begin
   @(posedge clk);
   stop <= 1'b0;
   data_out.do_readout(clk, 1'b1, 1000);
-  debug.display("checking results for test with one sample", VERBOSE);
+  debug.display("checking results for test with one sample", sim_util_pkg::VERBOSE);
   check_results();
 
   // test with no samples
@@ -164,7 +168,7 @@ initial begin
   @(posedge clk);
   stop <= 1'b0;
   data_out.do_readout(clk, 1'b1, 1000);
-  debug.display("checking results for test with no samples", VERBOSE);
+  debug.display("checking results for test with no samples", sim_util_pkg::VERBOSE);
   check_results();
 
   // fill up buffer
@@ -182,7 +186,7 @@ initial begin
   @(posedge clk);
   stop <= 1'b0;
   data_out.do_readout(clk, 1'b1, 100000);
-  debug.display("checking results for test with 1024 samples (full buffer)", VERBOSE);
+  debug.display("checking results for test with 1024 samples (full buffer)", sim_util_pkg::VERBOSE);
   check_results();
   repeat (500) @(posedge clk);
   debug.finish();

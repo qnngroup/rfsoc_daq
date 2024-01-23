@@ -4,6 +4,7 @@
 // Breaks out SV interfaces into verilog-compatible ports so that the toplevel
 // can be instantiated in a block diagram
 
+`timescale 1ns/1ps
 module daq_axis_sv #(
   // Shared parameters
   parameter int SAMPLE_WIDTH = 16, // width in bits of each sample
@@ -76,7 +77,7 @@ module daq_axis_sv #(
   // DAC CONFIGURATION
   //////////////////////////////////////////////////////
   // awg frame depth
-  input   wire [(1+$clog2(AWG_DEPTH))*CHANNELS-1:0]       s_axis_awg_frame_depth_tdata,
+  input   wire [$clog2(AWG_DEPTH)*CHANNELS-1:0]           s_axis_awg_frame_depth_tdata,
   input   wire                                            s_axis_awg_frame_depth_tvalid,
   output  wire                                            s_axis_awg_frame_depth_tready,
   // awg burst length
@@ -182,7 +183,7 @@ module daq_axis_sv #(
 //////////////////////////////////////////////////////
 // AWG interfaces
 Axis_If #(.DWIDTH(AXI_MM_WIDTH)) ps_awg_dma_in ();
-Axis_If #(.DWIDTH((1+$clog2(AWG_DEPTH))*CHANNELS)) ps_awg_frame_depth ();
+Axis_If #(.DWIDTH($clog2(AWG_DEPTH)*CHANNELS)) ps_awg_frame_depth ();
 Axis_If #(.DWIDTH(64*CHANNELS)) ps_awg_burst_length ();
 Axis_If #(.DWIDTH(2*CHANNELS)) ps_awg_trigger_out_config ();
 Axis_If #(.DWIDTH(2)) ps_awg_start_stop ();

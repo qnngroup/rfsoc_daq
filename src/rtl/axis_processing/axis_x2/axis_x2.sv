@@ -1,5 +1,7 @@
 // axis_x2.sv - Reed Foster
 // computes x^2 on axi-stream data
+
+`timescale 1ns/1ps
 module axis_x2 #(
   parameter int SAMPLE_WIDTH = 16,
   parameter int PARALLEL_SAMPLES = 1,

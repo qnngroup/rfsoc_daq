@@ -10,12 +10,10 @@
 // constrained to be continuous (i.e. valid = 1 always), but for discontinous
 // valid input data, tracking when the scale factor changes is a little tricky
 
-import sim_util_pkg::*;
-
 `timescale 1ns / 1ps
 module dac_prescaler_test ();
 
-sim_util_pkg::debug debug = new(DEFAULT); // printing, error tracking
+sim_util_pkg::debug debug = new(sim_util_pkg::DEFAULT); // printing, error tracking
 
 logic reset;
 logic clk = 0;
@@ -71,7 +69,7 @@ always @(posedge clk) begin
     for (int channel = 0; channel < CHANNELS; channel++) begin
       if (data_in_if.valid[channel]) begin
         for (int i = 0; i < PARALLEL_SAMPLES; i++) begin
-          data_in_if.data[channel][i*SAMPLE_WIDTH+:SAMPLE_WIDTH] <= $urandom_range({SAMPLE_WIDTH{1'b1}});
+          data_in_if.data[channel][i*SAMPLE_WIDTH+:SAMPLE_WIDTH] <= SAMPLE_WIDTH'($urandom_range({{(32-SAMPLE_WIDTH){1'b0}}, {SAMPLE_WIDTH{1'b1}}}));
           d_in = real'(int_t'(data_in_if.data[channel][i*SAMPLE_WIDTH+:SAMPLE_WIDTH]));
           scale = real'(sc_int_t'(scale_factor[channel]));
           offset = real'(os_int_t'(offset_amount[channel]));
@@ -97,13 +95,13 @@ task check_results();
       "received[%0d].size() = %0d",
       channel,
       received[channel].size()),
-      VERBOSE
+      sim_util_pkg::VERBOSE
     );
     debug.display($sformatf(
       "expected[%0d].size() = %0d",
       channel,
       expected[channel].size()),
-      VERBOSE
+      sim_util_pkg::VERBOSE
     );
     if (received[channel].size() != expected[channel].size()) begin
       debug.error("mismatched sizes; got a different number of samples than expected");
@@ -118,7 +116,7 @@ task check_results();
         sent_data[channel][$],
         expected[channel][$],
         received[channel][$]),
-        DEBUG
+        sim_util_pkg::DEBUG
       );
       if (math.abs(expected[channel][$] - received[channel][$]) > 1) begin
         debug.error($sformatf(
@@ -152,26 +150,26 @@ dac_prescaler #(
 );
 
 initial begin
-  debug.display("### RUNNING TEST FOR DAC_PRESCALER ###", DEFAULT);
+  debug.display("### RUNNING TEST FOR DAC_PRESCALER ###", sim_util_pkg::DEFAULT);
   reset <= 1'b1;
   data_in_if.data <= '0;
   data_in_if.valid <= '0;
   repeat (500) @(posedge clk);
   reset <= 1'b0;
   for (int channel = 0; channel < CHANNELS; channel++) begin
-    scale_factor[channel] <= $urandom_range(18'h3ffff);
-    offset_amount[channel] <= $urandom_range(14'h3fff);
+    scale_factor[channel] <= sc_int_t'($urandom_range(32'h3ffff));
+    offset_amount[channel] <= os_int_t'($urandom_range(32'h3fff));
   end
   repeat(5) @(posedge clk);
 
   // send a bunch of data with no backpressure
-  debug.display("testing without backpressure and random data valid", VERBOSE);
+  debug.display("testing without backpressure and random data valid", sim_util_pkg::VERBOSE);
   repeat (5) begin
     // don't send any data while we're changing scale factor
     data_in_if.valid <= '0;
     for (int channel = 0; channel < CHANNELS; channel++) begin
-      scale_factor[channel] <= $urandom_range(18'h3ffff);
-      offset_amount[channel] <= $urandom_range(14'h3fff);
+      scale_factor[channel] <= sc_int_t'($urandom_range(32'h3ffff));
+      offset_amount[channel] <= os_int_t'($urandom_range(32'h3fff));
     end
     repeat (5) @(posedge clk);
     data_in_if.send_samples(clk, 20, 1'b0, 1'b1);

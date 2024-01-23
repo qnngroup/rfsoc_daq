@@ -2,13 +2,10 @@
 // Basic integration test to make sure that all signal sources and
 // configuration registers are working
 
-import sim_util_pkg::*;
-import awg_pkg::*;
-
 `timescale 1ns/1ps
 module transmit_top_test ();
 
-sim_util_pkg::debug debug = new(DEFAULT);
+sim_util_pkg::debug debug = new(sim_util_pkg::DEFAULT);
 
 logic dac_reset;
 logic dac_clk = 0;
@@ -38,7 +35,7 @@ localparam int TRI_PHASE_BITS = 32;
 
 // AWG interfaces
 Axis_If #(.DWIDTH(AXI_MM_WIDTH)) ps_awg_dma_in ();
-Axis_If #(.DWIDTH((1+$clog2(AWG_DEPTH))*CHANNELS)) ps_awg_frame_depth ();
+Axis_If #(.DWIDTH($clog2(AWG_DEPTH)*CHANNELS)) ps_awg_frame_depth ();
 Axis_If #(.DWIDTH(2*CHANNELS)) ps_awg_trigger_out_config ();
 Axis_If #(.DWIDTH(64*CHANNELS)) ps_awg_burst_length ();
 Axis_If #(.DWIDTH(2)) ps_awg_start_stop ();
@@ -49,7 +46,7 @@ Axis_If #(.DWIDTH((SCALE_WIDTH+OFFSET_WIDTH)*CHANNELS)) ps_scale_offset ();
 Axis_If #(.DWIDTH(DDS_PHASE_BITS*CHANNELS)) ps_dds_phase_inc ();
 Axis_If #(.DWIDTH(TRI_PHASE_BITS*CHANNELS)) ps_tri_phase_inc ();
 // Trigger manager interface
-Axis_If #(.DWIDTH(1+CHANNELS)) ps_trigger_config ();
+Axis_If #(.DWIDTH(1+2*CHANNELS)) ps_trigger_config ();
 // Channel mux interface
 Axis_If #(.DWIDTH($clog2(3*CHANNELS)*CHANNELS)) ps_channel_mux_config ();
 // Outputs
@@ -156,7 +153,7 @@ transmit_top #(
   .dac_trigger_out
 );
 
-logic [$clog2(AWG_DEPTH):0] write_depths [CHANNELS];
+logic [$clog2(AWG_DEPTH)-1:0] write_depths [CHANNELS];
 logic [63:0] burst_lengths [CHANNELS];
 logic [1:0] trigger_modes [CHANNELS];
 
@@ -176,6 +173,8 @@ always @(posedge ps_clk) begin
 end
 
 logic [5:0][CHANNELS-1:0] dac_awg_triggers_pipe;
+logic [CHANNELS-1:0] dac_trigger;
+assign dac_trigger = dac_awg_triggers_pipe[5];
 always @(posedge dac_clk) begin
   dac_awg_triggers_pipe <= {dac_awg_triggers_pipe[4:0], dut_i.dac_awg_triggers};
 end
@@ -199,7 +198,7 @@ task automatic check_tri_output ();
         last_sample,
         real'(sample_t'(tri_received[channel][$]))/(2.0**SAMPLE_WIDTH),
         real'(sample_t'(last_sample))/(2.0**SAMPLE_WIDTH)),
-        DEBUG
+        sim_util_pkg::DEBUG
       );
       case (direction)
         UP: begin
@@ -256,7 +255,7 @@ always @(posedge dac_clk) begin
 end
 
 initial begin
-  debug.display("### TESTING TRANSMIT TOPLEVEL ###", DEFAULT);
+  debug.display("### TESTING TRANSMIT TOPLEVEL ###", sim_util_pkg::DEFAULT);
 
   dac_reset <= 1'b1;
   ps_reset <= 1'b1;
@@ -295,7 +294,7 @@ initial begin
 
   // configure the mux to select the AWG
   for (int channel = 0; channel < CHANNELS; channel++) begin
-    ps_channel_mux_config.data[channel*$clog2(3*CHANNELS)+:$clog2(3*CHANNELS)] <= channel;
+    ps_channel_mux_config.data[channel*$clog2(3*CHANNELS)+:$clog2(3*CHANNELS)] <= $clog2(3*CHANNELS)'(channel);
   end
 
   // configure the scale factor to be 1 and offset to be 0
@@ -304,7 +303,7 @@ initial begin
   end
 
   // configure the trigger manager to output a trigger from whenever awg_trigger_out[0] fires
-  ps_trigger_config.data <= {'0, 1'b1};
+  ps_trigger_config.data <= {1'b0, {(CHANNELS-1){1'b0}}, 1'b1};
 
   ps_channel_mux_config.valid <= 1'b1;
   do @(posedge ps_clk); while (~ps_channel_mux_config.ok);
@@ -344,21 +343,21 @@ initial begin
   
   awg_util.check_transfer_error(debug, ps_clk, 0); // no tlast error was introduced
 
-  debug.display("finished sending data to AWG over DMA", VERBOSE);
+  debug.display("finished sending data to AWG over DMA", sim_util_pkg::VERBOSE);
 
   // enable the DAC
   awg_util.do_dac_burst(
     debug,
     dac_clk,
     ps_clk,
-    dac_awg_triggers_pipe[5],
+    dac_trigger,
     trigger_arrivals,
     samples_received,
     write_depths,
     burst_lengths
   );
 
-  debug.display("finished collecting AWG data", VERBOSE);
+  debug.display("finished collecting AWG data", sim_util_pkg::VERBOSE);
 
   awg_util.check_output_data(
     debug,
@@ -370,11 +369,11 @@ initial begin
     burst_lengths
   );
   
-  debug.display("finished testing AWG", VERBOSE);
+  debug.display("finished testing AWG", sim_util_pkg::VERBOSE);
  
   // configure the mux to select the DDS
   for (int channel = 0; channel < CHANNELS; channel++) begin
-    ps_channel_mux_config.data[channel*$clog2(3*CHANNELS)+:$clog2(3*CHANNELS)] <= channel + CHANNELS;
+    ps_channel_mux_config.data[channel*$clog2(3*CHANNELS)+:$clog2(3*CHANNELS)] <= $clog2(3*CHANNELS)'(channel + CHANNELS);
   end
   // set phase increment
   for (int channel = 0; channel < CHANNELS; channel++) begin
@@ -388,13 +387,13 @@ initial begin
   do @(posedge ps_clk); while (~ps_channel_mux_config.ok);
   ps_channel_mux_config.valid <= 1'b0;
 
-  debug.display("finished configuring DDS", VERBOSE);
+  debug.display("finished configuring DDS", sim_util_pkg::VERBOSE);
 
   // wait until we get nonzero data, then start adding to dds_received
   while (dac_data_out.data === '0) @(posedge dac_clk);
   repeat (4) @(posedge dac_clk); // extra latency with 0 phase increment but nonzero output
   // nonzero data now
-  debug.display("collecting DDS data", VERBOSE);
+  debug.display("collecting DDS data", sim_util_pkg::VERBOSE);
   repeat (1000) begin
     for (int channel = 0; channel < CHANNELS; channel++) begin
       for (int sample = 0; sample < PARALLEL_SAMPLES; sample++) begin
@@ -403,23 +402,23 @@ initial begin
     end
     @(posedge dac_clk);
   end
-  debug.display("checking DDS data", VERBOSE);
+  debug.display("checking DDS data", sim_util_pkg::VERBOSE);
   // check to make sure that data matches what we'd expect
   dds_util.check_output(debug, dds_phase_inc, dds_received, 16'h007f);
 
-  debug.display("finished testing DDS", VERBOSE);
+  debug.display("finished testing DDS", sim_util_pkg::VERBOSE);
 
   // check triangle wave generator
   // configure the mux to select the triangle wave gen
   for (int channel = 0; channel < CHANNELS; channel++) begin
-    ps_channel_mux_config.data[channel*$clog2(3*CHANNELS)+:$clog2(3*CHANNELS)] <= channel + 2*CHANNELS;
+    ps_channel_mux_config.data[channel*$clog2(3*CHANNELS)+:$clog2(3*CHANNELS)] <= $clog2(3*CHANNELS)'(channel + 2*CHANNELS);
   end
   // set phase increment
   for (int channel = 0; channel < CHANNELS; channel++) begin
     ps_tri_phase_inc.data[channel*TRI_PHASE_BITS+:TRI_PHASE_BITS] <= get_phase_inc_from_freq(freqs[channel]);
   end
   
-  ps_trigger_config.data <= {'0, 1'b1, {CHANNELS{1'b0}}};
+  ps_trigger_config.data <= {1'b1, {CHANNELS{1'b0}}};
   
   ps_tri_phase_inc.valid <= 1'b1;
   do @(posedge ps_clk); while (~ps_tri_phase_inc.ok);
@@ -431,7 +430,7 @@ initial begin
   do @(posedge ps_clk); while (~ps_trigger_config.ok);
   ps_trigger_config.valid <= 1'b0;
 
-  debug.display("finished configuring triangle wave generator", VERBOSE);
+  debug.display("finished configuring triangle wave generator", sim_util_pkg::VERBOSE);
   while (dac_trigger_out !== 1'b1) @(posedge dac_clk);
   save_tri_data = 1;
   @(posedge dac_clk);
@@ -440,7 +439,7 @@ initial begin
   end
   save_tri_data = 0;
 
-  debug.display("checking triangle wave output", VERBOSE);
+  debug.display("checking triangle wave output", sim_util_pkg::VERBOSE);
   check_tri_output();
   
   debug.finish();

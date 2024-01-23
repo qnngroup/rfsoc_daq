@@ -13,12 +13,10 @@
 // - tests readout with continuous and toggling ready signal to verify
 //   backpressure handling logicimport sim_util_pkg::*;
 
-import sim_util_pkg::*;
-
 `timescale 1ns / 1ps
 module sample_buffer_test ();
 
-sim_util_pkg::debug debug = new(DEFAULT); // printing, error tracking
+sim_util_pkg::debug debug = new(sim_util_pkg::DEFAULT); // printing, error tracking
 
 logic clk = 0;
 localparam CLK_RATE_HZ = 100_000_000;
@@ -105,13 +103,13 @@ task check_results(
       "data_sent[%0d].size() = %0d",
       i,
       data_sent[i].size()),
-      VERBOSE
+      sim_util_pkg::VERBOSE
     );
   end
   debug.display($sformatf(
     "data_received.size() = %0d",
     data_received.size()),
-    VERBOSE
+    sim_util_pkg::VERBOSE
   );
   // check last
   if (last_received.size() != 1) begin
@@ -135,7 +133,7 @@ task check_results(
       "processing new bank with %0d samples from channel %0d",
       n_samples,
       current_channel),
-      VERBOSE
+      sim_util_pkg::VERBOSE
     );
     for (int i = 0; i < n_samples; i++) begin
       if (data_sent[current_channel][$] != data_received[$]) begin
@@ -171,7 +169,7 @@ task check_results(
       "removing %0d samples from data_sent[%0d]",
       data_sent[i].size(),
       i),
-      VERBOSE
+      sim_util_pkg::VERBOSE
     );
     while (data_sent[i].size() > 0) data_sent[i].pop_back();
   end
@@ -211,7 +209,7 @@ endtask
 int samples_to_send;
 
 initial begin
-  debug.display("### TESTING SAMPLE_BUFFER ###", DEFAULT);
+  debug.display("### TESTING SAMPLE_BUFFER ###", sim_util_pkg::DEFAULT);
   reset <= 1'b1;
   start <= 1'b0;
   stop <= 1'b0;
@@ -238,10 +236,10 @@ initial begin
           repeat (10) @(posedge clk);
           stop_acq();
           data_out.do_readout(clk, 1'b1, 100000);
-          debug.display($sformatf("checking results n_samples    = %d", samples_to_send), VERBOSE);
-          debug.display($sformatf("banking mode                  = %d", bank_mode), VERBOSE);
-          debug.display($sformatf("samples sent with rand_valid  = %d", in_valid_rand), VERBOSE);
-          debug.display($sformatf("acquisition started with mode = %d", start_type), VERBOSE);
+          debug.display($sformatf("checking results n_samples    = %d", samples_to_send), sim_util_pkg::VERBOSE);
+          debug.display($sformatf("banking mode                  = %d", bank_mode), sim_util_pkg::VERBOSE);
+          debug.display($sformatf("samples sent with rand_valid  = %d", in_valid_rand), sim_util_pkg::VERBOSE);
+          debug.display($sformatf("acquisition started with mode = %d", start_type), sim_util_pkg::VERBOSE);
           // The second argument of check_results is if it's okay for there to
           // be missing samples that weren't stored.
           // When data_in.valid is randomly toggled on and off and enough samples

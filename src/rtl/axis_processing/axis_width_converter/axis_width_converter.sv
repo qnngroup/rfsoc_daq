@@ -5,6 +5,8 @@
 // Therefore, the rate of the input is limited by the output rate.
 // If DOWN > UP, then the input must stall occasionally, which is to be
 // expected.
+
+`timescale 1ns/1ps
 module axis_width_converter #(
   parameter int DWIDTH_IN = 192,
   parameter int DWIDTH_OUT = 256
@@ -17,11 +19,13 @@ module axis_width_converter #(
 // merge both buffer outputs into a word that is AXI_MM_WIDTH bits
 // first step down/up the width of the outputs
 function automatic int GCD(input int A, input int B);
-  if (B == 0) begin
-    return A;
-  end else begin
-    return GCD(B, A % B);
+  int T;
+  while (B != 0) begin
+    T = B;
+    B = A % B;
+    A = T;
   end
+  return A;
 endfunction
 
 localparam int IN_OUT_GCD = GCD(DWIDTH_IN, DWIDTH_OUT);
@@ -29,26 +33,57 @@ localparam int DOWN = DWIDTH_IN / IN_OUT_GCD;
 localparam int UP = DWIDTH_OUT / IN_OUT_GCD;
 
 Axis_If #(.DWIDTH(DWIDTH_IN*UP)) data ();
+generate
+  if (UP > 1) begin
+    axis_upsizer #(
+      .DWIDTH(DWIDTH_IN),
+      .UP(UP)
+    ) up_i (
+      .clk,
+      .reset,
+      .data_in,
+      .data_out(data)
+    );
+  end else begin
+    always_ff @(posedge clk) begin
+      if (reset) begin
+        data.valid <= 1'b0;
+      end else begin
+        if (data.ready) begin
+          data.valid <= data_in.valid;
+          data.data <= data_in.data;
+          data.last <= data_in.last;
+        end
+      end
+    end
+    assign data_in.ready = data.ready;
+  end
 
-axis_upsizer #(
-  .DWIDTH(DWIDTH_IN),
-  .UP(UP)
-) up_i (
-  .clk,
-  .reset,
-  .data_in,
-  .data_out(data)
-);
-
-axis_downsizer #(
-  .DWIDTH(DWIDTH_IN*UP),
-  .DOWN(DOWN)
-) down_i (
-  .clk,
-  .reset,
-  .data_in(data),
-  .data_out
-);
+  if (DOWN > 1) begin
+    axis_downsizer #(
+      .DWIDTH(DWIDTH_IN*UP),
+      .DOWN(DOWN)
+    ) down_i (
+      .clk,
+      .reset,
+      .data_in(data),
+      .data_out
+    );
+  end else begin
+    always_ff @(posedge clk) begin
+      if (reset) begin
+        data_out.valid <= data.valid;
+      end else begin
+        if (data_out.ready) begin
+          data_out.valid <= data.valid;
+          data_out.data <= data.data;
+          data_out.last <= data.last;
+        end
+      end
+    end
+    assign data.ready = data_out.ready;
+  end
+endgenerate
 
 endmodule
 
@@ -70,7 +105,7 @@ logic valid_reg, last_reg;
 logic [$clog2(DOWN)-1:0] counter;
 logic read_final, rollover;
 
-assign read_final = counter == DOWN - 1;
+assign read_final = counter == $clog2(DOWN)'(DOWN - 1);
 assign rollover = read_final & data_out.ready;
 
 // only accept new samples when we're done breaking up the current sample
@@ -124,7 +159,7 @@ logic write_final;
 // finish assembling the large word when its full or if the last value
 // from data_in arrives (the MSBs of the final word will be invalid if
 // the input burst size is not an integer multiple of UP)
-assign write_final = ((counter == UP - 1) | data_in.last) && data_in.ok;
+assign write_final = ((counter == $clog2(UP)'(UP - 1)) | data_in.last) && data_in.ok;
 
 assign data_in.ready = data_out.ready;
 assign data_out.data = data_reg;

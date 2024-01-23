@@ -2,13 +2,10 @@
 // Basic integration test for DAQ toplevel to make sure all the signals are
 // getting passed through okay
 
-import sim_util_pkg::*;
-import sparse_sample_buffer_pkg::*;
-
 `timescale 1ns/1ps
 module daq_axis_test ();
 
-sim_util_pkg::debug debug = new(DEBUG);
+sim_util_pkg::debug debug = new(sim_util_pkg::DEFAULT);
 
 localparam int SAMPLE_WIDTH = 16;
 localparam int PARALLEL_SAMPLES = 16;
@@ -57,8 +54,9 @@ Axis_If #(.DWIDTH(32)) ps_buffer_cfg (); // banking mode (0: 1 channel, 1: 2 cha
 Axis_If #(.DWIDTH(32)) ps_buffer_ss ();
 Axis_If #(.DWIDTH($clog2(2*CHANNELS)*CHANNELS)) ps_adc_mux_cfg ();
 Axis_If #(.DWIDTH(32)) ps_buf_tstamp_width ();
+Axis_If #(.DWIDTH(32)) ps_buf_capture_done ();
 Axis_If #(.DWIDTH(32)) ps_lmh6401 ();
-Axis_If #(.DWIDTH((1+$clog2(AWG_DEPTH))*CHANNELS)) ps_awg_depth ();
+Axis_If #(.DWIDTH(96)) ps_awg_depth ();
 Axis_If #(.DWIDTH(64*CHANNELS)) ps_awg_burst_len();
 Axis_If #(.DWIDTH(32)) ps_awg_trigout_cfg ();
 Axis_If #(.DWIDTH(32)) ps_awg_ss ();
@@ -116,6 +114,11 @@ daq_axis #(
   .m_axis_buffer_timestamp_width_tdata(ps_buf_tstamp_width.data),
   .m_axis_buffer_timestamp_width_tvalid(ps_buf_tstamp_width.valid),
   .m_axis_buffer_timestamp_width_tready(ps_buf_tstamp_width.ready),
+  .m_axis_buffer_timestamp_width_tlast(ps_buf_tstamp_width.last),
+  .m_axis_buffer_capture_done_tdata(ps_buf_capture_done.data),
+  .m_axis_buffer_capture_done_tvalid(ps_buf_capture_done.valid),
+  .m_axis_buffer_capture_done_tready(ps_buf_capture_done.ready),
+  .m_axis_buffer_capture_done_tlast(ps_buf_capture_done.last),
   .s_axis_lmh6401_config_tdata(ps_lmh6401.data),
   .s_axis_lmh6401_config_tvalid(ps_lmh6401.valid),
   .s_axis_lmh6401_config_tready(ps_lmh6401.ready),
@@ -216,7 +219,7 @@ logic [TIMESTAMP_WIDTH-1:0] timestamps [CHANNELS][$];
 logic [SAMPLE_WIDTH*PARALLEL_SAMPLES-1:0] samples [CHANNELS][$];
 
 initial begin
-  debug.display("### TESTING DAQ_AXIS TOPLEVEL ###", DEFAULT);
+  debug.display("### TESTING DAQ_AXIS TOPLEVEL ###", sim_util_pkg::DEFAULT);
   ps_reset <= 1'b1;
   dac_reset <= 1'b1;
   adc_reset <= 1'b1;
@@ -232,7 +235,7 @@ initial begin
   // Axis_If #(.DWIDTH($clog2(2*CHANNELS)*CHANNELS)) ps_adc_mux_cfg ();
   // Axis_If #(.DWIDTH(32)) ps_buf_tstamp_width ();
   // Axis_If #(.DWIDTH(32)) ps_lmh6401 ();
-  // Axis_If #(.DWIDTH((1+$clog2(AWG_DEPTH))*CHANNELS)) ps_awg_depth ();
+  // Axis_If #(.DWIDTH($clog2(AWG_DEPTH)*CHANNELS)) ps_awg_depth ();
   // Axis_If #(.DWIDTH(64*CHANNELS)) ps_awg_burst_len();
   // Axis_If #(.DWIDTH(32)) ps_awg_trigout_cfg ();
   // Axis_If #(.DWIDTH(32)) ps_awg_ss ();
@@ -248,6 +251,7 @@ initial begin
   ps_buffer_ss.valid <= '0;
   ps_adc_mux_cfg.valid <= '0;
   ps_buf_tstamp_width.ready <= '0;
+  ps_buf_capture_done.ready <= 1'b0;
   ps_lmh6401.valid <= '0;
   ps_awg_depth.valid <= '0;
   ps_awg_burst_len.valid <= '0;
@@ -269,6 +273,9 @@ initial begin
   adc_reset <= 1'b0;
   @(posedge adc_clk);
   adc_data.valid <= '1;
+ 
+  // always read capture_done
+  ps_buf_capture_done.ready <= 1'b1;
 
   // check that we can generate triangle waves
   // send stop to AWG
@@ -295,7 +302,7 @@ initial begin
   do @(posedge ps_clk); while (~ps_dac_mux_cfg.ok);
   ps_dac_mux_cfg.valid <= 1'b0;
   // set dac scale to 0.25, zero offset
-  ps_dac_scale_offset.data <= {'0, {CHANNELS{18'h04000, 14'h0}}};
+  ps_dac_scale_offset.data <= {CHANNELS{18'h04000, 14'h0}};
   ps_dac_scale_offset.valid <= 1'b1;
   do @(posedge ps_clk); while (~ps_dac_scale_offset.ok);
   ps_dac_scale_offset.valid <= 1'b0;
@@ -326,12 +333,13 @@ initial begin
   ps_buffer_cfg.valid <= 1'b0;
 
   // enable trigger for channel 0 in trigger manager
-  ps_trigger_manager_cfg.data <= {1'b0, 16'h0100};
+  ps_trigger_manager_cfg.data <= {15'b0, 1'b0, 16'h0100};
   ps_trigger_manager_cfg.valid <= 1'b1;
   do @(posedge ps_clk); while (~ps_trigger_manager_cfg.ok);
   ps_trigger_manager_cfg.valid <= 1'b0;
 
-  while (~dut_i.daq_axis_sv_i.receive_top_i.buffer_i.capture_done) @(posedge adc_clk);
+  // wait until we get capture_done == 1
+  while (~(ps_buf_capture_done.ok & ps_buf_capture_done.data == 32'b1)) @(posedge ps_clk);
 
   repeat (10) @(posedge adc_clk);
   // assert dma_ready
@@ -344,10 +352,10 @@ initial begin
   end
   // convert dma data to samples, then check with triangle wave checker
   buf_util.parse_buffer_output(dma_received, timestamps, samples);
-  debug.display("parsed data_received:", VERBOSE);
+  debug.display("parsed data_received:", sim_util_pkg::VERBOSE);
   for (int channel = 0; channel < CHANNELS; channel++) begin
-    debug.display($sformatf("timestamps[%0d].size() = %0d", channel, timestamps[channel].size()), VERBOSE);
-    debug.display($sformatf("samples[%0d].size() = %0d", channel, samples[channel].size()), VERBOSE);
+    debug.display($sformatf("timestamps[%0d].size() = %0d", channel, timestamps[channel].size()), sim_util_pkg::VERBOSE);
+    debug.display($sformatf("samples[%0d].size() = %0d", channel, samples[channel].size()), sim_util_pkg::VERBOSE);
     if (timestamps[channel].size() !== 1) begin
       debug.error($sformatf(
         "expected exactly one timestamp for for channel %0d, got %0d",
@@ -363,7 +371,7 @@ initial begin
         "got sample %x (%0f)",
         samples[0][$][sample*SAMPLE_WIDTH+:SAMPLE_WIDTH],
         real'(sample_t'(samples[0][$][sample*SAMPLE_WIDTH+:SAMPLE_WIDTH]))/(2.0**SAMPLE_WIDTH)),
-        DEBUG
+        sim_util_pkg::DEBUG
       );
     end
     samples[0].pop_back();

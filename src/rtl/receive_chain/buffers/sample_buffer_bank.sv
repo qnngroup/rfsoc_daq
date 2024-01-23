@@ -7,6 +7,8 @@
 //  - which channel the contents belong to (implemented as 0 in this module,
 //    but muxed in the sample_buffer)
 //  - number of captured samples
+
+`timescale 1ns/1ps
 module sample_buffer_bank #(
   parameter int BUFFER_DEPTH = 1024,
   parameter int PARALLEL_SAMPLES = 16, // 4.096 GS/s @ 256 MHz
@@ -49,7 +51,7 @@ always_ff @(posedge clk) begin
     unique case (state)
       IDLE: if (start) state <= CAPTURE;
       // transition out of capture mode either when a manual stop is received or the buffer fills
-      CAPTURE: if (stop || (data_in.ok && (write_addr == BUFFER_DEPTH - 1))) state <= SEND_ID;
+      CAPTURE: if (stop || (data_in.ok && (write_addr == $clog2(BUFFER_DEPTH)'(BUFFER_DEPTH - 1)))) state <= SEND_ID;
       // SEND_ID and SEND_NUM_SAMPLES are additional "wait" states used to send
       // out information about the contents captured in the buffer:
       //   - which channel the conents belong to
@@ -99,7 +101,7 @@ always_ff @(posedge clk) begin
           buffer[write_addr] <= data_in.data;
           write_addr <= write_addr + 1'b1;
           buffer_has_data <= 1'b1;
-          if (write_addr == BUFFER_DEPTH - 1) begin
+          if (write_addr == $clog2(BUFFER_DEPTH)'(BUFFER_DEPTH - 1)) begin
             full <= 1'b1;
           end
         end
@@ -120,10 +122,10 @@ always_ff @(posedge clk) begin
       SEND_NUM_SAMPLES: begin
         first <= '0;
         if (write_addr > 0) begin
-          data_out_muxed <= write_addr;
+          data_out_muxed <= (PARALLEL_SAMPLES*SAMPLE_WIDTH)'(write_addr);
         end else if (buffer_has_data) begin
           // if write_addr == 0 but we've written to the buffer, then it's full
-          data_out_muxed <= BUFFER_DEPTH;
+          data_out_muxed <= (PARALLEL_SAMPLES*SAMPLE_WIDTH)'(BUFFER_DEPTH);
         end else begin
           data_out_muxed <= '0; // we don't have any data to send
           data_out_last[3] <= 1'b1;

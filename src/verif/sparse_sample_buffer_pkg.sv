@@ -1,9 +1,6 @@
 // sparse_sample_buffer_pkg.sv - Reed Foster
 // package with a class for parsing the sparse sample buffer output
 
-import sim_util_pkg::*;
-import sample_discriminator_pkg::*;
-
 package sparse_sample_buffer_pkg;
 
   class util #(
@@ -57,7 +54,7 @@ package sparse_sample_buffer_pkg;
       done_parsing = 0;
       while (!done_parsing) begin
         // combine remaining bits with new word
-        dma_word = (buffer_output.pop_back() << dma_word_leftover_bits) | dma_word;
+        dma_word = ({{AXI_MM_WIDTH{1'b0}}, buffer_output.pop_back()} << dma_word_leftover_bits) | dma_word;
         dma_word_leftover_bits = dma_word_leftover_bits + AXI_MM_WIDTH;
         while (dma_word_leftover_bits >= word_width) begin
           // data is always organized as so:
@@ -66,23 +63,23 @@ package sparse_sample_buffer_pkg;
           // to add to that channel, then finally collect those timestamps
           if (need_channel_id) begin
             // mask lower bits depending on whether we're parsing timestamps or data
-            current_channel = dma_word & ((1'b1 << word_width) - 1);
+            current_channel = dma_word[31:0];
             need_channel_id = 1'b0;
             need_word_count = 1'b1;
           end else begin
             if (need_word_count) begin
               // mask lower bits depending on whether we're parsing timestamps or data
-              words_remaining = dma_word & ((1'b1 << word_width) - 1);
+              words_remaining = dma_word[31:0];
               need_word_count = 1'b0;
             end else begin
               unique case (parse_mode)
                 TIMESTAMP: begin
                   // mask lower bits based on timestamp width
-                  timestamps[current_channel].push_front(dma_word & ((1'b1 << word_width) - 1));
+                  timestamps[current_channel].push_front(dma_word[TIMESTAMP_WIDTH-1:0]);
                 end
                 DATA: begin
                   // mask lower bits based on data width
-                  samples[current_channel].push_front(dma_word & ((1'b1 << word_width) - 1));
+                  samples[current_channel].push_front(dma_word[DATA_WIDTH-1:0]);
                 end
               endcase
               words_remaining = words_remaining - 1;

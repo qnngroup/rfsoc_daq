@@ -6,6 +6,8 @@
 // triggered timestamp creation is reported.
 // This allows the timestamp to be associated with a specific sample that was saved.
 // The sample count (not the timestamp) and hysteresis tracker are reset every time a new capture is started.
+
+`timescale 1ns/1ps
 module sample_discriminator #( 
   parameter int SAMPLE_WIDTH = 16,
   parameter int PARALLEL_SAMPLES = 16,

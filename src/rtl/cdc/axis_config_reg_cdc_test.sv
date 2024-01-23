@@ -2,11 +2,9 @@
 
 `timescale 1ns/1ps
 
-import sim_util_pkg::*;
-
 module axis_config_reg_cdc_test ();
 
-sim_util_pkg::debug debug = new(DEFAULT);
+sim_util_pkg::debug debug = new(sim_util_pkg::DEFAULT);
 
 Axis_If #(.DWIDTH(8)) f2s_src ();
 Axis_If #(.DWIDTH(8)) f2s_dest ();
@@ -127,7 +125,7 @@ task automatic check_results(
 endtask
 
 initial begin
-  debug.display("### TESTING AXI-STREAM CONFIGURATION REGISTER CDC ###", DEFAULT);
+  debug.display("### TESTING AXI-STREAM CONFIGURATION REGISTER CDC ###", sim_util_pkg::DEFAULT);
   slow_reset <= 1'b1;
   fast_reset <= 1'b1;
   s2f_enable_send <= 1'b0;
@@ -151,13 +149,13 @@ initial begin
 
   repeat (50) @(posedge slow_clk);
 
-  debug.display("checking data for fast->slow CDC", VERBOSE);
+  debug.display("checking data for fast->slow CDC", sim_util_pkg::VERBOSE);
   check_results(f2s_sent, f2s_received);
-  debug.display("checking last for fast->slow CDC", VERBOSE);
+  debug.display("checking last for fast->slow CDC", sim_util_pkg::VERBOSE);
   check_results(f2s_last_sent, f2s_last_received);
-  debug.display("checking data for slow->fast CDC", VERBOSE);
+  debug.display("checking data for slow->fast CDC", sim_util_pkg::VERBOSE);
   check_results(s2f_sent, s2f_received);
-  debug.display("checking last for slow->fast CDC", VERBOSE);
+  debug.display("checking last for slow->fast CDC", sim_util_pkg::VERBOSE);
   check_results(s2f_last_sent, s2f_last_received);
 
   debug.finish();

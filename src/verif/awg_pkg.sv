@@ -1,8 +1,6 @@
 // awg_pkg.sv - Reed Foster
 // utilities for testing AWG module
 
-import sim_util_pkg::*;
-
 package awg_pkg;
 
   class util #(
@@ -16,7 +14,7 @@ package awg_pkg;
     // https://verificationacademy.com/forums/t/typedef-interface/34464
     // https://www.reddit.com/r/Verilog/comments/1158h4w/trouble_with_parameterized_virtual_interfaces/
 
-    typedef virtual Axis_If #(.DWIDTH((1+$clog2(DEPTH))*CHANNELS)) write_depth_if;
+    typedef virtual Axis_If #(.DWIDTH($clog2(DEPTH)*CHANNELS))     write_depth_if;
     typedef virtual Axis_If #(.DWIDTH(2*CHANNELS))                 trig_cfg_if;
     typedef virtual Axis_If #(.DWIDTH(64*CHANNELS))                burst_len_if;
     typedef virtual Axis_If #(.DWIDTH(2))                          start_stop_if;
@@ -107,7 +105,7 @@ package awg_pkg;
       input logic [SAMPLE_WIDTH-1:0] samples_received [CHANNELS][$],
       input int trigger_arrivals [CHANNELS][$],
       input logic [1:0] trigger_modes [CHANNELS],
-      input logic [$clog2(DEPTH):0] write_depths [CHANNELS],
+      input logic [$clog2(DEPTH)-1:0] write_depths [CHANNELS],
       input logic [63:0] burst_lengths [CHANNELS]
     );
       int sample_count;
@@ -117,7 +115,7 @@ package awg_pkg;
         burst_count = 0;
         debug.display($sformatf("checking output for channel %0d", channel), sim_util_pkg::VERBOSE);
         if (samples_received[channel].size()
-            != write_depths[channel]*burst_lengths[channel]*PARALLEL_SAMPLES) begin
+            != (write_depths[channel]+1)*burst_lengths[channel]*PARALLEL_SAMPLES) begin
           debug.error($sformatf(
             {
               "incorrect number of samples received on channel %0d.",
@@ -126,7 +124,7 @@ package awg_pkg;
               "\ngot %0d"
             },
             channel,
-            write_depths[channel]*burst_lengths[channel]*PARALLEL_SAMPLES,
+            (write_depths[channel]+1)*burst_lengths[channel]*PARALLEL_SAMPLES,
             samples_to_send[channel].size(),
             samples_received[channel].size())
           );
@@ -143,10 +141,10 @@ package awg_pkg;
             );
           end
           samples_received[channel].pop_back();
-          if (sample_count == write_depths[channel]*PARALLEL_SAMPLES - 1) begin
+          if (sample_count == (write_depths[channel]+1)*PARALLEL_SAMPLES - 1) begin
             burst_count = burst_count + 1;
           end
-          sample_count = (sample_count + 1) % (write_depths[channel]*PARALLEL_SAMPLES);
+          sample_count = (sample_count + 1) % ((write_depths[channel]+1)*PARALLEL_SAMPLES);
         end
         // check for correct timing of trigger signals
         case (trigger_modes[channel])
@@ -178,7 +176,7 @@ package awg_pkg;
             end
           end
           2: begin
-            // should have burst_lengths[channel], with values k*write_depths[channel]*PARALLEL_SAMPLES for k = 0,1,2,...
+            // should have burst_lengths[channel], with values k*(write_depths[channel]+1)*PARALLEL_SAMPLES for k = 0,1,2,...
             if (trigger_arrivals[channel].size() !== burst_lengths[channel]) begin
               debug.error($sformatf(
                 "channel %0d: expected exactly %0d triggers, but got %0d triggers",
@@ -188,12 +186,12 @@ package awg_pkg;
               );
             end
             for (int frame = 0; frame < burst_lengths[channel]; frame++) begin
-              if (trigger_arrivals[channel][frame] !== frame*write_depths[channel]*PARALLEL_SAMPLES) begin
+              if (trigger_arrivals[channel][frame] !== frame*(write_depths[channel]+1)*PARALLEL_SAMPLES) begin
                 debug.error($sformatf(
                   "channel %0d: wrong trigger timing, got %0d, expected %0d",
                   channel,
                   trigger_arrivals[channel][frame],
-                  frame*write_depths[channel])
+                  frame*(write_depths[channel]+1))
                 );
               end
             end
@@ -206,7 +204,7 @@ package awg_pkg;
       inout sim_util_pkg::debug debug,
       ref logic dma_clk,
       input logic [1:0] trigger_modes [CHANNELS],
-      input logic [$clog2(DEPTH):0] write_depths [CHANNELS],
+      input logic [$clog2(DEPTH)-1:0] write_depths [CHANNELS],
       input logic [63:0] burst_lengths [CHANNELS]
     );
       bit register_write_success;
@@ -231,7 +229,7 @@ package awg_pkg;
       // finally, update the write depth, which will put the DUT into a state
       // where it is ready to accept DMA data
       for (int channel = 0; channel < CHANNELS; channel++) begin
-        v_dma_write_depth.data[channel*(1+$clog2(DEPTH))+:(1+$clog2(DEPTH))] <= write_depths[channel];
+        v_dma_write_depth.data[channel*$clog2(DEPTH)+:$clog2(DEPTH)] <= write_depths[channel];
       end
       v_dma_write_depth.send_sample_with_timeout(dma_clk, 10, register_write_success);
       if (~register_write_success) begin
@@ -241,14 +239,14 @@ package awg_pkg;
     
     task automatic generate_samples(
       inout sim_util_pkg::debug debug,
-      input logic [$clog2(DEPTH):0] write_depths [CHANNELS],
+      input logic [$clog2(DEPTH)-1:0] write_depths [CHANNELS],
       inout logic [SAMPLE_WIDTH-1:0] samples_to_send [CHANNELS][$],
       inout logic [AXI_MM_WIDTH-1:0] dma_words [$]
     );
       logic [AXI_MM_WIDTH-1:0] dma_word;
     
       for (int channel = 0; channel < CHANNELS; channel++) begin
-        for (int batch = 0; batch < write_depths[channel]; batch++) begin
+        for (int batch = 0; batch < write_depths[channel] + 1; batch++) begin
           for (int sample = 0; sample < PARALLEL_SAMPLES; sample++) begin
             samples_to_send[channel].push_back($urandom_range(1,{SAMPLE_WIDTH{1'b1}}));
           end
@@ -257,7 +255,7 @@ package awg_pkg;
     
       // reform samples into AXI_MM_WIDTH-wide words
       for (int channel = 0; channel < CHANNELS; channel++) begin
-        for (int word = 0; word < (write_depths[channel]*PARALLEL_SAMPLES*SAMPLE_WIDTH)/AXI_MM_WIDTH; word++) begin
+        for (int word = 0; word < ((write_depths[channel]+1)*PARALLEL_SAMPLES*SAMPLE_WIDTH)/AXI_MM_WIDTH; word++) begin
           dma_word = '0;
           for (int sample = 0; sample < AXI_MM_WIDTH/SAMPLE_WIDTH; sample++) begin
             dma_word = {samples_to_send[channel][word*(AXI_MM_WIDTH/SAMPLE_WIDTH)+sample],
@@ -305,7 +303,7 @@ package awg_pkg;
       ref logic [CHANNELS-1:0] dac_trigger,
       output int trigger_arrivals [CHANNELS][$],
       inout [SAMPLE_WIDTH-1:0] samples_received [CHANNELS][$],
-      input logic [$clog2(DEPTH):0] write_depths [CHANNELS],
+      input logic [$clog2(DEPTH)-1:0] write_depths [CHANNELS],
       input logic [63:0] burst_lengths [CHANNELS]
     );
       debug.display("running DAC burst", sim_util_pkg::DEBUG);
@@ -337,7 +335,7 @@ package awg_pkg;
             );
             trigger_arrivals[channel].push_back(samples_received[channel].size());
           end
-          if (samples_received[channel].size() < write_depths[channel]*burst_lengths[channel]*PARALLEL_SAMPLES) begin
+          if (samples_received[channel].size() < (write_depths[channel]+1)*burst_lengths[channel]*PARALLEL_SAMPLES) begin
             for (int sample = 0; sample < PARALLEL_SAMPLES; sample++) begin
               samples_received[channel].push_front(v_dac_data_out.data[channel][sample*SAMPLE_WIDTH+:SAMPLE_WIDTH]);
             end
@@ -351,7 +349,7 @@ package awg_pkg;
                 v_dac_data_out.data[channel],
                 channel,
                 burst_lengths[channel],
-                write_depths[channel],
+                write_depths[channel] + 1,
                 channel,
                 samples_received[channel].size())
               );

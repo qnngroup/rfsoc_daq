@@ -1,6 +1,8 @@
 // lmh6401_spi.sv - Reed Foster
 // Output-only SPI module for controlling the gain setting of multiple LMH6401
 // variable-gain amplifiers (VGAs)
+
+`timescale 1ns/1ps
 module lmh6401_spi #(
   parameter int AXIS_CLK_FREQ = 150_000_000,
   parameter int SPI_CLK_FREQ = 1_000_000,
@@ -14,7 +16,7 @@ module lmh6401_spi #(
 // use a counter for a clock divider to produce the SPI clock output
 localparam int CLK_DIV = int'(AXIS_CLK_FREQ/SPI_CLK_FREQ);
 localparam int CLK_COUNTER_BITS = $clog2(CLK_DIV);
-localparam int CLK_COUNTER_MAX = int'(CLK_DIV / 2) - 1;
+localparam [CLK_COUNTER_BITS-1:0] CLK_COUNTER_MAX = CLK_COUNTER_BITS'(int'(CLK_DIV / 2) - 1);
 
 // counter to divide input clock down to SPI clock
 logic [CLK_COUNTER_BITS-1:0] clk_counter;

@@ -1,5 +1,7 @@
 // dac_prescaler.sv - Reed Foster
 // Scales an AXI-stream data stream by a constant value
+
+`timescale 1ns/1ps
 module dac_prescaler #(
   parameter int SAMPLE_WIDTH = 16,
   parameter int PARALLEL_SAMPLES = 16,

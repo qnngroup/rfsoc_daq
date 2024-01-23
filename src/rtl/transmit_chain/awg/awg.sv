@@ -9,6 +9,7 @@
 // TODO reimplement dma_write_depth so that we don't get ragged DMA data
 // for now, just be careful
 
+`timescale 1ns/1ps
 module awg #(
   parameter int DEPTH = 2048,
   parameter int AXI_MM_WIDTH = 128,
@@ -27,7 +28,9 @@ module awg #(
   //  Also put the receive state machine into the DMA_ACCEPTING state.
   //  Need to put restrictions on this so that we always get a clean
   //  transition between subsequent channels when performing the DMA
-  //  (1+$clog2(DEPTH))*CHANNELS bits
+  //  E.g. with SAMPLE_WIDTH*PARALLEL_SAMPLES = 2*AXI_MM_WIDTH, DEPTH must be
+  //  a multiple of 2
+  //  1+$clog2(DEPTH)*CHANNELS bits
   Axis_If.Slave dma_write_depth,
   // dma_trigger_out_config:
   //  For each channel, specify how the trigger signal is generated
@@ -140,7 +143,7 @@ always_ff @(posedge dma_clk) begin
       DMA_ACCEPTING: begin
         if ((dma_write_data.ok && dma_write_data.last) // normal operation
             || (dma_write_enable // didn't get tlast, but finished writing to buffer
-                & (dma_write_channel == CHANNELS - 1)
+                & (dma_write_channel == $clog2(CHANNELS)'(CHANNELS - 1))
                 & (dma_write_address == dma_address_max_reg[dma_write_channel]))) begin
           dma_write_state <= DMA_BLOCKING;
         end
@@ -160,8 +163,7 @@ always_ff @(posedge dma_clk) begin
   end else begin
     if (dma_write_depth.ok) begin
       for (int channel = 0; channel < CHANNELS; channel++) begin
-        // subtract 1 so we can directly compare the current address
-        dma_address_max_reg[channel] <= dma_write_depth.data[channel*($clog2(DEPTH)+1)+:($clog2(DEPTH)+1)] - 1;
+        dma_address_max_reg[channel] <= dma_write_depth.data[channel*$clog2(DEPTH)+:$clog2(DEPTH)];
       end
     end
     if (dma_trigger_out_config.ok) begin
@@ -200,7 +202,7 @@ always_ff @(posedge dma_clk) begin
         if (dma_write_address == dma_address_max_reg[dma_write_channel]) begin
           dma_write_address <= '0;
           dma_write_done[dma_write_channel] <= 1'b1;
-          if (dma_write_channel == CHANNELS - 1) begin
+          if (int'(dma_write_channel) == CHANNELS - 1) begin
             dma_write_channel <= '0;
           end else begin
             dma_write_channel <= dma_write_channel + 1'b1;
@@ -230,7 +232,7 @@ always_ff @(posedge dma_clk) begin
       dma_transfer_error.valid <= 1'b0;
     end else begin
       if (dma_write_enable) begin
-        if ((dma_write_channel == CHANNELS - 1) & (dma_write_address == dma_address_max_reg[dma_write_channel])) begin
+        if ((int'(dma_write_channel) == CHANNELS - 1) & (dma_write_address == dma_address_max_reg[dma_write_channel])) begin
           if (~dma_tlast_reg) begin
             // we were expecting tlast, but didn't get it
             dma_transfer_error.data[0] <= 1'b1;

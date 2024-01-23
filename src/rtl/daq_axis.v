@@ -2,6 +2,7 @@
 // DAQ toplevel with separate AXI-stream interface for each signal chain
 // submodule configuration register
 
+`timescale 1ns/1ps
 module daq_axis #(
   // Shared parameters
   parameter SAMPLE_WIDTH = 16, // width in bits of each sample
@@ -126,7 +127,7 @@ module daq_axis #(
   //////////////////////////////////////////////////////
   // awg frame depth
   (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 s_axis_awg_frame_depth TDATA" *)
-  input   wire [(1+$clog2(AWG_DEPTH))*CHANNELS-1:0] s_axis_awg_frame_depth_tdata,
+  input   wire [95:0]                               s_axis_awg_frame_depth_tdata,
   (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 s_axis_awg_frame_depth TVALID" *)
   input   wire                                      s_axis_awg_frame_depth_tvalid,
   (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 s_axis_awg_frame_depth TREADY" *)
@@ -389,14 +390,14 @@ daq_axis_sv #(
   .m_axis_buffer_timestamp_width_tvalid               (m_axis_buffer_timestamp_width_tvalid),
   .m_axis_buffer_timestamp_width_tlast                (m_axis_buffer_timestamp_width_tlast),
   .m_axis_buffer_timestamp_width_tready               (m_axis_buffer_timestamp_width_tready),
-  .m_axis_buffer_capture_done_tdata                   (m_axis_buffer_capture_done_tdata[1:0]),
+  .m_axis_buffer_capture_done_tdata                   (m_axis_buffer_capture_done_tdata[0]),
   .m_axis_buffer_capture_done_tvalid                  (m_axis_buffer_capture_done_tvalid),
   .m_axis_buffer_capture_done_tlast                   (m_axis_buffer_capture_done_tlast),
   .m_axis_buffer_capture_done_tready                  (m_axis_buffer_capture_done_tready),
   .s_axis_lmh6401_config_tdata                        (s_axis_lmh6401_config_tdata[16+$clog2(CHANNELS)-1:0]),
   .s_axis_lmh6401_config_tvalid                       (s_axis_lmh6401_config_tvalid),
   .s_axis_lmh6401_config_tready                       (s_axis_lmh6401_config_tready),
-  .s_axis_awg_frame_depth_tdata                       (s_axis_awg_frame_depth_tdata),
+  .s_axis_awg_frame_depth_tdata                       (s_axis_awg_frame_depth_tdata[$clog2(AWG_DEPTH)*CHANNELS-1:0]),
   .s_axis_awg_frame_depth_tvalid                      (s_axis_awg_frame_depth_tvalid),
   .s_axis_awg_frame_depth_tready                      (s_axis_awg_frame_depth_tready),
   .s_axis_awg_burst_length_tdata                      (s_axis_awg_burst_length_tdata),

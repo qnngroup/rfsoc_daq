@@ -3,12 +3,10 @@
 // Ignore/don't check data around transients when mux selection is changed
 // through config_in interface
 
-import sim_util_pkg::*;
-
 `timescale 1ns / 1ps
 module axis_channel_mux_test ();
 
-sim_util_pkg::debug debug = new(DEFAULT); // printing, error tracking
+sim_util_pkg::debug debug = new(sim_util_pkg::DEFAULT); // printing, error tracking
 
 logic clk = 0;
 localparam CLK_RATE_HZ = 100_000_000;
@@ -79,19 +77,19 @@ task check_results();
     debug.display($sformatf(
       "checking results for channel %d",
       out_channel),
-      VERBOSE
+      sim_util_pkg::VERBOSE
     );
     debug.display($sformatf(
       "received[%0d].size() = %0d",
       out_channel,
       received[out_channel].size()),
-      VERBOSE
+      sim_util_pkg::VERBOSE
     );
     debug.display($sformatf(
       "expected[%0d].size() = %0d",
       out_channel,
       expected[out_channel].size()),
-      VERBOSE
+      sim_util_pkg::VERBOSE
     );
     if (received[out_channel].size() != expected[out_channel].size()) begin
       debug.error($sformatf(
@@ -116,7 +114,7 @@ task check_results();
 endtask
 
 initial begin
-  debug.display("### TESTING AXIS_CHANNEL_MUX ###", DEFAULT);
+  debug.display("### TESTING AXIS_CHANNEL_MUX ###", sim_util_pkg::DEFAULT);
   reset <= 1'b1;
   config_in.data <= '0;
   config_in.valid <= 1'b0;

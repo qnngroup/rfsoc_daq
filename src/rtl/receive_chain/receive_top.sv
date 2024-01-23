@@ -2,6 +2,7 @@
 // toplevel for receive signal chain, takes in data from physical ADC channels
 // and provides a DMA interface for readout of data saved in sample buffers
 
+`timescale 1ns/1ps
 module receive_top #(
   parameter int CHANNELS = 8, // number of input channels
   parameter int TSTAMP_BUFFER_DEPTH = 1024, // depth of timestamp buffer

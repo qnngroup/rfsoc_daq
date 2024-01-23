@@ -29,6 +29,8 @@ modport Slave (
   input   ok
 );
 
+/* verilator lint_off MULTIDRIVEN */
+
 ////////////////////////////////
 // Utitlities for testbenches //
 ////////////////////////////////
@@ -54,7 +56,7 @@ task automatic send_samples(
       samples_sent = samples_sent + 1'b1;
     end
     if (rand_arrivals) begin
-      valid <= $urandom() & 1'b1;
+      valid <= 1'($urandom()) & 1'b1;
     end // else do nothing; intf.valid is already 1'b1
   end
   if (reset_valid) begin
@@ -105,11 +107,13 @@ task automatic do_readout(
     @(posedge clk);
     cycle_count = cycle_count + 1;
     if (rand_ready) begin
-      ready <= $urandom() & 1'b1;
+      ready <= 1'($urandom()) & 1'b1;
     end
   end
   @(posedge clk);
   ready <= 1'b0;
 endtask
+
+/* verilator lint_on MULTIDRIVEN */
 
 endinterface

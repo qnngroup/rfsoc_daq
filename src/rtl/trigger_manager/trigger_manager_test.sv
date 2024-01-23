@@ -1,11 +1,9 @@
 // trigger_manager_test.sv - Reed Foster
 
-import sim_util_pkg::*;
-
 `timescale 1ns/1ps
 module trigger_manager_test ();
 
-sim_util_pkg::debug debug = new(DEFAULT);
+sim_util_pkg::debug debug = new(sim_util_pkg::DEFAULT);
 
 localparam int CHANNELS = 8;
 
@@ -53,7 +51,7 @@ task test_trigger(
 endtask
 
 initial begin
-  debug.display("### TESTING TRIGGER MANAGER ###", DEFAULT);
+  debug.display("### TESTING TRIGGER MANAGER ###", sim_util_pkg::DEFAULT);
   reset <= 1'b1;
   trigger_config.data <= '0;
   trigger_config.valid <= 1'b0;
