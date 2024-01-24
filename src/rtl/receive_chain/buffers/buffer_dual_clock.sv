@@ -187,7 +187,7 @@ always_ff @(posedge capture_clk) begin
   end
 end
 
-assign full = |capture_bank_full_latch;
+assign capture_full = |capture_bank_full_latch;
 
 ////////////////////////////////////////////////////////
 // Readout clock domain
