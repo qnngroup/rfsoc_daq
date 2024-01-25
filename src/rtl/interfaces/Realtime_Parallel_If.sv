@@ -1,5 +1,6 @@
 // Realtime_Parallel_If.sv - Reed Foster
 // multiple axi-stream interfaces without backpressure in parallel
+`timescale 1ns/1ps
 interface Realtime_Parallel_If #(
   parameter DWIDTH = 32,
   parameter CHANNELS = 1
