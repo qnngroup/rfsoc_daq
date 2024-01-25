@@ -6,8 +6,11 @@ verilog_regex="\.\(v\|sv\)"
 test_regex=".*_\(test\|tb\)"$verilog_regex
 
 echo $script_dir/null_modules/xpm_cdc.sv > $list_file
-# first, all the synthesizable RTL (v, sv sources that are not tests)
-find $script_dir/../src/rtl/ -type f \( ! -regex $test_regex -a -regex ".*"$verilog_regex \) >> $list_file
+# first, all the synthesizable RTL
+# sv sources that are not tests:
+find $script_dir/../src/rtl/ -type f \( ! -regex ".*_test\.sv" -a -regex ".*\.sv" \) >> $list_file
+# v sources that are not tests:
+find $script_dir/../src/rtl/ -type f \( ! -regex ".*_test\.v" -a -regex ".*\.v" \) >> $list_file
 # next, sim_util_pkg
 echo $script_dir/../src/verif/sim_util_pkg.sv >> $list_file
 # then, sample_discriminator_pkg
