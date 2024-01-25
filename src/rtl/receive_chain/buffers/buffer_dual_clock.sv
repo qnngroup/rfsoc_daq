@@ -46,6 +46,10 @@ always_ff @(posedge capture_clk) begin
   capture_stop_d <= capture_stop;
 end
 
+// enable sample capture on rising edge of start, disable on rising edge of
+// stop, or if buffer fills up
+logic capture_enabled;
+
 // delay write address to match latency of valid/data pipeline registers
 logic [CHANNELS-1:0][ADDR_WIDTH-1:0] capture_write_addr, capture_write_addr_d;
 always_ff @(posedge capture_clk) capture_write_addr_d <= capture_write_addr;
@@ -90,7 +94,7 @@ logic [CHANNELS-1:0] capture_write_enable, capture_write_enable_d;
 // valid->write_enable path (combinatorial, since we need to update address in a combinatorial loop ??)
 always_comb begin
   for (int channel = 0; channel < CHANNELS; channel++) begin
-    capture_write_enable[channel] = capture_start_d & capture_valid_mask[channel]
+    capture_write_enable[channel] = capture_enabled & capture_valid_mask[channel]
                                       & capture_valid_d[$clog2(CHANNELS)'($clog2(CHANNELS+1)'(channel) % capture_active_channels)];
   end
 end
@@ -202,6 +206,19 @@ always_ff @(posedge capture_clk) begin
 end
 
 assign capture_full = |(capture_full_mask & capture_bank_full_latch);
+
+// update enabled SR flipflop
+always_ff @(posedge capture_clk) begin
+  if (capture_reset) begin
+    capture_enabled <= 1'b0;
+  end else begin
+    if (capture_start & ~capture_start_d) begin
+      capture_enabled <= 1'b1;
+    end else if ((capture_stop & ~capture_stop_d) | (|(capture_bank_full & capture_full_mask))) begin
+      capture_enabled <= 1'b0;
+    end
+  end
+end
 
 ////////////////////////////////////////////////////////
 // Readout clock domain

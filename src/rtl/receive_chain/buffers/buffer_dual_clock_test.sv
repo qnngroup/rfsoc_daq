@@ -3,7 +3,7 @@
 `timescale 1ns/1ps
 module buffer_dual_clock_test ();
 
-sim_util_pkg::debug debug = new(sim_util_pkg::DEBUG);
+sim_util_pkg::debug debug = new(sim_util_pkg::DEFAULT);
 
 localparam int CHANNELS = 4;
 localparam int BUFFER_DEPTH = 64;
@@ -55,6 +55,7 @@ buffer_dual_clock #(
   .readout_start
 );
 
+logic capture_enabled;
 logic readout_enabled;
 
 logic [DATA_WIDTH-1:0] samples_sent [CHANNELS][$];
@@ -63,7 +64,7 @@ int last_received;
 
 always @(posedge capture_clk) begin
   capture_data.valid <= $urandom_range('0, {CHANNELS{1'b1}});
-  if (capture_start) begin
+  if (capture_enabled) begin
     for (int channel = 0; channel < CHANNELS; channel++) begin
       if (capture_data.valid[channel]) begin
         capture_data.data[channel] <= $urandom_range(0, {DATA_WIDTH{1'b1}});
@@ -197,6 +198,8 @@ initial begin
   capture_sw_reset <= 1'b0;
   readout_sw_reset <= 1'b0;
   readout_start <= 1'b0;
+  
+  capture_enabled <= 1'b0;
 
   repeat (100) @(posedge readout_clk);
   readout_reset <= 1'b0;
@@ -216,19 +219,23 @@ initial begin
       @(posedge capture_clk);
       // start capture
       capture_start <= 1'b1;
+      capture_enabled <= 1'b1;
       @(posedge capture_clk)
+      capture_start <= 1'b0;
       // send samples
       // wait some amount of time
       debug.display("waiting for capture to complete", sim_util_pkg::DEBUG);
       if (sample_count_mode == 0) begin
         repeat ($urandom_range(5, 20)) @(posedge capture_clk);
         capture_stop <= 1'b1;
-        capture_start <= 1'b0;
+        capture_enabled <= 1'b0;
+        @(posedge capture_clk);
+        capture_stop <= 1'b0;
       end else begin
-        while (capture_start) begin
+        while (capture_enabled) begin
           for (int channel = 0; channel < 1 << banking_mode; channel++) begin
             if (samples_sent[channel].size() == (BUFFER_DEPTH * (CHANNELS >> banking_mode))) begin
-              capture_start <= 1'b0;
+              capture_enabled <= 1'b0;
             end
           end
           @(posedge capture_clk);
