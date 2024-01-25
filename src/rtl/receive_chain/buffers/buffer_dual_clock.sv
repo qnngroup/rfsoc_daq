@@ -48,7 +48,7 @@ end
 
 // enable sample capture on rising edge of start, disable on rising edge of
 // stop, or if buffer fills up
-logic capture_enabled;
+logic capture_active;
 
 // delay write address to match latency of valid/data pipeline registers
 logic [CHANNELS-1:0][ADDR_WIDTH-1:0] capture_write_addr, capture_write_addr_d;
@@ -94,7 +94,7 @@ logic [CHANNELS-1:0] capture_write_enable, capture_write_enable_d;
 // valid->write_enable path (combinatorial, since we need to update address in a combinatorial loop ??)
 always_comb begin
   for (int channel = 0; channel < CHANNELS; channel++) begin
-    capture_write_enable[channel] = capture_enabled & capture_valid_mask[channel]
+    capture_write_enable[channel] = capture_active & capture_valid_mask[channel]
                                       & capture_valid_d[$clog2(CHANNELS)'($clog2(CHANNELS+1)'(channel) % capture_active_channels)];
   end
 end
@@ -207,15 +207,19 @@ end
 
 assign capture_full = |(capture_full_mask & capture_bank_full_latch);
 
-// update enabled SR flipflop
+// update active SR flipflop
 always_ff @(posedge capture_clk) begin
   if (capture_reset) begin
-    capture_enabled <= 1'b0;
+    capture_active <= 1'b0;
   end else begin
-    if (capture_start & ~capture_start_d) begin
-      capture_enabled <= 1'b1;
-    end else if ((capture_stop & ~capture_stop_d) | (|(capture_bank_full & capture_full_mask))) begin
-      capture_enabled <= 1'b0;
+    if (capture_sw_reset) begin
+      capture_active <= 1'b0;
+    end else begin
+      if (capture_start & ~capture_start_d) begin
+        capture_active <= 1'b1;
+      end else if ((capture_stop & ~capture_stop_d) | (|(capture_bank_full & capture_full_mask))) begin
+        capture_active <= 1'b0;
+      end
     end
   end
 end
@@ -250,12 +254,20 @@ always_ff @(posedge readout_clk) begin
     readout_data.last <= '0;
     readout_bank_select_pipe <= '0;
   end else begin
-    if (readout_data.ready | ~readout_data.valid) begin
-      readout_valid_pipe <= {readout_valid_pipe[READ_LATENCY-2:0], readout_active};
-      readout_last_pipe <= {readout_last_pipe[READ_LATENCY-2:0], readout_last};
-      readout_data.valid <= readout_valid_pipe[READ_LATENCY-1];
-      readout_data.last <= readout_last_pipe[READ_LATENCY-1];
-      readout_bank_select_pipe <= {readout_bank_select_pipe[READ_LATENCY-2:0], readout_bank_select};
+    if (readout_sw_reset) begin
+      readout_valid_pipe <= '0;
+      readout_last_pipe <= '0;
+      readout_data.valid <= '0;
+      readout_data.last <= '0;
+      readout_bank_select_pipe <= '0;
+    end else begin
+      if (readout_data.ready | ~readout_data.valid) begin
+        readout_valid_pipe <= {readout_valid_pipe[READ_LATENCY-2:0], readout_active};
+        readout_last_pipe <= {readout_last_pipe[READ_LATENCY-2:0], readout_last};
+        readout_data.valid <= readout_valid_pipe[READ_LATENCY-1];
+        readout_data.last <= readout_last_pipe[READ_LATENCY-1];
+        readout_bank_select_pipe <= {readout_bank_select_pipe[READ_LATENCY-2:0], readout_bank_select};
+      end
     end
   end
 end
@@ -291,10 +303,14 @@ always_ff @(posedge readout_clk) begin
   if (readout_reset) begin
     readout_active <= 1'b0;
   end else begin
-    if (readout_start & ~readout_start_d) begin
-      readout_active <= 1'b1;
-    end else if (readout_last & readout_data.ready) begin
+    if (readout_sw_reset) begin
       readout_active <= 1'b0;
+    end else begin
+      if (readout_start & ~readout_start_d) begin
+        readout_active <= 1'b1;
+      end else if (readout_last & readout_data.ready) begin
+        readout_active <= 1'b0;
+      end
     end
   end
 end

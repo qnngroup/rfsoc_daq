@@ -77,6 +77,8 @@ end
 always @(posedge readout_clk) begin
   if (readout_enabled) begin
     readout_data.ready <= $urandom_range(0, 1);
+  end else begin
+    readout_data.ready <= 1'b0;
   end
 end
 
@@ -206,56 +208,92 @@ initial begin
   repeat (10) @(posedge capture_clk);
   capture_reset <= 1'b0;
 
-  for (int sample_count_mode = 0; sample_count_mode < 2; sample_count_mode++) begin
-    if (sample_count_mode == 0) begin
-      debug.display("sending a few samples", sim_util_pkg::VERBOSE);
+  for (int test_readout_reset = 0; test_readout_reset < 2; test_readout_reset++) begin
+    if (test_readout_reset == 0) begin
+      debug.display("not asserting readout_sw_reset", sim_util_pkg::VERBOSE);
     end else begin
-      debug.display("sending samples until full", sim_util_pkg::VERBOSE);
+      debug.display("asserting readout_sw_reset", sim_util_pkg::VERBOSE);
     end
-    for (int banking_mode = 0; banking_mode <= $clog2(CHANNELS); banking_mode++) begin
-      debug.display($sformatf("testing with banking_mode = %0d", banking_mode), sim_util_pkg::VERBOSE);
-      // set the banking mode
-      capture_banking_mode <= banking_mode;
-      @(posedge capture_clk);
-      // start capture
-      capture_start <= 1'b1;
-      capture_enabled <= 1'b1;
-      @(posedge capture_clk)
-      capture_start <= 1'b0;
-      // send samples
-      // wait some amount of time
-      debug.display("waiting for capture to complete", sim_util_pkg::DEBUG);
-      if (sample_count_mode == 0) begin
-        repeat ($urandom_range(5, 20)) @(posedge capture_clk);
-        capture_stop <= 1'b1;
-        capture_enabled <= 1'b0;
-        @(posedge capture_clk);
-        capture_stop <= 1'b0;
+    for (int test_capture_reset = 0; test_capture_reset < 2; test_capture_reset++) begin
+      if (test_capture_reset == 0) begin
+        debug.display("not asserting capture_sw_reset", sim_util_pkg::VERBOSE);
       end else begin
-        while (capture_enabled) begin
-          for (int channel = 0; channel < 1 << banking_mode; channel++) begin
-            if (samples_sent[channel].size() == (BUFFER_DEPTH * (CHANNELS >> banking_mode))) begin
-              capture_enabled <= 1'b0;
+        debug.display("asserting capture_sw_reset", sim_util_pkg::VERBOSE);
+      end
+      for (int sample_count_mode = 0; sample_count_mode < 2; sample_count_mode++) begin
+        if (sample_count_mode == 0) begin
+          debug.display("sending a few samples", sim_util_pkg::VERBOSE);
+        end else begin
+          debug.display("sending samples until full", sim_util_pkg::VERBOSE);
+        end
+        for (int banking_mode = 0; banking_mode <= $clog2(CHANNELS); banking_mode++) begin
+          debug.display($sformatf("testing with banking_mode = %0d", banking_mode), sim_util_pkg::VERBOSE);
+          // set the banking mode
+          capture_banking_mode <= banking_mode;
+          @(posedge capture_clk);
+          for (int r = 0; r < ((test_capture_reset > 0) ? 2 : 1); r++) begin
+            // start capture
+            capture_start <= 1'b1;
+            capture_enabled <= 1'b1;
+            @(posedge capture_clk)
+            capture_start <= 1'b0;
+            if ((r == 0) & (test_capture_reset > 0)) begin
+              repeat ($urandom_range(15, 45)) @(posedge capture_clk);
+              capture_sw_reset <= 1'b1;
+              @(posedge capture_clk);
+              capture_sw_reset <= 1'b0;
+              for (int channel = 0; channel < CHANNELS; channel++) begin
+                while (samples_sent[channel].size() > 0) samples_sent[channel].pop_back();
+              end
+            end else begin
+              // send samples
+              // wait some amount of time
+              debug.display("waiting for capture to complete", sim_util_pkg::DEBUG);
+              if (sample_count_mode == 0) begin
+                repeat ($urandom_range(5, 20)) @(posedge capture_clk);
+                capture_stop <= 1'b1;
+                capture_enabled <= 1'b0;
+                @(posedge capture_clk);
+                capture_stop <= 1'b0;
+              end else begin
+                while (capture_enabled) begin
+                  for (int channel = 0; channel < 1 << banking_mode; channel++) begin
+                    if (samples_sent[channel].size() == (BUFFER_DEPTH * (CHANNELS >> banking_mode))) begin
+                      capture_enabled <= 1'b0;
+                    end
+                  end
+                  @(posedge capture_clk);
+                end
+              end
             end
           end
-          @(posedge capture_clk);
+          @(posedge readout_clk);
+          for (int r = 0; r < ((test_readout_reset > 0) ? 2 : 1); r++) begin
+            readout_start <= 1'b1;
+            readout_enabled <= 1'b1;
+            debug.display("waiting for readout to complete", sim_util_pkg::DEBUG);
+            repeat (10) @(posedge readout_clk);
+            // check capture_write_depth
+            check_write_depth(samples_sent, capture_write_depth, banking_mode);
+            if ((r == 0) & (test_readout_reset > 0)) begin
+              repeat ($urandom_range(0, BUFFER_DEPTH*CHANNELS/2)) @(posedge readout_clk);
+              readout_start <= 1'b0;
+              readout_sw_reset <= 1'b1;
+              @(posedge readout_clk);
+              readout_sw_reset <= 1'b0;
+              while (samples_received.size() > 0) samples_received.pop_back();
+            end else begin
+              while (~(readout_data.ok & readout_data.last)) @(posedge readout_clk);
+              readout_start <= 1'b0;
+              readout_enabled <= 1'b0;
+              repeat (10) @(posedge readout_clk);
+              check_results(samples_sent, samples_received, last_received, banking_mode);
+            end
+          end
         end
       end
-      @(posedge readout_clk);
-      readout_start <= 1'b1;
-      readout_enabled <= 1'b1;
-      debug.display("waiting for readout to complete", sim_util_pkg::DEBUG);
-      repeat (10) @(posedge readout_clk);
-      // check capture_write_depth
-      check_write_depth(samples_sent, capture_write_depth, banking_mode);
-      while (~(readout_data.ok & readout_data.last)) @(posedge readout_clk);
-      readout_start <= 1'b0;
-      readout_enabled <= 1'b0;
-      repeat (10) @(posedge readout_clk);
-      check_results(samples_sent, samples_received, last_received, banking_mode);
     end
   end
-
   debug.finish();
 end
 
