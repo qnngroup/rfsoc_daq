@@ -1,7 +1,7 @@
 // buffer_dual_clock_test.sv - Reed Foster
 
 `timescale 1ns/1ps
-module buffer_dual_clock_test ();
+module buffer_core_test ();
 
 sim_util_pkg::debug debug = new(sim_util_pkg::DEFAULT);
 
@@ -23,7 +23,7 @@ always #(0.5s/READOUT_CLK_RATE_HZ) readout_clk = ~readout_clk;
 Realtime_Parallel_If #(.DWIDTH(DATA_WIDTH), .CHANNELS(CHANNELS)) capture_data ();
 Axis_If #(.DWIDTH(DATA_WIDTH)) readout_data ();
 
-logic [$clog2($clog2(CHANNELS)+1)-1:0] capture_banking_mode;
+logic [$clog2(CHANNELS+1)-1:0] capture_active_channels;
 logic capture_start, capture_stop;
 logic capture_full;
 
@@ -33,7 +33,7 @@ logic capture_sw_reset;
 logic readout_sw_reset;
 logic readout_start;
 
-buffer_dual_clock #(
+buffer_core #(
   .CHANNELS(CHANNELS),
   .BUFFER_DEPTH(BUFFER_DEPTH),
   .DATA_WIDTH(DATA_WIDTH),
@@ -42,7 +42,7 @@ buffer_dual_clock #(
   .capture_clk,
   .capture_reset,
   .capture_data,
-  .capture_banking_mode,
+  .capture_active_channels,
   .capture_start,
   .capture_stop,
   .capture_full,
@@ -118,15 +118,15 @@ end
 task automatic check_write_depth (
   input logic [DATA_WIDTH-1:0] samples_sent [CHANNELS][$],
   input logic [CHANNELS-1:0][$clog2(BUFFER_DEPTH+1)-1:0] write_depths,
-  input int banking_mode
+  input int active_channels
 );
   
   int total_write_depth;
 
   // make sure the write depths match up with the number of samples sent
-  for (int channel = 0; channel < 1 << banking_mode; channel++) begin
+  for (int channel = 0; channel < active_channels; channel++) begin
     total_write_depth = 0;
-    for (int bank = channel; bank < CHANNELS; bank += 1 << banking_mode) begin
+    for (int bank = channel; bank < CHANNELS; bank += active_channels) begin
       if (write_depths[bank][$clog2(BUFFER_DEPTH+1)-1]) begin
         // if MSB of write_depths is set, then bank is full
         // this behavior is identical to just adding write_depth[bank] when
@@ -158,7 +158,7 @@ task automatic check_results (
   inout logic [DATA_WIDTH-1:0] samples_sent [CHANNELS][$],
   inout logic [DATA_WIDTH-1:0] samples_received [$],
   input int last_received,
-  input int banking_mode
+  input int active_channels
 );
  
   // keep track of what sample we're on across multiple banks
@@ -187,27 +187,26 @@ task automatic check_results (
     for (int sample = 0; sample < BUFFER_DEPTH; sample++) begin
       // get the index of the sample within the currently-selected channel
       // banks are assigned to channels accordingly:
-      // banking_mode = 0: [0, 0, 0, 0, 0, 0, 0, 0, ... ]
-      // banking_mode = 1: [0, 1, 0, 1, 0, 1, 0, 1, ... ]
-      // banking_mode = 2: [0, 1, 2, 3, 0, 1, 2, 3, ... ]
-      // banking_mode = 3: [0, 1, 2, 3, 4, 5, 6, 7, ... ]
-      // 1 << banking_mode gives the number of active channels
-      // bank % (1 << banking_mode) gives the channel assigned to the current bank
-      // bank / (1 << banking_mode) gives the bank offset for banks associated
+      // active_channels = 1: [0, 0, 0, 0, 0, 0, 0, 0, ... ]
+      // active_channels = 2: [0, 1, 0, 1, 0, 1, 0, 1, ... ]
+      // active_channels = 4: [0, 1, 2, 3, 0, 1, 2, 3, ... ]
+      // active_channels = 8: [0, 1, 2, 3, 4, 5, 6, 7, ... ]
+      // (bank % active_channels) gives the channel assigned to the current bank
+      // (bank / active_channels) gives the bank offset for banks associated
       // with the channel assigned to the current bank
       //  i.e. if we're on bank 5:
-      //    banking_mode = 3, it would be the 0th bank for channel 5
-      //    banking_mode = 2, it would be the 1st bank for channel 1
-      //    banking_mode = 1, it would be the 2nd bank for channel 1
-      //    banking_mode = 0, it would be the 5th bank for channel 0
-      sample_index = (bank / (1 << banking_mode)) * BUFFER_DEPTH + sample;
-      if (sample_index < samples_sent[bank % (1 << banking_mode)].size()) begin
-        if (samples_sent[bank % (1 << banking_mode)][$-sample_index] !== samples_received[$]) begin
+      //    active_channels = 8, it would be the 0th bank for channel 5
+      //    active_channels = 4, it would be the 1st bank for channel 1
+      //    active_channels = 2, it would be the 2nd bank for channel 1
+      //    active_channels = 1, it would be the 5th bank for channel 0
+      sample_index = (bank / active_channels) * BUFFER_DEPTH + sample;
+      if (sample_index < samples_sent[bank % active_channels].size()) begin
+        if (samples_sent[bank % active_channels][$-sample_index] !== samples_received[$]) begin
           debug.error($sformatf(
             "channel %0d, bank %0d: sample mismatch, expected %x got %x",
-            bank % (1 << banking_mode),
+            bank % active_channels,
             bank,
-            samples_sent[bank % (1 << banking_mode)][$-sample_index],
+            samples_sent[bank % active_channels][$-sample_index],
             samples_received[$])
           );
         end
@@ -233,7 +232,7 @@ initial begin
 
   // reset inputs to DUT
   readout_data.ready <= 1'b0;
-  capture_banking_mode <= '0;
+  capture_active_channels <= '0;
   capture_start <= 1'b0;
   capture_stop <= 1'b0;
   capture_sw_reset <= 1'b0;
@@ -263,13 +262,13 @@ initial begin
           1: debug.display("sending zero samples", sim_util_pkg::VERBOSE);
           2: debug.display("sending samples until full", sim_util_pkg::VERBOSE);
         endcase
-        for (int banking_mode = 0; banking_mode <= $clog2(CHANNELS); banking_mode++) begin
-          debug.display($sformatf("testing with banking_mode = %0d", banking_mode), sim_util_pkg::VERBOSE);
+        for (int active_channels = 1; active_channels <= CHANNELS; active_channels <<= 1) begin
+          debug.display($sformatf("testing with active_channels = %0d", active_channels), sim_util_pkg::VERBOSE);
           ////////////////////////////////////////////////////////////////////////
           // test capture
           ////////////////////////////////////////////////////////////////////////
           // set the banking mode
-          capture_banking_mode <= banking_mode;
+          capture_active_channels <= active_channels;
           @(posedge capture_clk);
           // if we're testing capture reset, do 2 iterations, where the first
           // iteration we interrupt with a sw_reset signal
@@ -315,8 +314,8 @@ initial begin
                 2: begin
                   // wait until one of the channels is full
                   while (capture_enabled) begin
-                    for (int channel = 0; channel < 1 << banking_mode; channel++) begin
-                      if (samples_sent[channel].size() == (BUFFER_DEPTH * (CHANNELS >> banking_mode))) begin
+                    for (int channel = 0; channel < active_channels; channel++) begin
+                      if (samples_sent[channel].size() == (BUFFER_DEPTH * (CHANNELS / active_channels))) begin
                         // reset capture_enabled so we stop saving samples
                         capture_enabled <= 1'b0;
                       end
@@ -338,7 +337,7 @@ initial begin
             repeat (10) @(posedge readout_clk);
             // check capture_write_depth to make sure the buffer saved the
             // correct number of samples in each bank
-            check_write_depth(samples_sent, capture_write_depth, banking_mode);
+            check_write_depth(samples_sent, capture_write_depth, active_channels);
             if ((r == 0) & (test_readout_reset > 0)) begin
               repeat ($urandom_range(0, BUFFER_DEPTH*CHANNELS/2)) @(posedge readout_clk);
               readout_start <= 1'b0;
@@ -350,7 +349,7 @@ initial begin
               while (~(readout_data.ok & readout_data.last)) @(posedge readout_clk);
               readout_start <= 1'b0;
               repeat (10) @(posedge readout_clk);
-              check_results(samples_sent, samples_received, last_received, banking_mode);
+              check_results(samples_sent, samples_received, last_received, active_channels);
             end
           end
         end

@@ -1,8 +1,9 @@
-// buffer_dual_clock.sv - Reed Foster
+// buffer_core.sv - Reed Foster
 // collection of BRAM buffers with independent read/write clocks
+// as well as logic for operating them
 
 `timescale 1ns/1ps
-module buffer_dual_clock #(
+module buffer_core #(
   parameter int CHANNELS = 8,
   parameter int BUFFER_DEPTH = 256,
   parameter int DATA_WIDTH = 256,
@@ -13,13 +14,13 @@ module buffer_dual_clock #(
   // data
   Realtime_Parallel_If.Slave capture_data,
   // configuration
-  // banking mode: 1 << banking_mode active channels (banking_mode == MAX -> independent capture)
-  input wire [$clog2($clog2(CHANNELS)+1)-1:0] capture_banking_mode,
+  // buffers are chained together for non-independent banking modes
+  // (active_channels < CHANNELS), increasing the write depth
+  input wire [$clog2(CHANNELS+1)-1:0] capture_active_channels, // number of active channels [0, ... CHANNELS]
+  // active_channels must be a power of 2
   input wire capture_start, // software/PS-triggered start of capture (gated by capture FSM)
   input wire capture_stop, // software/PS-triggered stop of capture (gated by capture FSM)
   output logic capture_full, // asserted when any active buffers* fill
-  // *for non-independent banking modes (banking_mode < MAX), buffers are
-  // chained together, increasing the write depth
   output logic [CHANNELS-1:0][$clog2(BUFFER_DEPTH+1)-1:0] capture_write_depth,
   input wire capture_sw_reset, // manual software/PS-triggered reset
 
@@ -68,9 +69,7 @@ end
 logic capture_dma_done;
 
 // banking mode
-logic [$clog2($clog2(CHANNELS)+1)-1:0] capture_banking_mode_reg; // latch input banking mode when capture is started
-logic [$clog2(CHANNELS+1)-1:0] capture_active_channels; // [0, ... CHANNELS]
-assign capture_active_channels = 1'b1 << capture_banking_mode_reg; // number of active channels
+logic [$clog2(CHANNELS+1)-1:0] capture_active_channels_reg; // latch input active_channels when capture is started
 
 // masks for different channel modes
 logic [CHANNELS-1:0] capture_full_mask, capture_valid_mask;
@@ -83,7 +82,7 @@ always_ff @(posedge capture_clk) capture_data_d <= capture_data.data;
 // mux data based on banking_mode
 always_ff @(posedge capture_clk) begin
   for (int channel = 0; channel < CHANNELS; channel++) begin
-    capture_buffer_in[channel] <= capture_data_d[$clog2(CHANNELS)'($clog2(CHANNELS+1)'(channel) % capture_active_channels)];
+    capture_buffer_in[channel] <= capture_data_d[$clog2(CHANNELS)'($clog2(CHANNELS+1)'(channel) % capture_active_channels_reg)];
   end
 end
 
@@ -95,7 +94,7 @@ logic [CHANNELS-1:0] capture_write_enable, capture_write_enable_d;
 always_comb begin
   for (int channel = 0; channel < CHANNELS; channel++) begin
     capture_write_enable[channel] = capture_active & capture_valid_mask[channel]
-                                      & capture_valid_d[$clog2(CHANNELS)'($clog2(CHANNELS+1)'(channel) % capture_active_channels)];
+                                      & capture_valid_d[$clog2(CHANNELS)'($clog2(CHANNELS+1)'(channel) % capture_active_channels_reg)];
   end
 end
 // register write_enable and valid
@@ -104,13 +103,13 @@ always_ff @(posedge capture_clk) begin
   capture_write_enable_d <= capture_write_enable;
 end
 
-// latch banking mode on capture start
+// latch active channels on capture start
 always_ff @(posedge capture_clk) begin
   if (capture_reset) begin
-    capture_banking_mode_reg <= '0;
+    capture_active_channels_reg <= '0;
   end else begin
     if (capture_start & ~capture_start_d) begin
-      capture_banking_mode_reg <= capture_banking_mode;
+      capture_active_channels_reg <= capture_active_channels;
     end
   end
 end
@@ -122,11 +121,11 @@ always_ff @(posedge capture_clk) begin
     if (capture_start & ~capture_start_d) begin
       for (int channel = 0; channel < CHANNELS; channel++) begin
         // For 8 channels:
-        // if banking_mode == 0 (1 active channels): mask = 0x80 (10000000)
-        // if banking_mode == 1 (2 active channels): mask = 0xc0 (11000000)
-        // if banking_mode == 2 (4 active channels): mask = 0xf0 (11110000)
-        // if banking_mode == 3 (8 active channels): mask = 0xff (11111111)
-        capture_full_mask[CHANNELS-1-channel] <= channel + 1 > (1 << capture_banking_mode) ? 1'b0 : 1'b1;
+        // if active channels == 1: mask = 0x80 (10000000)
+        // if active channels == 2: mask = 0xc0 (11000000)
+        // if active channels == 4: mask = 0xf0 (11110000)
+        // if active channels == 8: mask = 0xff (11111111)
+        capture_full_mask[CHANNELS-1-channel] <= channel + 1 > capture_active_channels ? 1'b0 : 1'b1;
       end
     end
   end
@@ -163,11 +162,11 @@ always_ff @(posedge capture_clk) begin
       if (capture_start & ~capture_start_d) begin
         // initialized almost same as capture_full_mask, just bitswapped
         // For 8 channels:
-        // if banking_mode == 0 (1 active channels): mask = 0x01 (10000000)
-        // if banking_mode == 1 (2 active channels): mask = 0x03 (11000000)
-        // if banking_mode == 2 (4 active channels): mask = 0x0f (11110000)
-        // if banking_mode == 3 (8 active channels): mask = 0xff (11111111)
-        capture_valid_mask[channel] <= (channel + 1 > (1 << capture_banking_mode)) ? 1'b0 : 1'b1;
+        // if active channels == 1: mask = 0x01 (10000000)
+        // if active channels == 2: mask = 0x03 (11000000)
+        // if active channels == 4: mask = 0x0f (11110000)
+        // if active channels == 8: mask = 0xff (11111111)
+        capture_valid_mask[channel] <= channel + 1 > capture_active_channels ? 1'b0 : 1'b1;
       end else begin
         // when a bank fills up, update which bank is active by shifting the
         // bits in the mask based on the current banking mode
@@ -178,8 +177,8 @@ always_ff @(posedge capture_clk) begin
             // if we're resetting the current valid mask (i.e. it wasn't reset
             // in a previous clock cycle), then set a subsequent mask bit whose
             // distance from the current bit is determined by the banking mode
-            if ($clog2(CHANNELS+1)'(channel) + capture_active_channels < $clog2(CHANNELS+1)'(CHANNELS)) begin
-              capture_valid_mask[$clog2(CHANNELS)'($clog2(CHANNELS+1)'(channel) + capture_active_channels)] <= 1'b1;
+            if ($clog2(CHANNELS+1)'(channel) + capture_active_channels_reg < $clog2(CHANNELS+1)'(CHANNELS)) begin
+              capture_valid_mask[$clog2(CHANNELS)'($clog2(CHANNELS+1)'(channel) + capture_active_channels_reg)] <= 1'b1;
             end
           end
         end
