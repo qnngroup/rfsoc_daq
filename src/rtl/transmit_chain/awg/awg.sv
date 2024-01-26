@@ -201,7 +201,7 @@ always_ff @(posedge dma_clk) begin
         if (dma_write_address == dma_address_max_reg[dma_write_channel]) begin
           dma_write_address <= '0;
           dma_write_done[dma_write_channel] <= 1'b1;
-          if (int'(dma_write_channel) == CHANNELS - 1) begin
+          if (dma_write_channel == $clog2(CHANNELS)'(CHANNELS - 1)) begin
             dma_write_channel <= '0;
           end else begin
             dma_write_channel <= dma_write_channel + 1'b1;
@@ -231,7 +231,7 @@ always_ff @(posedge dma_clk) begin
       dma_transfer_error.valid <= 1'b0;
     end else begin
       if (dma_write_enable) begin
-        if ((int'(dma_write_channel) == CHANNELS - 1) & (dma_write_address == dma_address_max_reg[dma_write_channel])) begin
+        if ((dma_write_channel == $clog2(CHANNELS)'(CHANNELS - 1)) & (dma_write_address == dma_address_max_reg[dma_write_channel])) begin
           if (~dma_tlast_reg) begin
             // we were expecting tlast, but didn't get it
             dma_transfer_error.data[0] <= 1'b1;
