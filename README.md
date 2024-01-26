@@ -82,6 +82,10 @@ sim_util_pkg::debug debug = new(sim_util_pkg::DEBUG);
 
 Here's a template:
 ```
+// my_module_test.sv - Author Name
+// Short description of the test and what it intends to achieve (in general)
+// (optional, but recommended) list of specific behavior of the DUT which this test covers
+
 `timescale 1ns / 1ps
 module my_module_test ();
 
