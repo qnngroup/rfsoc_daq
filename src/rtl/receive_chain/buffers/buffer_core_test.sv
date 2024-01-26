@@ -10,6 +10,12 @@ localparam int BUFFER_DEPTH = 64;
 localparam int DATA_WIDTH = 16;
 localparam int READ_LATENCY = 4;
 
+buffer_pkg::util #(
+  .CHANNELS(CHANNELS),
+  .BUFFER_DEPTH(BUFFER_DEPTH),
+  .DATA_WIDTH(DATA_WIDTH)
+) buffer_util = new;
+
 logic capture_reset;
 logic capture_clk = 0;
 localparam CAPTURE_CLK_RATE_HZ = 512_000_000;
@@ -27,7 +33,7 @@ logic [$clog2(CHANNELS+1)-1:0] capture_active_channels;
 logic capture_start, capture_stop;
 logic capture_full;
 
-logic [CHANNELS-1:0][$clog2(BUFFER_DEPTH+1)-1:0] capture_write_depth;
+logic [CHANNELS-1:0][$clog2(BUFFER_DEPTH):0] capture_write_depth;
 logic capture_sw_reset;
 
 logic readout_sw_reset;
@@ -115,113 +121,7 @@ always @(posedge readout_clk) begin
   end
 end
 
-task automatic check_write_depth (
-  input logic [DATA_WIDTH-1:0] samples_sent [CHANNELS][$],
-  input logic [CHANNELS-1:0][$clog2(BUFFER_DEPTH+1)-1:0] write_depths,
-  input int active_channels
-);
-  
-  int total_write_depth;
-
-  // make sure the write depths match up with the number of samples sent
-  for (int channel = 0; channel < active_channels; channel++) begin
-    total_write_depth = 0;
-    for (int bank = channel; bank < CHANNELS; bank += active_channels) begin
-      if (write_depths[bank][$clog2(BUFFER_DEPTH+1)-1]) begin
-        // if MSB of write_depths is set, then bank is full
-        // this behavior is identical to just adding write_depth[bank] when
-        // BUFFER_DEPTH is a power of 2; however this is not always the case
-        total_write_depth += BUFFER_DEPTH;
-      end else begin
-        total_write_depth += write_depths[bank];
-      end
-    end
-    debug.display($sformatf(
-      "channel %0d: sent %0d samples",
-      channel,
-      samples_sent[channel].size()),
-      sim_util_pkg::DEBUG
-    );
-    if (samples_sent[channel].size() !== total_write_depth) begin
-      debug.error($sformatf(
-        "channel %0d: sent %0d samples, but %0d were written",
-        channel,
-        samples_sent[channel].size(),
-        total_write_depth)
-      );
-    end
-  end
-
-endtask
-
-task automatic check_results (
-  inout logic [DATA_WIDTH-1:0] samples_sent [CHANNELS][$],
-  inout logic [DATA_WIDTH-1:0] samples_received [$],
-  input int last_received,
-  input int active_channels
-);
- 
-  // keep track of what sample we're on across multiple banks
-  int sample_index;
-
-  // make sure we got tlast at the right time
-  if (last_received !== CHANNELS*BUFFER_DEPTH) begin
-    debug.error($sformatf(
-      "expected tlast event on cycle %0d, got it on %0d",
-      CHANNELS*BUFFER_DEPTH,
-      last_received)
-    );
-  end
-
-  // make sure samples_received is the right size
-  if (samples_received.size() !== CHANNELS*BUFFER_DEPTH) begin
-    debug.error($sformatf(
-      "expected to receive %0d samples, but got %0d",
-      CHANNELS*BUFFER_DEPTH,
-      samples_received.size())
-    );
-  end
-
-  // check that the right data was received
-  for (int bank = 0; bank < CHANNELS; bank++) begin
-    for (int sample = 0; sample < BUFFER_DEPTH; sample++) begin
-      // get the index of the sample within the currently-selected channel
-      // banks are assigned to channels accordingly:
-      // active_channels = 1: [0, 0, 0, 0, 0, 0, 0, 0, ... ]
-      // active_channels = 2: [0, 1, 0, 1, 0, 1, 0, 1, ... ]
-      // active_channels = 4: [0, 1, 2, 3, 0, 1, 2, 3, ... ]
-      // active_channels = 8: [0, 1, 2, 3, 4, 5, 6, 7, ... ]
-      // (bank % active_channels) gives the channel assigned to the current bank
-      // (bank / active_channels) gives the bank offset for banks associated
-      // with the channel assigned to the current bank
-      //  i.e. if we're on bank 5:
-      //    active_channels = 8, it would be the 0th bank for channel 5
-      //    active_channels = 4, it would be the 1st bank for channel 1
-      //    active_channels = 2, it would be the 2nd bank for channel 1
-      //    active_channels = 1, it would be the 5th bank for channel 0
-      sample_index = (bank / active_channels) * BUFFER_DEPTH + sample;
-      if (sample_index < samples_sent[bank % active_channels].size()) begin
-        if (samples_sent[bank % active_channels][$-sample_index] !== samples_received[$]) begin
-          debug.error($sformatf(
-            "channel %0d, bank %0d: sample mismatch, expected %x got %x",
-            bank % active_channels,
-            bank,
-            samples_sent[bank % active_channels][$-sample_index],
-            samples_received[$])
-          );
-        end
-      end
-      samples_received.pop_back();
-    end
-  end
-
-  // clean up extra samples
-  for (int channel = 0; channel < CHANNELS; channel++) begin
-    while (samples_sent[channel].size() > 0) samples_sent[channel].pop_back();
-  end
-  while (samples_received.size() > 0) samples_received.pop_back(); 
-
-endtask
+int expected_depths [CHANNELS];
 
 initial begin
   debug.display("### TESTING DUAL-CLOCK SAMPLE BUFFER ###", sim_util_pkg::DEFAULT);
@@ -337,7 +237,10 @@ initial begin
             repeat (10) @(posedge readout_clk);
             // check capture_write_depth to make sure the buffer saved the
             // correct number of samples in each bank
-            check_write_depth(samples_sent, capture_write_depth, active_channels);
+            for (int channel = 0; channel < CHANNELS; channel++) begin
+              expected_depths[channel] = samples_sent[channel].size();
+            end
+            buffer_util.check_write_depth(debug, expected_depths, capture_write_depth, active_channels);
             if ((r == 0) & (test_readout_reset > 0)) begin
               repeat ($urandom_range(0, BUFFER_DEPTH*CHANNELS/2)) @(posedge readout_clk);
               readout_start <= 1'b0;
@@ -349,7 +252,7 @@ initial begin
               while (~(readout_data.ok & readout_data.last)) @(posedge readout_clk);
               readout_start <= 1'b0;
               repeat (10) @(posedge readout_clk);
-              check_results(samples_sent, samples_received, last_received, active_channels);
+              buffer_util.check_results(debug, samples_sent, samples_received, last_received, active_channels);
             end
           end
         end

@@ -21,7 +21,7 @@ module buffer_core #(
   input wire capture_start, // software/PS-triggered start of capture (gated by capture FSM)
   input wire capture_stop, // software/PS-triggered stop of capture (gated by capture FSM)
   output logic capture_full, // asserted when any active buffers* fill
-  output logic [CHANNELS-1:0][$clog2(BUFFER_DEPTH+1)-1:0] capture_write_depth,
+  output logic [CHANNELS-1:0][$clog2(BUFFER_DEPTH):0] capture_write_depth,
   input wire capture_sw_reset, // manual software/PS-triggered reset
 
   // Readout (PS) clock, reset (100 MHz)
