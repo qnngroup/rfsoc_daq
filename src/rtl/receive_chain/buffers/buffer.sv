@@ -55,7 +55,7 @@ Axis_If #(.DWIDTH($clog2($clog2(CHANNELS+1)))) adc_capture_banking_mode_sync ();
 assign adc_capture_banking_mode_sync.ready = adc_capture_state == CAPTURE_IDLE;
 always_ff @(posedge adc_clk) begin
   if (adc_reset) begin
-    adc_active_channels <= CHANNELS;
+    adc_active_channels <= $clog2(CHANNELS+1)'(CHANNELS);
   end else begin
     if (adc_capture_banking_mode_sync.ok) begin
       adc_active_channels <= 1 << adc_capture_banking_mode_sync.data;
@@ -137,6 +137,17 @@ logic [CHANNELS-1:0][$clog2(BUFFER_DEPTH):0] adc_capture_write_depth;
 Axis_If #(.DWIDTH(CHANNELS*($clog2(BUFFER_DEPTH)+1))) adc_capture_write_depth_sync ();
 assign adc_capture_write_depth_sync.data = adc_capture_write_depth;
 assign adc_capture_write_depth_sync.valid = adc_capture_done;
+// CDC for capture depth
+axis_config_reg_cdc #(
+  .DWIDTH(CHANNELS*($clog2(BUFFER_DEPTH)+1))
+) capture_write_depth_cdc_i (
+  .src_clk(adc_clk),
+  .src_reset(adc_reset),
+  .src(adc_capture_write_depth_sync),
+  .dest_clk(ps_clk),
+  .dest_reset(ps_reset),
+  .dest(ps_capture_write_depth)
+);
 
 ////////////////////////////////////////////////////////////
 // Buffer core logic
@@ -373,7 +384,6 @@ assign ps_readout_reset = (ps_readout_sw_reset.data == 1) & ps_readout_sw_reset.
 // only allow DMA transfer to start when we actually have saved data
 assign ps_readout_start.ready = ps_readout_state == DMA_READY;
 logic ps_readout_start_pls; // pulse high for one cycle
-logic ps_readout_active;
 
 //////////////////////////
 // Internal logic
@@ -385,14 +395,13 @@ logic [CHANNELS-1:0][READ_LATENCY-1:0][DATA_WIDTH-1:0] ps_readout_data_pipe;
 logic [READ_LATENCY-1:0][$clog2(CHANNELS)-1:0] ps_bank_select_pipe;
 logic [READ_LATENCY-1:0] ps_readout_valid_pipe, ps_readout_last_pipe;
 
-logic ps_readout_enable, ps_readout_active;
+logic ps_readout_active;
+logic ps_readout_enable;
 logic ps_readout_last;
 
 assign ps_readout_last = (ps_read_addr == ADDR_WIDTH'(BUFFER_DEPTH - 1)) & (ps_bank_select == $clog2(CHANNELS)'(CHANNELS - 1));
 assign ps_readout_enable = ps_readout_active & (ps_readout_data.ready | ~ps_readout_data.valid);
 
-logic ps_start_d;
-always_ff @(posedge ps_clk) ps_start_d <= ps_start;
 logic ps_readout_done_pls;
 assign ps_readout_done_pls = ps_readout_data.ok & ps_readout_data.last;
 
@@ -451,6 +460,7 @@ end
 always_ff @(posedge ps_clk) begin
   if (ps_reset) begin
     ps_readout_start_pls <= 1'b0;
+    ps_readout_active <= 1'b0;
   end else begin
     // ps_readout_start_pls goes high one cycle before ps_readout_active, so
     // if we have multiple transactions attempted on ps_readout_start, we
@@ -462,10 +472,14 @@ always_ff @(posedge ps_clk) begin
     end else begin
       ps_readout_start_pls <= 1'b0;
     end
-    if (ps_readout_start_pls) begin
-      ps_readout_active <= 1'b1;
-    end else if (ps_readout_last & ps_readout_data.ok) begin
+    if (ps_readout_reset) begin
       ps_readout_active <= 1'b0;
+    end else begin
+      if (ps_readout_start_pls) begin
+        ps_readout_active <= 1'b1;
+      end else if (ps_readout_last & ps_readout_data.ok) begin
+        ps_readout_active <= 1'b0;
+      end
     end
   end
 end
@@ -477,9 +491,35 @@ always_ff @(posedge ps_clk) begin
   end
 end
 
-////////////////////////////////////////////////////////
+//////////////////////////////
+// Readout state machine
+// transition logic
+//////////////////////////////
+always_ff @(posedge ps_clk) begin
+  if (ps_reset) begin
+    ps_readout_state <= DMA_IDLE;
+  end else begin
+    unique case (ps_readout_state)
+      DMA_IDLE: if (ps_capture_done) ps_readout_state <= DMA_READY;
+      DMA_READY: if (ps_readout_start_pls) ps_readout_state <= DMA_ACTIVE;
+      DMA_ACTIVE: begin
+        if (ps_readout_reset) begin
+          ps_readout_state <= DMA_READY;
+        end else begin
+          if (ps_readout_done_pls) begin
+            ps_readout_state <= DMA_IDLE;
+          end
+        end
+      end
+    endcase
+  end
+end
+
+////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////
 // Clock crossing and memory
-////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////
 
 // CDC for readout done (readout clock -> capture clock)
 xpm_cdc_pulse #(
