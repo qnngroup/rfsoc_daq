@@ -1,6 +1,45 @@
 // buffer.sv - Reed Foster
-// collection of BRAM buffers with independent read/write clocks
-// as well as 
+// Save samples from ADC (either raw or processed samples) into a large buffer
+// at a high rate. The buffer can later be read out at a slower rate over DMA
+// so that further signal processing and analysis can be performed on the
+// sample data
+//
+// Implemented as a collection of BRAM/URAM buffers with independent
+// read/write clocks, as well as state machine to handle configuration updates
+//
+// Datastream interfaces
+// - adc_data: data,valid pairs for CHANNELS parallel stream interfaces
+// - ps_readout_data: DMA data, always outputs
+//
+// Realtime I/O:
+// - adc_capture_hw_start: input, hardware trigger for starting capture
+// - adc_capture_hw_stop: input, hardware trigger for stopping capture
+// - adc_capture_full: output, goes high when buffer fills up
+//
+// Configuration registers:
+// - arm/start/stop:
+//    - arm the buffer for hardware-triggered capture
+//    - start capture (software-triggered capture)
+//    - stop capture
+// - banking_mode:
+//    - select how many channels are active
+//    - enables deeper storage of sample data when fewer channels are active
+//    - active_channels = 1 << banking_mode
+// - capture/readout sw_reset:
+//    - reset state machine and counters for capture and readout logic
+//    - capture sw_reset can be asserted at any time
+//    - readout sw_reset can only be asserted when the readout hardware is in
+//      the DMA_ACTIVE state (this allows for re-trying failed DMA transfers)
+//      and only resets to DMA_READY so that capture cannot be triggered again
+//      (unless capture sw_reset is also asserted)
+//
+// Status registers:
+// - ps_capture_write_depth:
+//    - outputted every time a capture finishes
+//    - flattened 2D array [CHANNELS][$clog2(BUFFER_DEPTH)+1]
+//    - for each channel, MSB indicates if buffer is full
+//    - LSBs indicate the number of samples stored in the corresponding
+//      bank
 
 `timescale 1ns/1ps
 module buffer #(
@@ -128,7 +167,8 @@ assign adc_capture_stop_pls = (adc_capture_hw_stop | adc_capture_sw_stop) & (adc
 
 // enable sample capture on rising edge of start, disable on rising edge of
 // stop, or if buffer fills up
-logic adc_capture_active, adc_capture_done;
+logic adc_capture_active;
+logic adc_capture_done_pls;
 
 ////////////////////////
 // capture depth
@@ -136,7 +176,8 @@ logic adc_capture_active, adc_capture_done;
 logic [CHANNELS-1:0][$clog2(BUFFER_DEPTH):0] adc_capture_write_depth;
 Axis_If #(.DWIDTH(CHANNELS*($clog2(BUFFER_DEPTH)+1))) adc_capture_write_depth_sync ();
 assign adc_capture_write_depth_sync.data = adc_capture_write_depth;
-assign adc_capture_write_depth_sync.valid = adc_capture_done;
+assign adc_capture_write_depth_sync.valid = adc_capture_done_pls;
+assign adc_capture_write_depth_sync.last = 1'b1; // always final packet
 // CDC for capture depth
 axis_config_reg_cdc #(
   .DWIDTH(CHANNELS*($clog2(BUFFER_DEPTH)+1))
@@ -307,16 +348,16 @@ always_ff @(posedge adc_clk) begin
 end
 
 //////////////////////////////
-// update capture_done
+// update capture_done_pls
 //////////////////////////////
 always_ff @(posedge adc_clk) begin
   if (adc_reset) begin
-    adc_capture_done <= 1'b0;
+    adc_capture_done_pls <= 1'b0;
   end else begin
     if ((adc_capture_full & ~adc_capture_full_d) | adc_capture_stop_pls) begin
-      adc_capture_done <= 1'b1;
+      adc_capture_done_pls <= 1'b1;
     end else begin
-      adc_capture_done <= 1'b0;
+      adc_capture_done_pls <= 1'b0;
     end
   end
 end
@@ -388,26 +429,38 @@ logic ps_readout_start_pls; // pulse high for one cycle
 //////////////////////////
 // Internal logic
 //////////////////////////
+// all banks are read out simultaneously, multiple times
+// the outputs of the banks are muxed based on bank_select
 logic [ADDR_WIDTH-1:0] ps_read_addr;
 logic [$clog2(CHANNELS)-1:0] ps_bank_select;
 
+// pipeline to allow registered output of bank memory
+// bank_select needs to be delayed appropriately to match latency of data,valid,last
 logic [CHANNELS-1:0][READ_LATENCY-1:0][DATA_WIDTH-1:0] ps_readout_data_pipe;
-logic [READ_LATENCY-1:0][$clog2(CHANNELS)-1:0] ps_bank_select_pipe;
 logic [READ_LATENCY-1:0] ps_readout_valid_pipe, ps_readout_last_pipe;
+logic [READ_LATENCY-1:0][$clog2(CHANNELS)-1:0] ps_bank_select_pipe;
 
+// high while data is valid
 logic ps_readout_active;
+// read enable for BRAM, also enable for pipeline registers and address update
 logic ps_readout_enable;
+// goes high when the final address is read
 logic ps_readout_last;
 
-assign ps_readout_last = (ps_read_addr == ADDR_WIDTH'(BUFFER_DEPTH - 1)) & (ps_bank_select == $clog2(CHANNELS)'(CHANNELS - 1));
 assign ps_readout_enable = ps_readout_active & (ps_readout_data.ready | ~ps_readout_data.valid);
+assign ps_readout_last = (ps_read_addr == ADDR_WIDTH'(BUFFER_DEPTH - 1)) & (ps_bank_select == $clog2(CHANNELS)'(CHANNELS - 1));
 
+// tell readout FSM and capture logic when we're done with readout
 logic ps_readout_done_pls;
 assign ps_readout_done_pls = ps_readout_data.ok & ps_readout_data.last;
 
-logic ps_capture_done;
+// CDC'd from capture clock domain
+logic ps_capture_done_pls;
 
-// pipeline for valid/last and bank_select
+/////////////////////////////
+// pipeline for valid/last
+// and bank_select
+/////////////////////////////
 always_ff @(posedge ps_clk) begin
   if (ps_reset) begin
     {ps_readout_valid_pipe, ps_readout_last_pipe} <= '0;
@@ -430,7 +483,10 @@ always_ff @(posedge ps_clk) begin
   end
 end
 
-// update read address and bank select
+/////////////////////////////
+// update read address
+// and bank select
+/////////////////////////////
 always_ff @(posedge ps_clk) begin
   if (ps_reset) begin
     ps_read_addr <= '0;
@@ -456,7 +512,10 @@ always_ff @(posedge ps_clk) begin
   end
 end
 
-// readout_active and readout_start_pls
+/////////////////////////////
+// readout_active and
+// readout_start_pls
+/////////////////////////////
 always_ff @(posedge ps_clk) begin
   if (ps_reset) begin
     ps_readout_start_pls <= 1'b0;
@@ -484,7 +543,10 @@ always_ff @(posedge ps_clk) begin
   end
 end
 
-// mux output
+/////////////////////////////
+// mux pipeline output
+// to data interface
+/////////////////////////////
 always_ff @(posedge ps_clk) begin
   if (ps_readout_data.ready | ~ps_readout_data.valid) begin
     ps_readout_data.data <= ps_readout_data_pipe[ps_bank_select_pipe[READ_LATENCY-1]][READ_LATENCY-1];
@@ -500,7 +562,7 @@ always_ff @(posedge ps_clk) begin
     ps_readout_state <= DMA_IDLE;
   end else begin
     unique case (ps_readout_state)
-      DMA_IDLE: if (ps_capture_done) ps_readout_state <= DMA_READY;
+      DMA_IDLE: if (ps_capture_done_pls) ps_readout_state <= DMA_READY;
       DMA_READY: if (ps_readout_start_pls) ps_readout_state <= DMA_ACTIVE;
       DMA_ACTIVE: begin
         if (ps_readout_reset) begin
@@ -521,7 +583,10 @@ end
 ////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////
 
-// CDC for readout done (readout clock -> capture clock)
+/////////////////////////////////////
+// CDC for readout done
+// (readout clock -> capture clock)
+/////////////////////////////////////
 xpm_cdc_pulse #(
   .DEST_SYNC_FF(4), // 4 synchronization stages
   .INIT_SYNC_FF(0), // don't allow behavioral initialization
@@ -537,7 +602,10 @@ xpm_cdc_pulse #(
   .dest_pulse(adc_readout_done_pls)
 );
 
-// CDC for capture done (capture clock -> readout clock)
+/////////////////////////////////////
+// CDC for capture done
+// (capture clock -> readout clock)
+/////////////////////////////////////
 xpm_cdc_pulse #(
   .DEST_SYNC_FF(4), // 4 synchronization stages
   .INIT_SYNC_FF(0), // don't allow behavioral initialization
@@ -547,13 +615,15 @@ xpm_cdc_pulse #(
 ) capture_done_cdc_i (
   .src_clk(adc_clk),
   .src_rst(adc_reset),
-  .src_pulse(adc_capture_done),
+  .src_pulse(adc_capture_done_pls),
   .dest_clk(ps_clk),
   .dest_rst(ps_reset),
-  .dest_pulse(ps_capture_done)
+  .dest_pulse(ps_capture_done_pls)
 );
 
+/////////////////////////////
 // write to memory
+/////////////////////////////
 always_ff @(posedge adc_clk) begin
   for (int channel = 0; channel < CHANNELS; channel++) begin
     if (adc_write_enable_d[channel]) begin
@@ -562,7 +632,9 @@ always_ff @(posedge adc_clk) begin
   end
 end
 
+/////////////////////////////
 // read from memory
+/////////////////////////////
 always_ff @(posedge ps_clk) begin
   for (int channel = 0; channel < CHANNELS; channel++) begin
     if (ps_readout_data.ready | ~ps_readout_data.valid) begin
