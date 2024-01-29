@@ -1,6 +1,6 @@
 // buffer.sv - Reed Foster
-// adds capture and readout FSMs to buffer_core to reduce deadlocks due to
-// stalled DMA transfers
+// collection of BRAM buffers with independent read/write clocks
+// as well as 
 
 `timescale 1ns/1ps
 module buffer #(
@@ -10,253 +10,494 @@ module buffer #(
   parameter int READ_LATENCY = 4
 ) (
   // ADC clock, reset (512 MHz)
-  input wire capture_clk, capture_reset,
+  input wire adc_clk, adc_reset,
   // data
-  Realtime_Parallel_If.Slave capture_data,
-  // hardware control
-  input logic capture_hw_start,
-  input logic capture_hw_stop,
-  output logic capture_full,
+  Realtime_Parallel_If.Slave adc_data,
+  // realtime ports
+  input wire adc_capture_hw_start,
+  input wire adc_capture_hw_stop,
+  output logic adc_capture_full, // asserted when any active buffers fill
 
   // Readout (PS) clock, reset (100 MHz)
-  input wire readout_clk, readout_reset,
-  Axis_If.Master readout_data,
-  // configuration
-  Axis_If.Slave readout_capture_arm_sw_start_stop, // controls capture {arm, sw_start, sw_stop}
-  Axis_If.Slave readout_banking_mode, // controls capture (active_channels = 1 << banking_mode)
-  Axis_If.Slave readout_capture_sw_reset, // readout clock domain; reset capture logic
-  Axis_If.Slave readout_dma_sw_reset, // readout clock domain; reset readout logic
-  Axis_If.Slave readout_dma_start, // enable DMA over readout_data interface
-  // status
-  Axis_If.Master readout_write_depth // number of samples saved per bank; outputted after a capture completes
+  input wire ps_clk, ps_reset,
+  Axis_If.Master ps_readout_data,
+  // Configuration
+  Axis_If.Slave ps_capture_arm_start_stop, // controls capture {arm, sw_start, sw_stop}
+  Axis_If.Slave ps_capture_banking_mode, // controls capture (active_channels = 1 << banking_mode)
+  Axis_If.Slave ps_capture_sw_reset, // ps clock domain; reset capture logic
+  Axis_If.Slave ps_readout_sw_reset, // ps clock domain; reset readout logic
+  Axis_If.Slave ps_readout_start, // enable DMA over ps_readout_data interface
+  // Status
+  Axis_If.Master ps_capture_write_depth // number of samples saved per bank; outputted after a capture completes
 );
 
-enum {CAPTURE_IDLE, TRIGGER_WAIT, SAVE_SAMPLES, HOLD_SAMPLES} capture_state;
-enum {DMA_IDLE, DMA_READY, DMA_ACTIVE} readout_state;
+localparam int ADDR_WIDTH = $clog2(BUFFER_DEPTH);
+logic [DATA_WIDTH-1:0] memory [CHANNELS][BUFFER_DEPTH];
 
-logic [$clog2(CHANNELS+1)-1:0] capture_active_channels;
-logic [CHANNELS-1:0][$clog2(BUFFER_DEPTH):0] capture_write_depth;
-logic capture_start, capture_stop;
+////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////
+// Capture clock domain
+////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////
 
-assign capture_stop = (capture_hw_stop | capture_sw_stop) & (capture_state == SAVE_SAMPLES);
-assign capture_start = ((capture_hw_start | capture_sw_start) & (capture_state == TRIGGER_WAIT))
-                        | (capture_sw_start & (capture_state == CAPTURE_IDLE));
+// capture state machine
+enum {CAPTURE_IDLE, TRIGGER_WAIT, SAVE_SAMPLES, HOLD_SAMPLES} adc_capture_state;
 
-logic capture_sw_reset;
-logic capture_arm;
-logic capture_sw_start;
-logic capture_sw_stop;
+////////////////////////////////////////////////////////////
+// Configuration and Status registers
+////////////////////////////////////////////////////////////
 
-logic readout_sw_reset;
-logic readout_start;
-
-assign readout_sw_reset = (readout_dma_sw_reset.data == 1) & readout_dma_sw_reset.ok;
-// only accept resets during DMA state transfer
-assign readout_dma_sw_reset.ready = readout_state == DMA_ACTIVE;
-
-logic capture_full_d; // delay so we can detect rising edge when buffer first fills up
-always_ff @(posedge capture_clk) capture_full_d <= capture_full;
-
-logic capture_done; // pulse, goes high when either capture_stop is asserted, or when capture_full goes high
-logic readout_capture_done_sync; // synchronized capture_done to readout clock domain
-
-logic readout_dma_done;
-assign readout_dma_done = readout_data.last & readout_data.ok;
-logic capture_dma_done_sync; // synchronized
-
-always_ff @(posedge capture_clk) begin
-  if (capture_reset) begin
-    capture_done <= 1'b0;
+////////////////////////
+// active channels
+////////////////////////
+logic [$clog2(CHANNELS+1)-1:0] adc_active_channels;
+Axis_If #(.DWIDTH($clog2($clog2(CHANNELS+1)))) adc_capture_banking_mode_sync ();
+assign adc_capture_banking_mode_sync.ready = adc_capture_state == CAPTURE_IDLE;
+always_ff @(posedge adc_clk) begin
+  if (adc_reset) begin
+    adc_active_channels <= CHANNELS;
   end else begin
-    if ((capture_full & ~capture_full_d) | capture_stop) begin
-      // we don't need edge detection for capture_stop, since capture_stop
-      // will trigger a state transfer for capture_state which will reset
-      // capture_stop
-      capture_done <= 1'b1;
-    end else begin
-      capture_done <= 1'b0;
+    if (adc_capture_banking_mode_sync.ok) begin
+      adc_active_channels <= 1 << adc_capture_banking_mode_sync.data;
+    end
+  end
+end
+// CDC for banking mode
+axis_config_reg_cdc #(
+  .DWIDTH($clog2($clog2(CHANNELS+1)))
+) capture_banking_mode_cdc_i (
+  .src_clk(ps_clk),
+  .src_reset(ps_reset),
+  .src(ps_capture_banking_mode),
+  .dest_clk(adc_clk),
+  .dest_reset(adc_reset),
+  .dest(adc_capture_banking_mode_sync)
+);
+
+////////////////////////
+// sw_reset
+////////////////////////
+logic adc_capture_reset;
+Axis_If #(.DWIDTH(1)) adc_capture_reset_sync ();
+assign adc_capture_reset_sync.ready = 1'b1; // always accept sw_reset
+assign adc_capture_reset = (adc_capture_reset_sync.data == 1) & adc_capture_reset_sync.ok;
+// CDC for capture sw_reset
+axis_config_reg_cdc #(
+  .DWIDTH(1)
+) capture_sw_reset_cdc_i (
+  .src_clk(ps_clk),
+  .src_reset(ps_reset),
+  .src(ps_capture_sw_reset),
+  .dest_clk(adc_clk),
+  .dest_reset(adc_reset),
+  .dest(adc_capture_reset_sync)
+);
+
+////////////////////////
+// arm, start, stop
+////////////////////////
+logic adc_capture_arm, adc_capture_sw_start, adc_capture_sw_stop;
+Axis_If #(.DWIDTH(3)) adc_capture_arm_start_stop_sync ();
+assign adc_capture_arm_start_stop_sync.ready = (adc_capture_state != HOLD_SAMPLES);
+always_comb begin
+  if (adc_capture_arm_start_stop_sync.ok) begin
+    {adc_capture_arm, adc_capture_sw_start, adc_capture_sw_stop} = adc_capture_arm_start_stop_sync.data;
+  end else begin
+    {adc_capture_arm, adc_capture_sw_start, adc_capture_sw_stop} = '0;
+  end
+end
+// CDC for capture arm/start/stop
+axis_config_reg_cdc #(
+  .DWIDTH(3)
+) capture_arm_start_stop_cdc_i (
+  .src_clk(ps_clk),
+  .src_reset(ps_reset),
+  .src(ps_capture_arm_start_stop),
+  .dest_clk(adc_clk),
+  .dest_reset(adc_reset),
+  .dest(adc_capture_arm_start_stop_sync)
+);
+// gate start/stop signals from hw_start/hw_stop and sw_start/sw_start based on the current capture state
+// arm is gated by the adc_capture_state FSM: adc_capture_state can only transition to
+// the TRIGGER_WAIT state from the CAPTURE_IDLE state when arm is applied
+logic adc_capture_start_pls, adc_capture_stop_pls;
+assign adc_capture_start_pls = ((adc_capture_hw_start | adc_capture_sw_start) & (adc_capture_state == TRIGGER_WAIT))
+                            | (adc_capture_sw_start & (adc_capture_state == CAPTURE_IDLE));
+assign adc_capture_stop_pls = (adc_capture_hw_stop | adc_capture_sw_stop) & (adc_capture_state == SAVE_SAMPLES);
+// register start so that we can detect rising edge
+
+// enable sample capture on rising edge of start, disable on rising edge of
+// stop, or if buffer fills up
+logic adc_capture_active, adc_capture_done;
+
+////////////////////////
+// capture depth
+////////////////////////
+logic [CHANNELS-1:0][$clog2(BUFFER_DEPTH):0] adc_capture_write_depth;
+Axis_If #(.DWIDTH(CHANNELS*($clog2(BUFFER_DEPTH)+1))) adc_capture_write_depth_sync ();
+assign adc_capture_write_depth_sync.data = adc_capture_write_depth;
+assign adc_capture_write_depth_sync.valid = adc_capture_done;
+
+////////////////////////////////////////////////////////////
+// Buffer core logic
+////////////////////////////////////////////////////////////
+
+// delay write address to match latency of valid/data pipeline registers
+logic [CHANNELS-1:0][ADDR_WIDTH-1:0] adc_write_addr, adc_write_addr_d;
+always_ff @(posedge adc_clk) adc_write_addr_d <= adc_write_addr;
+
+// track when banks are full
+logic [CHANNELS-1:0] adc_bank_full, adc_bank_full_latch;
+logic adc_capture_full_d; // delay so we can detect rising edge of capture_full
+always_ff @(posedge adc_clk) adc_capture_full_d <= adc_capture_full;
+
+// reset write address and full status when readout is done (CDC'd from readout clock domain)
+logic adc_readout_done_pls;
+
+// valid_mask and full_mask for different channel modes
+// valid_mask is AND'd with muxed adc_valid_d to generate write_enables
+logic [CHANNELS-1:0] adc_capture_full_mask, adc_capture_valid_mask;
+always_ff @(posedge adc_clk) begin
+  if (adc_reset) begin
+    {adc_capture_full_mask, adc_capture_valid_mask} <= '0;
+  end else begin
+    for (int channel = 0; channel < CHANNELS; channel++) begin
+      // For 8 channels:
+      // if active channels == 1: full_mask = 0x80 (10000000), valid_mask = 0x01 (00000001)
+      // if active channels == 2: full_mask = 0xc0 (11000000), valid_mask = 0x03 (00000011)
+      // if active channels == 4: full_mask = 0xf0 (11110000), valid_mask = 0x0f (00001111)
+      // if active channels == 8: full_mask = 0xff (11111111), valid_mask = 0xff (11111111)
+      adc_capture_full_mask[CHANNELS-1-channel] <= channel + 1 > adc_active_channels ? 1'b0 : 1'b1;
+      if (adc_capture_start_pls) begin
+        // reset valid_mask 
+        adc_capture_valid_mask[channel] <= channel + 1 > adc_active_channels ? 1'b0 : 1'b1;
+      end else begin
+        // when a bank fills up, update which bank is active by shifting the
+        // bits in the mask based on the current banking mode
+        if (adc_bank_full[channel]) begin
+          // reset the current valid mask -> we shouldn't write to this bank anymore
+          adc_capture_valid_mask[channel] <= 1'b0;
+          if (adc_capture_valid_mask[channel]) begin
+            // if we're resetting the current valid mask (i.e. it wasn't reset
+            // in a previous clock cycle), then set a subsequent mask bit whose
+            // distance from the current bit is determined by the banking mode
+            if ($clog2(CHANNELS+1)'(channel) + adc_active_channels < $clog2(CHANNELS+1)'(CHANNELS)) begin
+              adc_capture_valid_mask[$clog2(CHANNELS)'($clog2(CHANNELS+1)'(channel) + adc_active_channels)] <= 1'b1;
+            end
+          end
+        end
+      end
     end
   end
 end
 
-buffer_core #(
-  .CHANNELS(CHANNELS),
-  .BUFFER_DEPTH(BUFFER_DEPTH),
-  .DATA_WIDTH(DATA_WIDTH),
-  .READ_LATENCY(READ_LATENCY)
-) buffer_core_i (
-  .capture_clk,
-  .capture_reset,
-  .capture_data,
-  .capture_active_channels,
-  .capture_start,
-  .capture_stop,
-  .capture_full,
-  .capture_write_depth,
-  .capture_sw_reset,
-  .readout_clk,
-  .readout_reset,
-  .readout_data,
-  .readout_sw_reset,
-  .readout_start
-);
+////////////////////////////////////
+// Data and valid mux
+////////////////////////////////////
+// register data in for timing
+logic [CHANNELS-1:0][DATA_WIDTH-1:0] adc_data_d;
+always_ff @(posedge adc_clk) adc_data_d <= adc_data.data;
 
-// capture state machine
-always_ff @(posedge capture_clk) begin
-  if (capture_reset) begin
-    capture_state <= CAPTURE_IDLE;
+// mux data based on banking_mode (registered for timing)
+logic [CHANNELS-1:0][DATA_WIDTH-1:0] adc_buffer_in;
+always_ff @(posedge adc_clk) begin
+  for (int channel = 0; channel < CHANNELS; channel++) begin
+    adc_buffer_in[channel] <= adc_data_d[$clog2(CHANNELS)'($clog2(CHANNELS+1)'(channel) % adc_active_channels)];
+  end
+end
+
+// valid is converted to a write_enable based on the current banking mode and
+// currently selected bank (through valid_mask)
+logic [CHANNELS-1:0] adc_valid_d; // register for timing
+// adc_write_enable is an internal signal used for updating the write address
+// adc_write_enable_d is the input to the sample RAM
+logic [CHANNELS-1:0] adc_write_enable, adc_write_enable_d;
+
+// valid->write_enable path (combinatorial, since we need to update address in a combinatorial loop ??)
+always_comb begin
+  for (int channel = 0; channel < CHANNELS; channel++) begin
+    adc_write_enable[channel] = adc_capture_active & adc_capture_valid_mask[channel]
+                                      & adc_valid_d[$clog2(CHANNELS)'($clog2(CHANNELS+1)'(channel) % adc_active_channels)];
+  end
+end
+// register write_enable and valid
+always_ff @(posedge adc_clk) begin
+  adc_valid_d <= adc_data.valid;
+  adc_write_enable_d <= adc_write_enable;
+end
+
+//////////////////////////////
+// Update write address
+//////////////////////////////
+always_comb begin
+  for (int channel = 0; channel < CHANNELS; channel++) begin
+    adc_bank_full[channel] = adc_write_addr[channel] == $clog2(BUFFER_DEPTH)'(BUFFER_DEPTH - 1) & adc_write_enable[channel];
+  end
+end
+always_ff @(posedge adc_clk) begin
+  if (adc_reset) begin
+    adc_write_addr <= '0;
   end else begin
-    if (capture_sw_reset) begin
-      capture_state <= CAPTURE_IDLE;
+    if (adc_capture_reset | adc_readout_done_pls) begin
+      adc_write_addr <= '0;
     end else begin
-      unique case (capture_state)
+      for (int channel = 0; channel < CHANNELS; channel++) begin
+        if (adc_write_enable[channel]) begin
+          adc_write_addr[channel] <= adc_write_addr[channel] + 1;
+        end
+      end
+    end
+  end
+end
+// update write depth output
+always_ff @(posedge adc_clk) begin
+  for (int channel = 0; channel < CHANNELS; channel++) begin
+    adc_capture_write_depth[channel] <= {adc_bank_full_latch[channel], adc_write_addr[channel]};
+  end
+end
+
+//////////////////////////////
+// Full logic
+//////////////////////////////
+always_ff @(posedge adc_clk) begin
+  if (adc_reset) begin
+    adc_bank_full_latch <= '0;
+  end else begin
+    if (adc_capture_reset | adc_readout_done_pls) begin
+      adc_bank_full_latch <= '0;
+    end else begin
+      for (int channel = 0; channel < CHANNELS; channel++) begin
+        if (adc_bank_full[channel]) begin
+          adc_bank_full_latch[channel] <= adc_bank_full[channel];
+        end
+      end
+    end
+  end
+end
+assign adc_capture_full = |(adc_capture_full_mask & adc_bank_full_latch);
+
+//////////////////////////////
+// capture_active (SR flipflop)
+//////////////////////////////
+always_ff @(posedge adc_clk) begin
+  if (adc_reset) begin
+    adc_capture_active <= 1'b0;
+  end else begin
+    if (adc_capture_reset) begin
+      adc_capture_active <= 1'b0;
+    end else begin
+      if (adc_capture_start_pls) begin
+        adc_capture_active <= 1'b1;
+      end else if (adc_capture_stop_pls | (|(adc_bank_full & adc_capture_full_mask))) begin
+        adc_capture_active <= 1'b0;
+      end
+    end
+  end
+end
+
+//////////////////////////////
+// update capture_done
+//////////////////////////////
+always_ff @(posedge adc_clk) begin
+  if (adc_reset) begin
+    adc_capture_done <= 1'b0;
+  end else begin
+    if ((adc_capture_full & ~adc_capture_full_d) | adc_capture_stop_pls) begin
+      adc_capture_done <= 1'b1;
+    end else begin
+      adc_capture_done <= 1'b0;
+    end
+  end
+end
+
+//////////////////////////////
+// Capture state machine
+// transition logic
+//////////////////////////////
+always_ff @(posedge adc_clk) begin
+  if (adc_reset) begin
+    adc_capture_state <= CAPTURE_IDLE;
+  end else begin
+    if (adc_capture_reset) begin
+      adc_capture_state <= CAPTURE_IDLE;
+    end else begin
+      unique case (adc_capture_state)
         CAPTURE_IDLE: begin
           // if we get an arm signal, go to TRIGGER_WAIT
           // if we get a sw_start signal, go to SAVE_SAMPLES
-          if (capture_arm) begin
-            capture_state <= TRIGGER_WAIT;
-          end else if (capture_start) begin
+          if (adc_capture_arm) begin
+            adc_capture_state <= TRIGGER_WAIT;
+          end else if (adc_capture_start_pls) begin
             // for capture_state == CAPTURE_IDLE, capture_start can
             // only be asserted from sw_start, since hw_start is
             // gated by capture_state == TRIGGER_WAIT
-            capture_state <= SAVE_SAMPLES;
+            adc_capture_state <= SAVE_SAMPLES;
           end
         end
         TRIGGER_WAIT:
-          // if we get a hw_start signal or a sw_start signal, go to
-          // SAVE_SAMPLES
-          if (capture_start) begin
-            capture_state <= SAVE_SAMPLES;
+          // if we get a hw_start signal or a sw_start signal, go to SAVE_SAMPLES
+          if (adc_capture_start_pls) begin
+            adc_capture_state <= SAVE_SAMPLES;
           end
         SAVE_SAMPLES:
-          // if we get capture_stop or buffer is full, go to HOLD_SAMPLES
-          if (capture_stop | capture_full) capture_state <= HOLD_SAMPLES;
+          // if we stop capture or buffer gets full, go to HOLD_SAMPLES
+          if (adc_capture_stop_pls | adc_capture_full) adc_capture_state <= HOLD_SAMPLES;
         HOLD_SAMPLES:
-          // if we get capture_dma_done_sync, go to CAPTURE_IDLE
-          if (capture_dma_done_sync) capture_state <= CAPTURE_IDLE;
+          // once DMA completes, go to CAPTURE_IDLE
+          if (adc_readout_done_pls) adc_capture_state <= CAPTURE_IDLE;
       endcase
     end
   end
 end
 
-// accept DMA start only when we're ready (i.e. the buffer has valid data in it)
-assign readout_dma_start.ready = readout_state == DMA_READY;
-always_ff @(posedge readout_clk) begin
-  if (readout_reset) begin
-    readout_start <= 1'b0;
+////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////
+// Readout clock domain
+////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////
+
+// readout state machine
+enum {DMA_IDLE, DMA_READY, DMA_ACTIVE} ps_readout_state;
+
+//////////////////////////
+// Configuration/control
+//////////////////////////
+
+// software reset
+// only allow reset during DMA transfer
+assign ps_readout_sw_reset.ready = ps_readout_state == DMA_ACTIVE;
+logic ps_readout_reset;
+assign ps_readout_reset = (ps_readout_sw_reset.data == 1) & ps_readout_sw_reset.ok;
+
+// readout start
+// only allow DMA transfer to start when we actually have saved data
+assign ps_readout_start.ready = ps_readout_state == DMA_READY;
+logic ps_readout_start_pls; // pulse high for one cycle
+logic ps_readout_active;
+
+//////////////////////////
+// Internal logic
+//////////////////////////
+logic [ADDR_WIDTH-1:0] ps_read_addr;
+logic [$clog2(CHANNELS)-1:0] ps_bank_select;
+
+logic [CHANNELS-1:0][READ_LATENCY-1:0][DATA_WIDTH-1:0] ps_readout_data_pipe;
+logic [READ_LATENCY-1:0][$clog2(CHANNELS)-1:0] ps_bank_select_pipe;
+logic [READ_LATENCY-1:0] ps_readout_valid_pipe, ps_readout_last_pipe;
+
+logic ps_readout_enable, ps_readout_active;
+logic ps_readout_last;
+
+assign ps_readout_last = (ps_read_addr == ADDR_WIDTH'(BUFFER_DEPTH - 1)) & (ps_bank_select == $clog2(CHANNELS)'(CHANNELS - 1));
+assign ps_readout_enable = ps_readout_active & (ps_readout_data.ready | ~ps_readout_data.valid);
+
+logic ps_start_d;
+always_ff @(posedge ps_clk) ps_start_d <= ps_start;
+logic ps_readout_done_pls;
+assign ps_readout_done_pls = ps_readout_data.ok & ps_readout_data.last;
+
+logic ps_capture_done;
+
+// pipeline for valid/last and bank_select
+always_ff @(posedge ps_clk) begin
+  if (ps_reset) begin
+    {ps_readout_valid_pipe, ps_readout_last_pipe} <= '0;
+    {ps_readout_data.valid, ps_readout_data.last} <= '0;
+    ps_bank_select_pipe <= '0;
   end else begin
-    if (readout_dma_start.ok & (readout_dma_start.data == 1)) begin
-      readout_start <= 1'b1;
+    if (ps_readout_reset) begin
+      {ps_readout_valid_pipe, ps_readout_last_pipe} <= '0;
+      {ps_readout_data.valid, ps_readout_data.last} <= '0;
+      ps_bank_select_pipe <= '0;
     end else begin
-      readout_start <= 1'b0;
+      if (ps_readout_data.ready | ~ps_readout_data.valid) begin
+        ps_readout_valid_pipe <= {ps_readout_valid_pipe[READ_LATENCY-2:0], ps_readout_active};
+        ps_readout_last_pipe <= {ps_readout_last_pipe[READ_LATENCY-2:0], ps_readout_last};
+        ps_readout_data.valid <= ps_readout_valid_pipe[READ_LATENCY-1];
+        ps_readout_data.last <= ps_readout_last_pipe[READ_LATENCY-1];
+        ps_bank_select_pipe <= {ps_bank_select_pipe[READ_LATENCY-2:0], ps_bank_select};
+      end
     end
   end
 end
 
-// readout state machine
-always_ff @(posedge readout_clk) begin
-  if (readout_reset) begin
+// update read address and bank select
+always_ff @(posedge ps_clk) begin
+  if (ps_reset) begin
+    ps_read_addr <= '0;
+    ps_bank_select <= '0;
   end else begin
-    unique case (readout_state)
-      // stay in IDLE until capture completes (either from a sw_stop or by
-      // filling up the buffer)
-      DMA_IDLE: if (readout_capture_done_sync) readout_state <= DMA_READY;
-      // wait until dma_start register is written to before enabling readout
-      DMA_READY: if (readout_dma_start.ok & (readout_dma_start.data == 1)) readout_state <= DMA_ACTIVE;
-      DMA_ACTIVE: begin
-        // in case there are any issues with the DMA and it doesn't complete,
-        // the user can reset the readout logic and try again
-        if (readout_sw_reset) begin
-          readout_state <= DMA_READY;
-        end else begin
-          if (readout_dma_done) begin
-            readout_state <= DMA_IDLE;
+    if (ps_readout_reset | ps_readout_start_pls) begin
+      ps_read_addr <= '0;
+      ps_bank_select <= '0;
+    end else begin
+      if (ps_readout_enable) begin
+        if (ps_read_addr == ADDR_WIDTH'(BUFFER_DEPTH - 1)) begin
+          ps_read_addr <= 0;
+          if (ps_bank_select == $clog2(CHANNELS)'(CHANNELS - 1)) begin
+            ps_bank_select <= 0;
+          end else begin
+            ps_bank_select <= ps_bank_select + 1;
           end
+        end else begin
+          ps_read_addr <= ps_read_addr + 1;
         end
       end
-    endcase
+    end
   end
 end
 
-// synchronize sw_reset for capture to capture clock domain
-Axis_If #(.DWIDTH(1)) capture_sw_reset_sync();
-assign capture_sw_reset_sync.ready = 1'b1; // always accept reset
-assign capture_sw_reset = (capture_sw_reset_sync.data == 1) & (capture_sw_reset_sync.ok);
-// clock domain crossing
-axis_config_reg_cdc #(
-  .DWIDTH(1)
-) capture_sw_reset_cdc_i (
-  .src_clk(readout_clk),
-  .src_reset(readout_reset),
-  .src(readout_capture_sw_reset),
-  .dest_clk(capture_clk),
-  .dest_reset(capture_reset),
-  .dest(capture_sw_reset_sync)
-);
-
-// synchronize arm/sw_start/sw_stop to capture clock domain
-Axis_If #(.DWIDTH(3)) capture_arm_sw_start_stop_sync();
-// accept stop in any of the following states. sw_start and arm have
-// additional logic that renders assertion of these subsignals ineffective
-// outside of CAPTURE_IDLE and/or TRIGGER_WAIT
-assign capture_arm_sw_start_stop_sync.ready = (capture_state == CAPTURE_IDLE)
-                                              | (capture_state == TRIGGER_WAIT)
-                                              | (capture_state == SAVE_SAMPLES);
-always_comb begin
-  if (capture_arm_sw_start_stop_sync.ok) begin
-    capture_arm = capture_arm_sw_start_stop_sync.data[2] == 1;
-    capture_sw_start = capture_arm_sw_start_stop_sync.data[1] == 1;
-    capture_sw_stop = capture_arm_sw_start_stop_sync.data[0] == 1;
+// readout_active and readout_start_pls
+always_ff @(posedge ps_clk) begin
+  if (ps_reset) begin
+    ps_readout_start_pls <= 1'b0;
   end else begin
-    capture_arm = 1'b0;
-    capture_sw_start = 1'b0;
-    capture_sw_stop = 1'b0;
+    // ps_readout_start_pls goes high one cycle before ps_readout_active, so
+    // if we have multiple transactions attempted on ps_readout_start, we
+    // should block readout_start_pls from going high again or staying high
+    //   multiple transactions are possible, since ps_readout_start.ready doesn't go
+    //   low for two cycles after readout_start.ok & (readout_start.data == 1)
+    if (ps_readout_start.ok & (ps_readout_start.data == 1) & ~ps_readout_active & ~ps_readout_start_pls) begin
+      ps_readout_start_pls <= 1'b1;
+    end else begin
+      ps_readout_start_pls <= 1'b0;
+    end
+    if (ps_readout_start_pls) begin
+      ps_readout_active <= 1'b1;
+    end else if (ps_readout_last & ps_readout_data.ok) begin
+      ps_readout_active <= 1'b0;
+    end
   end
 end
-// clock domain crossing
-axis_config_reg_cdc #(
-  .DWIDTH(3)
-) capture_arm_sw_start_stop_cdc_i (
-  .src_clk(readout_clk),
-  .src_reset(readout_reset),
-  .src(readout_capture_arm_sw_start_stop),
-  .dest_clk(capture_clk),
-  .dest_reset(capture_reset),
-  .dest(capture_arm_sw_start_stop_sync)
+
+// mux output
+always_ff @(posedge ps_clk) begin
+  if (ps_readout_data.ready | ~ps_readout_data.valid) begin
+    ps_readout_data.data <= ps_readout_data_pipe[ps_bank_select_pipe[READ_LATENCY-1]][READ_LATENCY-1];
+  end
+end
+
+////////////////////////////////////////////////////////
+// Clock crossing and memory
+////////////////////////////////////////////////////////
+
+// CDC for readout done (readout clock -> capture clock)
+xpm_cdc_pulse #(
+  .DEST_SYNC_FF(4), // 4 synchronization stages
+  .INIT_SYNC_FF(0), // don't allow behavioral initialization
+  .REG_OUTPUT(1), // register the output
+  .RST_USED(1), // use resets
+  .SIM_ASSERT_CHK(1) // report potential violations
+) readout_done_cdc_i (
+  .src_clk(ps_clk),
+  .src_rst(ps_reset),
+  .src_pulse(ps_readout_done_pls),
+  .dest_clk(adc_clk),
+  .dest_rst(adc_reset),
+  .dest_pulse(adc_readout_done_pls)
 );
 
-// synchronize banking mode and convert it to a number of active channels
-Axis_If #(.DWIDTH($clog2($clog2(CHANNELS+1)))) capture_banking_mode ();
-assign capture_banking_mode.ready = capture_state == CAPTURE_IDLE;
-assign capture_active_channels = 1 << capture_banking_mode.data;
-axis_config_reg_cdc #(
-  .DWIDTH($clog2($clog2(CHANNELS+1)))
-) banking_mode_cdc_i (
-  .src_clk(readout_clk),
-  .src_reset(readout_reset),
-  .src(readout_banking_mode),
-  .dest_clk(capture_clk),
-  .dest_reset(capture_reset),
-  .dest(capture_banking_mode)
-);
-
-// synchronize write depth to readout clock domain
-Axis_If #(.DWIDTH(CHANNELS*($clog2(BUFFER_DEPTH)+1))) capture_write_depth_if();
-assign capture_write_depth_if.data = capture_write_depth;
-assign capture_write_depth_if.valid = capture_done; // only go high for one cycle at the end of each capture
-assign capture_write_depth_if.last = 1'b1; // always send a full packet
-axis_config_reg_cdc #(
-  .DWIDTH(CHANNELS*($clog2(BUFFER_DEPTH)+1))
-) capture_write_depth_cdc_i (
-  .src_clk(capture_clk),
-  .src_reset(capture_reset),
-  .src(capture_write_depth_if),
-  .dest_clk(readout_clk),
-  .dest_reset(readout_reset),
-  .dest(readout_write_depth)
-);
-
-// synchronize capture_done
+// CDC for capture done (capture clock -> readout clock)
 xpm_cdc_pulse #(
   .DEST_SYNC_FF(4), // 4 synchronization stages
   .INIT_SYNC_FF(0), // don't allow behavioral initialization
@@ -264,28 +505,30 @@ xpm_cdc_pulse #(
   .RST_USED(1), // use resets
   .SIM_ASSERT_CHK(1) // report potential violations
 ) capture_done_cdc_i (
-  .src_clk(capture_clk),
-  .src_rst(capture_reset),
-  .src_pulse(capture_done),
-  .dest_clk(readout_clk),
-  .dest_rst(readout_reset),
-  .dest_pulse(readout_capture_done_sync)
+  .src_clk(adc_clk),
+  .src_rst(adc_reset),
+  .src_pulse(adc_capture_done),
+  .dest_clk(ps_clk),
+  .dest_rst(ps_reset),
+  .dest_pulse(ps_capture_done)
 );
 
-// synchronize dma_done
-xpm_cdc_pulse #(
-  .DEST_SYNC_FF(4), // 4 synchronization stages
-  .INIT_SYNC_FF(0), // don't allow behavioral initialization
-  .REG_OUTPUT(1), // register the output
-  .RST_USED(1), // use resets
-  .SIM_ASSERT_CHK(1) // report potential violations
-) dma_done_cdc_i (
-  .src_clk(readout_clk),
-  .src_rst(readout_reset),
-  .src_pulse(readout_dma_done),
-  .dest_clk(capture_clk),
-  .dest_rst(capture_reset),
-  .dest_pulse(capture_dma_done_sync)
-);
+// write to memory
+always_ff @(posedge adc_clk) begin
+  for (int channel = 0; channel < CHANNELS; channel++) begin
+    if (adc_write_enable_d[channel]) begin
+      memory[channel][adc_write_addr_d[channel]] <= adc_buffer_in[channel];
+    end
+  end
+end
+
+// read from memory
+always_ff @(posedge ps_clk) begin
+  for (int channel = 0; channel < CHANNELS; channel++) begin
+    if (ps_readout_data.ready | ~ps_readout_data.valid) begin
+      ps_readout_data_pipe[channel] <= {ps_readout_data_pipe[channel][READ_LATENCY-2:0], memory[channel][ps_read_addr]};
+    end
+  end
+end
 
 endmodule
