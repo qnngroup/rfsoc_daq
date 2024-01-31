@@ -268,4 +268,4 @@ def drawPath(fitterAcc,wave_period,showTruePath=True,make_periodic=True):
     print("-1")
     return
 
-print(drawPath(0.99,3.1e-6,make_periodic=True))
+#print(drawPath(0.99,3.1e-6,make_periodic=True))

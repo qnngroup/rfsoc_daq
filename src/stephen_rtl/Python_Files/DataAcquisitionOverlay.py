@@ -42,7 +42,7 @@ class DataAcquisitionOverlay():
         raw_vn = hex(self.read(addr_map["firmware_version"]))[2:]
         raw_vn = raw_vn[:-2]+"."+raw_vn[-2:]
         self.firmware_version = eval(raw_vn)
-        print(f"Data Acquisition System Overlay Successfully Instantiated. DAS Verison Number: {self.firmware_version}")
+        print(f"Data Acquisition System Overlay Successfully Instantiated.\nDAS Verison Number: {self.firmware_version}")
     def write(self,offset,val): self.sys_driver.write(offset,val)
     def read(self, offset): return self.sys_driver.read(offset);
 

@@ -46,9 +46,9 @@ def plt_percs():
 	ax2.set_ylabel(r"PWL BRAM Depth",fontsize=17,fontproperties=font,fontweight='light')
 
 # plt_percs()
-# potential_max_period = 24.5e-6
-# s,p,b = calc_pwl_BRAM_util(potential_max_period)
-# print(s)
+#potential_max_period = 24.5e-6
+#s,p,b = calc_pwl_BRAM_util(potential_max_period)
+#print(s)
 # bram_depth = int(b)
 # time_bit_width = ceil(log2(bram_depth*samples_per_period))
 # print(f"{s}, {bram_depth} BRAM depth required\n{time_bit_width} bits needed for the time field")
