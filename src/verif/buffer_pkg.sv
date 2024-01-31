@@ -8,116 +8,203 @@ package buffer_pkg;
     parameter int DATA_WIDTH = 16
   );
 
-    task automatic check_write_depth (
-      inout sim_util_pkg::debug debug,
-      input int expected_depths [CHANNELS],
-      input logic [CHANNELS-1:0][$clog2(BUFFER_DEPTH):0] write_depths,
-      input int active_channels
+    typedef virtual Axis_If #(.DWIDTH(3))     arm_start_stop_if;
+    typedef virtual Axis_If #(.DWIDTH(1))     reset_if;
+
+    arm_start_stop_if v_arm_start_stop;
+    reset_if v_capture_reset;
+    reset_if v_readout_reset;
+
+    function new (
+      input arm_start_stop_if arm_start_stop,
+      input reset_if capture_reset,
+      input reset_if readout_reset
     );
-      
-      int total_write_depth;
-    
-      // make sure the write depths match up with the number of samples sent
-      for (int channel = 0; channel < active_channels; channel++) begin
-        total_write_depth = 0;
-        for (int bank = channel; bank < CHANNELS; bank += active_channels) begin
-          if (write_depths[bank][$clog2(BUFFER_DEPTH)]) begin
-            // if MSB of write_depths is set, then bank is full
-            // this behavior is identical to just adding write_depth[bank] when
-            // BUFFER_DEPTH is a power of 2; however this is not always the case
-            total_write_depth += BUFFER_DEPTH;
-          end else begin
-            total_write_depth += write_depths[bank];
-          end
+      v_arm_start_stop = arm_start_stop;
+      v_capture_reset = capture_reset;
+      v_readout_reset = readout_reset;
+    endfunction
+
+    /////////////////////////////////////////////////////////////////
+    // tasks for interacting with the DUT/test
+    /////////////////////////////////////////////////////////////////
+    //
+    // clear samples_sent queues (used at the end of each trial, or when
+    // a capture is manually restarted)
+    task automatic clear_samples_sent (
+      inout logic [DATA_WIDTH-1:0] samples_sent [CHANNELS][$]
+    );
+      for (int channel = 0; channel < CHANNELS; channel++) begin
+        while (samples_sent[channel].size() > 0) samples_sent[channel].pop_back();
+      end
+    endtask
+
+    task automatic capture_arm_start_stop(
+      inout sim_util_pkg::debug debug,
+      ref ps_clk,
+      input logic [2:0] arm_start_stop
+    );
+      logic valid_arm_start_stop = 0;
+      logic success;
+      case (arm_start_stop)
+        1: begin
+          debug.display("sending stop to capture", sim_util_pkg::DEBUG);
+          valid_arm_start_stop = 1;
         end
-        debug.display($sformatf(
-          "channel %0d: sent %0d samples",
-          channel,
-          expected_depths[channel]),
-          sim_util_pkg::DEBUG
-        );
-        if (expected_depths[channel] !== total_write_depth) begin
-          debug.error($sformatf(
-            "channel %0d: sent %0d samples, but %0d were written",
-            channel,
-            expected_depths[channel],
-            total_write_depth)
-          );
+        2: begin
+          debug.display("sending sw_start to capture", sim_util_pkg::DEBUG);
+          valid_arm_start_stop = 1;
+        end
+        4: begin
+          debug.display("sending arm to capture", sim_util_pkg::DEBUG);
+          valid_arm_start_stop = 1;
+        end
+        default: debug.error($sformatf("invalid arm_start_stop value %0d", arm_start_stop));
+      endcase
+      if (valid_arm_start_stop) begin
+        v_arm_start_stop.send_sample_with_timeout(ps_clk, arm_start_stop, 10, success);
+        if (~success) begin
+          debug.error("failed to start capture");
         end
       end
-    
     endtask
     
-    task automatic check_results (
+    task automatic reset_capture(
+      inout sim_util_pkg::debug debug,
+      ref ps_clk,
+      inout logic [DATA_WIDTH-1:0] samples_sent [CHANNELS][$]
+    );
+      logic success;
+      debug.display("resetting capture", sim_util_pkg::DEBUG);
+      v_capture_reset.send_sample_with_timeout(ps_clk, 1'b1, 10, success);
+      if (~success) begin
+        debug.error("failed to reset capture");
+      end
+      // delete all saved samples
+      this.clear_samples_sent(samples_sent);
+    endtask
+
+    task automatic reset_readout(
+      inout sim_util_pkg::debug debug,
+      ref ps_clk,
+      inout logic [DATA_WIDTH-1:0] samples_received [$]
+    );
+      logic success;
+      debug.display("resetting readout", sim_util_pkg::DEBUG);
+      v_readout_reset.send_sample_with_timeout(ps_clk, 1'b1, 10, success);
+      if (~success) begin
+        debug.error("failed to reset readout");
+      end
+      // delete all saved samples
+      while (samples_received.size() > 0) samples_received.pop_back();
+    endtask
+
+    /////////////////////////////////////////////////////////////////
+    // tasks for verifying DUT output
+    /////////////////////////////////////////////////////////////////
+    // make sure that the reported write_depth (i.e. how many samples the DUT
+    // stored in each buffer bank) is maximal for at least one of the channels
+    task automatic check_write_depth_full (
+      inout sim_util_pkg::debug debug,
+      input [CHANNELS-1:0][$clog2(BUFFER_DEPTH):0] write_depth [$],
+      input int active_channels,
+      output bit success
+    );
+      success = 0;
+      for (int channel = 0; channel < active_channels; channel++) begin
+        if (write_depth[$][CHANNELS-1-channel][$clog2(BUFFER_DEPTH)]) begin
+          success = 1;
+        end
+      end
+      if (~success) begin
+        debug.error($sformatf(
+          "write_depth = %x does not indicate that any buffer filled up for active_channels = %0d",
+          write_depth[$],
+          active_channels)
+        );
+      end
+    endtask
+
+    // make sure that the correct number of transfers occurred on the
+    // write_depth interface
+    task automatic check_write_depth_num_packets (
+      inout sim_util_pkg::debug debug,
+      input [CHANNELS-1:0][$clog2(BUFFER_DEPTH):0] write_depth [$],
+      input int expected_packets,
+      output bit success
+    );
+      // check write_depth queue is empty
+      if (write_depth.size() !== expected_packets) begin
+        debug.error($sformatf(
+          "write_depth.size() = %0d, expected %0d transactions",
+          write_depth.size(),
+          expected_packets)
+        );
+        success = 0;
+      end else begin
+        success = 1;
+      end
+    endtask
+
+    // check that the correct number of samples match between the output and
+    // input
+    task automatic check_output(
       inout sim_util_pkg::debug debug,
       inout logic [DATA_WIDTH-1:0] samples_sent [CHANNELS][$],
       inout logic [DATA_WIDTH-1:0] samples_received [$],
-      input int last_received,
+      inout [CHANNELS-1:0][$clog2(BUFFER_DEPTH):0] write_depth [$],
       input int active_channels
     );
-     
-      // keep track of what sample we're on across multiple banks
+      logic [CHANNELS-1:0][31:0] total_write_depth = '0;
       int sample_index;
-    
-      // make sure we got tlast at the right time
-      if (last_received !== CHANNELS*BUFFER_DEPTH) begin
-        debug.error($sformatf(
-          "expected tlast event on cycle %0d, got it on %0d",
-          CHANNELS*BUFFER_DEPTH,
-          last_received)
-        );
+      // check_output(samples_sent, samples_received, write_depth, 1 << banking_mode);
+      // check that the correct number of samples match based on the write depth
+      for (int channel = 0; channel < active_channels; channel++) begin
+        for (int bank = channel; bank < CHANNELS; bank += active_channels) begin
+          if (write_depth[$][bank][$clog2(BUFFER_DEPTH)]) begin
+            total_write_depth[channel] += BUFFER_DEPTH;
+          end else begin
+            total_write_depth[channel] += write_depth[$][bank];
+          end
+        end
+        // remove extra samples until we get something that matches the DMA data
+        // since we aren't sure exactly when the DUT started saving data
+        while ((samples_sent[channel].size() > 0) && (samples_sent[channel][$] !== samples_received[$-channel*BUFFER_DEPTH])) begin
+          samples_sent[channel].pop_back();
+        end
+        if (total_write_depth[channel] > samples_sent[channel].size()) begin
+          debug.error($sformatf(
+            "channel %0d: DUT reported write depth = %0d, but only %0d samples were sent to DUT",
+            channel,
+            total_write_depth[channel],
+            samples_sent[channel].size())
+          );
+        end
       end
-    
-      // make sure samples_received is the right size
-      if (samples_received.size() !== CHANNELS*BUFFER_DEPTH) begin
-        debug.error($sformatf(
-          "expected to receive %0d samples, but got %0d",
-          CHANNELS*BUFFER_DEPTH,
-          samples_received.size())
-        );
-      end
-    
-      // check that the right data was received
       for (int bank = 0; bank < CHANNELS; bank++) begin
         for (int sample = 0; sample < BUFFER_DEPTH; sample++) begin
-          // get the index of the sample within the currently-selected channel
-          // banks are assigned to channels accordingly:
-          // active_channels = 1: [0, 0, 0, 0, 0, 0, 0, 0, ... ]
-          // active_channels = 2: [0, 1, 0, 1, 0, 1, 0, 1, ... ]
-          // active_channels = 4: [0, 1, 2, 3, 0, 1, 2, 3, ... ]
-          // active_channels = 8: [0, 1, 2, 3, 4, 5, 6, 7, ... ]
-          // (bank % active_channels) gives the channel assigned to the current bank
-          // (bank / active_channels) gives the bank offset for banks associated
-          // with the channel assigned to the current bank
-          //  i.e. if we're on bank 5:
-          //    active_channels = 8, it would be the 0th bank for channel 5
-          //    active_channels = 4, it would be the 1st bank for channel 1
-          //    active_channels = 2, it would be the 2nd bank for channel 1
-          //    active_channels = 1, it would be the 5th bank for channel 0
           sample_index = (bank / active_channels) * BUFFER_DEPTH + sample;
-          if (sample_index < samples_sent[bank % active_channels].size()) begin
-            if (samples_sent[bank % active_channels][$-sample_index] !== samples_received[$]) begin
+          if (sample_index < total_write_depth[bank % active_channels]) begin
+            if (samples_sent[bank % active_channels][$] !== samples_received[$]) begin
               debug.error($sformatf(
-                "channel %0d, bank %0d: sample mismatch, expected %x got %x",
+                "channel %0d, bank %0d: sample mismatch: expected %x got %x",
                 bank % active_channels,
                 bank,
-                samples_sent[bank % active_channels][$-sample_index],
+                samples_sent[bank % active_channels][$],
                 samples_received[$])
               );
             end
+            samples_sent[bank % active_channels].pop_back();
           end
           samples_received.pop_back();
         end
       end
-    
-      // clean up extra samples
-      for (int channel = 0; channel < CHANNELS; channel++) begin
-        while (samples_sent[channel].size() > 0) samples_sent[channel].pop_back();
-      end
-      while (samples_received.size() > 0) samples_received.pop_back(); 
-    
+      // clear queues
+      this.clear_samples_sent(samples_sent);
+      while (samples_received.size() > 0) samples_received.pop_back();
+      while (write_depth.size() > 0) write_depth.pop_back();
     endtask
-
+    
   endclass
 
 endpackage

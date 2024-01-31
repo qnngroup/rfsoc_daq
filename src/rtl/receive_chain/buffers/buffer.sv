@@ -447,6 +447,7 @@ logic ps_readout_enable;
 // goes high when the final address is read
 logic ps_readout_last;
 
+// enable for read_address/bank_select update, also enable for data/valid/last/bank_sel pipelines
 assign ps_readout_enable = ps_readout_active & (ps_readout_data.ready | ~ps_readout_data.valid);
 assign ps_readout_last = (ps_read_addr == ADDR_WIDTH'(BUFFER_DEPTH - 1)) & (ps_bank_select == $clog2(CHANNELS)'(CHANNELS - 1));
 
