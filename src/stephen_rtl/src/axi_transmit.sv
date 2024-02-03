@@ -2,7 +2,7 @@
 `default_nettype none
 import mem_layout_pkg::*;
 
-module axi_transmit #(parameter BUS_WIDTH, parameter DATA_WIDTH)
+module axi_transmit #(parameter BUS_WIDTH = 32, parameter DATA_WIDTH = 32)
 					 (input wire clk, rst, Recieve_Transmit_IF.transmit_bus bus);
 
 	localparam PACKETS_TO_SEND = DATA_WIDTH/BUS_WIDTH;

@@ -51,9 +51,9 @@ module pwl_generator #(parameter DMA_DATA_WIDTH = 32, parameter SAMPLE_WIDTH = 1
 			   				    .wea(wave_bram_we),        
 			   				    .ena(wave_bram_en),         
 			   				    .douta(batch));
-	assign slope_in = dma.data[0+:`SAMPLE_WIDTH];
-	assign sample_in = dma.data[`SAMPLE_WIDTH+:`SAMPLE_WIDTH]; 
-	assign time_in = dma.data[`SAMPLE_WIDTH*2+:`SAMPLE_WIDTH]; 
+	assign slope_in = (dma.valid)? dma.data[0+:`SAMPLE_WIDTH] : 0;
+	assign sample_in = (dma.valid)? dma.data[`SAMPLE_WIDTH+:`SAMPLE_WIDTH] : 0;
+	assign time_in = (dma.valid)? dma.data[`SAMPLE_WIDTH*2+:`SAMPLE_WIDTH] : 0;
 
     logic[`SAMPLE_WIDTH-1:0] curr_sample, curr_slope, curr_time; 
     assign curr_sample = curr_sample_pair[1];

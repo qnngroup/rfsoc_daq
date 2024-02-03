@@ -28,8 +28,17 @@ module sys(input wire clk,sys_rst,
     logic rst,hlt_cmd,trig_dac_ila, bufft_valid_clear;
     logic[`BATCH_WIDTH-1:0] dac_batch_unfiltered;
     logic[$clog2(`SAMPLE_WIDTH):0] scale_factor; 
-    logic [`BATCH_SAMPLES-1:0][`SAMPLE_WIDTH-1:0] dac_samples, dac_samples_scaled; 
+    logic [`BATCH_SAMPLES-1:0][`SAMPLE_WIDTH-1:0] dac_samples_scaled; 
     logic[$clog2(`MAX_ILA_BURST_SIZE)+1:0] hlt_counter; 
+
+    logic dac_sample_pulled;
+    logic[`SAMPLE_WIDTH-1:0] dac_ila_sample;
+    logic[`WD_DATA_WIDTH-1:0] ila_resp_valid_wd, ila_resp_wd; 
+    logic ila_resp_valid_wr, ila_resp_wr, read_ila_trig; 
+    logic valid_dac_ila_sample;  
+    logic[1:0] valid_dac_edge; 
+    enum logic[1:0] {IDLE_T, SEND_SAMPLE, WRITE_WAIT, ILA_POLL_WAIT} dacIlaState; 
+    
     enum logic[1:0] {IDLE_R, RESP_WAIT, RESET} rstState; 
     enum logic {IDLE_I, CHANGE_BURST_SIZE} ilaParamState;
     enum logic {IDLE_S, CHANGE_SCALE} scaleParamState;
@@ -100,6 +109,7 @@ module sys(input wire clk,sys_rst,
             ilaParamState <= IDLE_I; 
             scaleParamState <= IDLE_S; 
             hltState <= IDLE_H; 
+            bufftState <= IDLE_B; 
         end 
         else begin
             if (valid_dac_batch && ila_burst_size != 0) begin
@@ -205,14 +215,6 @@ module sys(input wire clk,sys_rst,
                            .cmc(cmc_if.stream_out),
                            .sdc(sdc_if.stream_out));
 
-    
-    logic dac_sample_pulled;
-    logic[`SAMPLE_WIDTH-1:0] dac_ila_sample;
-    logic[`WD_DATA_WIDTH-1:0] ila_resp_valid_wd, ila_resp_wd; 
-    logic ila_resp_valid_wr, ila_resp_wr, read_ila_trig; 
-    logic valid_dac_ila_sample;  
-    logic[1:0] valid_dac_edge; 
-    enum logic[1:0] {IDLE_T, SEND_SAMPLE, WRITE_WAIT, ILA_POLL_WAIT} dacIlaState; 
 
     // To manage sending of dac ila samples 
     always_ff @(posedge clk) begin

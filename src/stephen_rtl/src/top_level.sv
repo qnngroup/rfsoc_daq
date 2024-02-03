@@ -26,27 +26,7 @@ module top_level(input wire clk,sys_rst,
                  input wire[`DMA_DATA_WIDTH-1:0] pwl_tdata,
                  input wire[3:0] pwl_tkeep,
                  input wire pwl_tlast, pwl_tvalid,
-                 output logic pwl_tready,
-                 //Sample Discriminator Config Inputs/Outputs (axi-stream)
-                 output logic[`SDC_DATA_WIDTH-1:0] sdc_tdata,
-                 output logic[3:0] sdc_tkeep,
-                 output logic sdc_tlast, sdc_tvalid,
-                 input wire sdc_tready,
-                 //Buffer Config Inputs/Outputs (axi-stream)
-                 output logic[`BUFF_CONFIG_WIDTH-1:0] buffc_tdata,
-                 output logic[3:0] buffc_tkeep,
-                 output logic buffc_tlast, buffc_tvalid,
-                 input wire buffc_tready,
-                 //Channel Mux Config Inputs/Outputs (axi-stream)
-                 output logic[`CHANNEL_MUX_WIDTH-1:0] cmc_tdata,
-                 output logic[3:0] cmc_tkeep,
-                 output logic cmc_tlast, cmc_tvalid,
-                 input wire cmc_tready,
-                 //Buffer Timestamp Inputs/Outputs (axi-stream)
-                 input wire[`BUFF_TIMESTAMP_WIDTH-1:0] bufft_tdata,
-                 input wire[3:0] bufft_tkeep,
-                 input wire bufft_tlast, bufft_tvalid,
-                 output logic bufft_tready);
+                 output logic pwl_tready);
 
     Recieve_Transmit_IF #(`A_BUS_WIDTH, `A_DATA_WIDTH)   wa_if (); 
     Recieve_Transmit_IF #(`WD_BUS_WIDTH, `WD_DATA_WIDTH) wd_if (); 
@@ -67,28 +47,12 @@ module top_level(input wire clk,sys_rst,
     assign pwl_dma_if.last = pwl_tlast;
     assign pwl_tready = pwl_dma_if.ready; 
 
-    assign bufft_if.data = bufft_tdata;
-    assign bufft_if.valid = bufft_tvalid;
-    assign bufft_if.last = bufft_tlast;
-    assign bufft_tready = bufft_if.ready; 
+    assign {bufft_if.data, bufft_if.valid, bufft_if.last} = 0; //Swap with Reed's out signals when he needs them.
+    assign bufft_if.ready = 1; 
 
-    assign sdc_tdata =  sdc_if.data;  
-    assign sdc_tvalid = sdc_if.valid;  
-    assign sdc_tlast =  sdc_if.last;  
-    assign sdc_tkeep = 1;
-    assign sdc_if.ready = sdc_tready; 
-
-    assign buffc_tdata =  buffc_if.data;  
-    assign buffc_tvalid = buffc_if.valid;  
-    assign buffc_tlast =  buffc_if.last;  
-    assign buffc_tkeep = 1;
-    assign buffc_if.ready = buffc_tready;
-
-    assign cmc_tdata =  cmc_if.data;  
-    assign cmc_tvalid = cmc_if.valid;  
-    assign cmc_tlast =  cmc_if.last;  
-    assign cmc_tkeep = 1;
-    assign cmc_if.ready = cmc_tready;
+    assign sdc_if.ready = 1;   //Swap with Reed's in signals when he needs them
+    assign buffc_if.ready = 1; //Swap with Reed's in signals when he needs them
+    assign cmc_if.ready = 1;   //Swap with Reed's in signals when he needs them
 
     assign ra_if.packet     = raddr_packet;
     assign ra_if.valid_pack = raddr_valid_packet;
@@ -195,7 +159,11 @@ endmodule
 //Mon  1/15:  10 hours
 //Tues 1/16:  7 hours
 
-//Mon 1/22:  9 hours
+//Mon  1/22:  9 hours
+
+//Wed  1/31:  7 hours
+//Thur 2/1:   6 hours
+//Sat  2/3:   
 
 
 //TODO: Almost ready to pull shit onto lab computer. Finish testing things here (wtf is going on with the memory?? And wresp stuff is wierd. Make sure all tests work and pass). 

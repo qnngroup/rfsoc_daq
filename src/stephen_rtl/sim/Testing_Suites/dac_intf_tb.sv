@@ -16,6 +16,10 @@ module dac_intf_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] 
 	logic panic = 0; 
 
 	Axis_IF #(`DMA_DATA_WIDTH) pwl_dma_if(); 
+	assign pwl_dma_if.valid = 0;
+	assign pwl_dma_if.data = 0;
+	assign pwl_dma_if.ready = 0;
+	assign pwl_dma_if.last = 0; 
 
 	logic[`MEM_SIZE-1:0] fresh_bits; 
 	logic[`MEM_SIZE-1:0][`WD_DATA_WIDTH-1:0] mem_map, read_resps; 
@@ -176,9 +180,10 @@ module dac_intf_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] 
 	enum logic {WATCH, PANIC} panicState; 
 	logic go; 
 	logic[$clog2(TIMEOUT):0] timeout_cntr; 
-	edetect testNum_edetect(.clk(clk), .rst(rst),
-                            .val(test_num),
-                            .comb_posedge_out(testNum_edge)); 
+	edetect #(.DATA_WIDTH(8))
+	testNum_edetect (.clk(clk), .rst(rst),
+	 				 .val(test_num),
+	 				 .comb_posedge_out(testNum_edge)); 
 
 	always_ff @(posedge clk) begin 
 		if (rst) begin 

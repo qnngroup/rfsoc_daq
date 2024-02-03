@@ -10,18 +10,7 @@ module ila #(parameter LINE_WIDTH=256, parameter SAMPLE_WIDTH = 16, parameter MA
 		     input wire[$clog2(MAX_ILA_BURST_SIZE):0] ila_burst_size_in, 
 		     output logic[SAMPLE_WIDTH-1:0] sample_to_send,
 		     output logic valid_sample_out);
-         // dac_ILA dac_ILA (.clk(clk), 
-         //                  .probe0(rst),
-         //                  .probe1(set_trigger),
-         //                  .probe2(ilaState),
-         //                  .probe3(ila_bram_we),
-         //                  .probe4(ila_bram_en),
-         //                  .probe5(sample_pulled),
-         //                  .probe6(sample_to_send),
-         //                  .probe7(valid_sample_out),
-         //                  .probe8(ila_addr),
-         //                  .probe9(sample_counter));
-                     
+		                          
 	localparam SAMPLE_NUM = LINE_WIDTH/SAMPLE_WIDTH; 
 	int sample_index; 
 	logic [$clog2(MAX_ILA_BURST_SIZE)-1:0] ila_addr; 

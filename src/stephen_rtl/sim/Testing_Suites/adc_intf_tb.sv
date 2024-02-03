@@ -26,6 +26,7 @@ module adc_intf_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] 
 	logic[`CHAN_SAMPLES-1:0][`WD_DATA_WIDTH-1:0] exp_cmc_data; 
 	logic[`SDC_SAMPLES-1:0][`WD_DATA_WIDTH-1:0] exp_sdc_data; 
 
+	assign bufft_if.last = bufft_if.valid;
 	ADC_Interface DUT(.clk(clk), .rst(rst),
                       .fresh_bits(fresh_bits),
                       .read_resps(read_resps),
@@ -174,9 +175,10 @@ module adc_intf_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] 
 	enum logic {WATCH, PANIC} panicState; 
 	logic go; 
 	logic[$clog2(TIMEOUT):0] timeout_cntr; 
-	edetect testNum_edetect(.clk(clk), .rst(rst),
-                            .val(test_num),
-                            .comb_posedge_out(testNum_edge)); 
+	edetect #(.DATA_WIDTH(8))
+	testNum_edetect (.clk(clk), .rst(rst),
+	 				 .val(test_num),
+	 				 .comb_posedge_out(testNum_edge));  
 
 	always_ff @(posedge clk) begin 
 		if (rst) begin 

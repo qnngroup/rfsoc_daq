@@ -7,6 +7,7 @@ module top_level_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0]
     localparam STARTING_TEST = 0; 
     localparam TIMEOUT = 10_000; 
     localparam PERIODS_TO_CHECK = 3; 
+    localparam BUFF_LEN = 67;
     logic clk, rst;
     logic[15:0] timer; 
 
@@ -40,7 +41,6 @@ module top_level_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0]
     logic[`BATCH_SAMPLES-1:0] error_vec;
 
     //DMA BUFFER TO SEND
-    localparam BUFF_LEN = 67;
     logic[BUFF_LEN-1:0][`DMA_DATA_WIDTH-1:0] dma_buff;
     assign dma_buff = {48'h3c34097f0000, 48'h3b282a75ffe1, 48'h3a182a8dffff, 48'h390604140024, 48'h375602700001, 48'h36cb3a3eff99, 48'h36703d79fff7, 48'h34f71d030016, 48'h3443346affdf, 48'h327104f3001a, 48'h324d040c0006, 48'h31131b68ffed, 48'h31120d650e03, 48'h301c1123fffc, 48'h2f260edc0002, 48'h2cfb1f57fff8, 48'h2c6c0674002d, 48'h2c6b2764df10, 48'h2ba30ca90022, 48'h2ad63ceaffc4, 48'h28b9275b000a, 48'h288e1e7f0035, 48'h279d0edb0011, 48'h26383550ffe4, 48'h263737bcfd94, 48'h24212bb10006, 48'h238622e0000f, 48'h23762622ffcc, 48'h220302a70018, 48'h21d22479ff4f, 48'h203a0b6d0010, 48'h1f670a900001, 48'h1e4b29f8ffe4, 48'h1e4a07bb223d, 48'h1d023937ffd9, 48'h1c2328e40013, 48'h1b1337a5fff2, 48'h1aab3907fffd, 48'h1a0c353f0006, 48'h18843a7efffd, 48'h17451c9c0018, 48'h171d2593ffc7, 48'h161e2d7ffff8, 48'h13cd06900011, 48'h12de066d0001, 48'h126c10d1ffe9, 48'h11732742ffe9, 48'h11720a321d10, 48'h105a01ec0008, 48'hfc72405ffc5, 48'he801dfd0005, 48'hd2a18a40004, 48'hc1a0abc000d, 48'hc191a87f035, 48'ha950795000c, 48'ha711b41ff74, 48'h9401b050001, 48'h83a0a770010, 48'h7043e1fffd5, 48'h7033e50ffcf, 48'h63c13cd0037, 48'h3dc31a9fff3, 48'h3db20561153, 48'h2a838c2ffec, 48'h15c0e940021, 48'h15b04010a93, 48'h3};
     //EXPECTED OUTPUT
@@ -347,7 +347,7 @@ module top_level_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0]
         end
     endgenerate
 
-    assign curr_expected_batch = expected_batches[exp_i];
+    assign pwl_tkeep = 0; 
     assign checked_full_wave = (pwlTestState == VERIFY) && (valid_dac_batch) && (exp_i == (tl.sys.dac_intf.pwl_gen.wave_lines_stored-1)); 
     assign curr_expected_batch = expected_batches[exp_i];
     always_comb begin
@@ -538,9 +538,10 @@ module top_level_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0]
     logic go; 
     enum logic {WATCH, PANIC} panicState; 
     logic[$clog2(TIMEOUT):0] timeout_cntr; 
-    edetect testNum_edetect(.clk(clk), .rst(rst),
-                            .val(test_num+exp_i),
-                            .comb_posedge_out(testNum_edge)); 
+    edetect #(.DATA_WIDTH(11))
+    testNum_edetect (.clk(clk), .rst(rst),
+                     .val(test_num+exp_i),
+                     .comb_posedge_out(testNum_edge)); 
 
     always_ff @(posedge clk) begin 
         if (rst) begin 

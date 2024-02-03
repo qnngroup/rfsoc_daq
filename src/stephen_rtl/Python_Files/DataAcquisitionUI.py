@@ -2,6 +2,9 @@
 from DataAcquisitionOverlay import *
 from IPython.display import clear_output
 
+download = input("Download bitstream? (y/n) ")
+download = True if download == "y" else False
+
 verbose = True
 dacOverlay = DataAcquisitionOverlay("sys_design.bit", download = True)
 

@@ -381,9 +381,10 @@ module pwl_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] done)
     enum logic {WATCH, PANIC} panicState; 
     logic go; 
     logic[$clog2(TIMEOUT):0] timeout_cntr; 
-    edetect testNum_edetect(.clk(clk), .rst(rst),
-                            .val(test_num),
-                            .comb_posedge_out(testNum_edge)); 
+    edetect #(.DATA_WIDTH(8))
+    testNum_edetect (.clk(clk), .rst(rst),
+                     .val(test_num),
+                     .comb_posedge_out(testNum_edge));  
 
     always_ff @(posedge clk) begin 
         if (rst) begin 

@@ -13,7 +13,7 @@ module DAC_Interface (input wire clk,rst,
 					  Axis_IF pwl_dma_if);
 
 	enum logic[1:0] {IDLE,DMA_STREAM_WAIT,BUILD_SEED} dacState;
-	logic[`BATCH_SAMPLES-1:0][`SAMPLE_WIDTH-1:0] trig_out,seed_set, samples_out, pwl_batch_out;  
+	logic[`BATCH_SAMPLES-1:0][`SAMPLE_WIDTH-1:0] trig_out,seed_set, seed_set_in, samples_out, pwl_batch_out;  
 	logic produce_rand_samples, produce_trig_wave, produce_pwl; 
 	logic state_rdy; 
 	logic set_seeds;
@@ -22,6 +22,7 @@ module DAC_Interface (input wire clk,rst,
 	logic pwl_data_incoming, dma_stream_delay; 
 	logic valid_pwl_batch; 
 
+	assign seed_set_in = (rst)? 0 : seed_set; 
 	edetect valid_dac_edetect (.clk(clk), .rst(rst),
                                .val(valid_dac_batch),
                                .comb_posedge_out(valid_dac_edge));
@@ -31,7 +32,7 @@ module DAC_Interface (input wire clk,rst,
 		for (genvar i = 0; i < `BATCH_SAMPLES; i++) begin: lfsr_machines
 			 LFSR #(.DATA_WIDTH(`SAMPLE_WIDTH)) 
 		     lfsr(.clk(clk), .rst(rst || set_seeds || shutdown_lfsr),
-		          .seed(seed_set[i]),
+		          .seed(seed_set_in[i]),
 		          .run(run_shift_regs),
 		          .sample_out(samples_out[i]));
 		end

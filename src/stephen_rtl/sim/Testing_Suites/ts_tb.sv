@@ -10,42 +10,42 @@ module ts_tb();
 
 	logic clk, rst;
 	logic[NUM_OF_TESTS-1:0] runTest = 0;
-	logic[NUM_OF_TESTS-1:0] done; 
+	logic[NUM_OF_TESTS-1:0] done, tb_passed; 
 	logic signals_defined = 0; 
 	logic[$clog2(NUM_OF_TESTS):0] currTestNum, passedTBs, failedTBs, completedTests; 
-	logic tb_passed, test_suite_done; 
+	logic test_suite_done; 
 
 	axi_recieve_transmit_tb #(.VERBOSE(VERBOSE))
 	art_tb(.start(runTest[0]&&signals_defined),
-	       .done({tb_passed,done[0]}));
+	       .done({tb_passed[0],done[0]}));
 
 	slave_tb #(.VERBOSE(VERBOSE))
 	sl_tb(.start(runTest[1]&&signals_defined),
-	      .done({tb_passed,done[1]}));
+	      .done({tb_passed[1],done[1]}));
 
 	dac_intf_tb #(.VERBOSE(VERBOSE))
 	di_tb(.start(runTest[2]&&signals_defined),
-	      .done({tb_passed,done[2]}));
+	      .done({tb_passed[2],done[2]}));
 
 	adc_intf_tb #(.VERBOSE(VERBOSE))
 	ai_tb(.start(runTest[3]&&signals_defined),
-	      .done({tb_passed,done[3]}));
+	      .done({tb_passed[3],done[3]}));
 
 	ila_tb #(.VERBOSE(VERBOSE))
 	ila_tb(.start(runTest[4]),
-	       .done({tb_passed,done[4]}));
+	       .done({tb_passed[4],done[4]}));
 
 	pwl_tb #(.VERBOSE(VERBOSE))
 	pwl_tb(.start(runTest[5]),
-	       .done({tb_passed,done[5]}));
+	       .done({tb_passed[5],done[5]}));
 
 	sys_tb #(.VERBOSE(VERBOSE))
 	sys_tb(.start(runTest[6]),
-	       .done({tb_passed,done[6]}));
+	       .done({tb_passed[6],done[6]}));
 
 	top_level_tb #(.VERBOSE(VERBOSE))
 	tl_tb(.start(runTest[7]),
-	      .done({tb_passed,done[7]}));
+	      .done({tb_passed[7],done[7]}));
 
 	assign test_suite_done = currTestNum == NUM_OF_TESTS; 
 	always_ff @(posedge clk) begin
@@ -63,7 +63,7 @@ module ts_tb();
 						currTestNum <= currTestNum + 1;
 						runTest[currTestNum+1] <= 1;
 					end 
-					if (tb_passed) passedTBs <= passedTBs + 1;
+					if (|tb_passed) passedTBs <= passedTBs + 1;
 					else failedTBs <= failedTBs + 1;
 					completedTests <= completedTests + 1; 
 				end 

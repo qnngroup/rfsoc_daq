@@ -52,6 +52,7 @@ module sys_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] done)
     assign ra_if.dev_rdy = 1;
     assign rr_if.dev_rdy = 1;
     assign {rr_if.data_to_send, rr_if.data, rr_if.send, rr_if.trans_rdy} = 0;
+    assign {pwl_dma_if.data, pwl_dma_if.last, pwl_dma_if.valid} = 0;
 
     axi_transmit #(.BUS_WIDTH(`A_BUS_WIDTH), .DATA_WIDTH(`A_DATA_WIDTH))
     waddr_ps_transmitter(.clk(clk), .rst(rst),
@@ -100,7 +101,7 @@ module sys_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] done)
                         .osc_sig_out(wr_if.dev_rdy));
     LFSR #(.DATA_WIDTH (`WD_DATA_WIDTH))
     rand_num_gen(.clk(clk), .rst(rst),
-                 .seed(-1),
+                 .seed((`WD_DATA_WIDTH)'(-1)),
                  .run(testState != IDLE),
                  .sample_out(rand_val));
 
@@ -112,6 +113,7 @@ module sys_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] done)
         end 
         for (int i = 0; i < `CHAN_SAMPLES; i++) exp_cmc_data[i] = i+69;
         for (int i = 0; i < `SDC_SAMPLES; i++) exp_sdc_data[i] = i;
+        bufft_if.last = bufft_if.valid;
     end
 
   
@@ -195,6 +197,8 @@ module sys_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] done)
         end
     end
     always_comb begin
+        if (test_num != 2) test_check_vector = 0; 
+
         if (test_num == 0) 
             test_check = {sys.rst, sys.rst}; 
         else if (test_num == 1)  
@@ -204,7 +208,7 @@ module sys_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] done)
                 for (int i = 1; i < `BATCH_SAMPLES; i++) test_check_vector[i] = dac_samples[i] == dac_samples[i-1]+1; 
                 test_check_vector[0] = 1; 
                 test_check = {&test_check_vector, 1'b1};
-            end else test_check = 0; 
+            end else {test_check,test_check_vector} = 0; 
         end 
         else if (test_num == 3)  
             test_check = (~valid_dac_batch && dac0_rdy && testState == TEST)? {1'b1, 1'b1} : 0;
@@ -782,9 +786,10 @@ module sys_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] done)
     enum logic {WATCH, PANIC} panicState;
     logic go; 
     logic[$clog2(TIMEOUT):0] timeout_cntr; 
-    edetect testNum_edetect(.clk(clk), .rst(rst),
-                            .val(test_num),
-                            .comb_posedge_out(testNum_edge)); 
+    edetect #(.DATA_WIDTH(8))
+    testNum_edetect (.clk(clk), .rst(rst),
+                     .val(test_num),
+                     .comb_posedge_out(testNum_edge)); 
     edetect sample_edetect(.clk(clk), .rst(rst),
                             .val(sys.dac_sample_pulled),
                             .comb_posedge_out(new_sample_edge)); 

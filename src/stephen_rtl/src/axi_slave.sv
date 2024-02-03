@@ -20,7 +20,6 @@ module axi_slave #(parameter A_BUS_WIDTH=2, parameter A_DATA_WIDTH=5, parameter 
     logic [`MEM_SIZE-1:0] rtl_read_reqs_full, rtl_write_reqs_full; 	  
 	logic[A_DATA_WIDTH-1:0] windex_out, windex_out_raw, rindex_out;
 	logic[WD_DATA_WIDTH-1:0] wdata_out, rdata_in; 
-	logic transmit_wrsp_rdy,transmit_rdata_rdy;
 	logic wcomplete, rcomplete;
 	logic can_ps_write, can_ps_read, is_readonly_addr;
 	logic ps_write_req,ps_read_req; 

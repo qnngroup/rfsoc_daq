@@ -9,6 +9,7 @@ module slave_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] don
 	localparam TIMEOUT = 10_000; 
 
 	logic clk, rst;
+	logic panic = 0; 
 	logic[`WD_DATA_WIDTH-1:0] rand_val, read_data;
 	logic ps_read_rdy, ps_wrsp_rdy; 
 	logic[`MEM_SIZE-1:0] rtl_write_reqs, rtl_read_reqs, fresh_bits, rtl_rdy; 
@@ -23,6 +24,10 @@ module slave_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] don
 	logic[7:0] test_num; 
 	logic[7:0] testsPassed, testsFailed; 
 	logic kill_tb; 
+
+	logic[`WD_DATA_WIDTH-1:0] curr_data_memmap, curr_data_rtlreadout, rtlreadoutTest;
+	logic[`A_DATA_WIDTH-1:0] curr_id, curr_test_id; 
+	logic[1:0] wasWritten; 
 
 	Recieve_Transmit_IF #(`A_BUS_WIDTH, `A_DATA_WIDTH)   wa_if (); 
 	Recieve_Transmit_IF #(`WD_BUS_WIDTH, `WD_DATA_WIDTH) wd_if (); 
@@ -51,14 +56,13 @@ module slave_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] don
 	   .rtl_rd_out(rtl_rd_out),				//out 
 	   .fresh_bits(fresh_bits));
 
+	assign {rr_if.data, rr_if.valid_data} = 0;
+	assign {rr_if.dev_rdy, rr_if.data_to_send, rr_if.send, rr_if.trans_rdy} = 0; 
+
 	axi_receive #(.BUS_WIDTH(2), .DATA_WIDTH(2))
 	ps_wresp_recieve(.clk(clk), .rst(rst),
 	                 .bus(wr_if.receive_bus),
 	                 .is_addr(1'b0)); 
-	axi_receive #(.BUS_WIDTH(2), .DATA_WIDTH(2))
-	ps_rresp_recieve(.clk(clk), .rst(rst),
-	                 .bus(rr_if.receive_bus),
-	                 .is_addr(1'b0));
 	axi_receive #(.BUS_WIDTH(`WD_BUS_WIDTH), .DATA_WIDTH(`WD_DATA_WIDTH))
 	ps_rdata_recieve(.clk(clk), .rst(rst),
 	                 .bus(rd_if.receive_bus),
@@ -75,7 +79,7 @@ module slave_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] don
 
 	LFSR #(.DATA_WIDTH (`WD_DATA_WIDTH))
 	rand_num_gen(.clk(clk), .rst(rst),
-	             .seed(-1),
+	             .seed((`WD_DATA_WIDTH)'(-1)),
 	             .run(testState != IDLE),
 	             .sample_out(rand_val));
 	oscillate_sig #(.DELAY (OSC_DELAY))
@@ -85,9 +89,6 @@ module slave_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] don
 	                     .val(fresh_bits[curr_id]),
 	                     .comb_posedge_out(wasWritten));
 
-	logic[`WD_DATA_WIDTH-1:0] curr_data_memmap, curr_data_rtlreadout, rtlreadoutTest;
-	logic[`A_DATA_WIDTH-1:0] curr_id, curr_test_id; 
-	logic[1:0] wasWritten; 
 	assign curr_id = ids[curr_addr_idx];
 	assign curr_data_memmap = DUT.mem_map[curr_id]; 
 	assign curr_data_rtlreadout = rtl_rd_out[curr_id];
@@ -494,7 +495,11 @@ module slave_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] don
 					else if (test_num == 3*`ADDR_NUM+14) begin 
 						if (timer == 0) {idx, correct_steps, timer} <= 1; 
 						if (timer == 1) begin
-							if (idx == `ADDR_NUM) testState <= CHECK;
+							if (idx == `ADDR_NUM-1) begin
+								testState <= CHECK;
+								timer <= 0;
+								idx <= 0;
+							end 
 							else begin 
 								if (`is_RTLPOLL(ids[idx])) begin 
 									wa_if.data_to_send <= addrs[idx];
@@ -609,13 +614,13 @@ module slave_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] don
 	end
 
 	logic[1:0] testNum_edge;
-	logic panic = 0; 
 	logic go; 
 	enum logic {WATCH, PANIC} panicState;
 	logic[$clog2(TIMEOUT):0] timeout_cntr; 
-	edetect testNum_edetect(.clk(clk), .rst(rst),
-                            .val(test_num),
-                            .comb_posedge_out(testNum_edge)); 
+	edetect #(.DATA_WIDTH(8))
+	testNum_edetect (.clk(clk), .rst(rst),
+	 				 .val(test_num),
+	 				 .comb_posedge_out(testNum_edge)); 
 
 	always_ff @(posedge clk) begin 
 		if (rst || testState == IDLE) begin 
