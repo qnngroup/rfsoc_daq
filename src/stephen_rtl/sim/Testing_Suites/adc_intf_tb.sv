@@ -184,9 +184,11 @@ module adc_intf_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] 
 		if (rst) begin 
 			{timeout_cntr,panic} <= 0;
 			panicState <= WATCH;
-			go <= 0; 
+			if (start) go <= 1; 
+			else go <= 0; 
 		end 
 		else begin
+			if (start) go <= 1;
 			if (go) begin
 				case(panicState) 
 					WATCH: begin
@@ -201,7 +203,6 @@ module adc_intf_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] 
 					PANIC: if (panic) panic <= 0; 
 				endcase
 			end 
-			if (start) go <= 1; 
 		end
 	end 
 

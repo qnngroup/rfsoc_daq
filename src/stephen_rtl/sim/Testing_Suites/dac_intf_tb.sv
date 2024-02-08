@@ -27,7 +27,6 @@ module dac_intf_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] 
 	logic[`BATCH_SAMPLES-1:0][`SAMPLE_WIDTH-1:0] dac_samples, last_dac_out; 
 	logic[`BATCH_SAMPLES-1:0][31:0] sample_diffs; 
 	logic[`BATCH_SAMPLES-1:0] test_values;
-	logic[1:0] valid_dac_edge; 
 	logic halt, dac0_rdy, valid_dac_batch; 
 	logic[15:0] samples_seen; 
 
@@ -38,7 +37,6 @@ module dac_intf_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] 
 	                   .dac0_rdy(dac0_rdy),
 	                   .dac_batch(dac_batch),
 	                   .valid_dac_batch(valid_dac_batch),
-	                   .valid_dac_edge(valid_dac_edge),
 	                   .pwl_dma_if(pwl_dma_if));
 
    	always_comb begin
@@ -189,9 +187,11 @@ module dac_intf_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] 
 		if (rst) begin 
 			{timeout_cntr,panic} <= 0;
 			panicState <= WATCH;
-			go <= 0; 
+			if (start) go <= 1; 
+			else go <= 0; 
 		end 
 		else begin
+			if (start) go <= 1;
 			if (go) begin
 				case(panicState) 
 					WATCH: begin
@@ -206,7 +206,6 @@ module dac_intf_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] 
 					PANIC: if (panic) panic <= 0; 
 				endcase
 			end 
-			if (start) go <= 1; 
 		end
 	end 
 

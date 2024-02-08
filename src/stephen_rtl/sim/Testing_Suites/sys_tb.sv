@@ -7,17 +7,16 @@ module sys_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] done)
     localparam STARTING_TEST = 0; 
     localparam TIMEOUT = 10_000; 
     localparam SKIP_TRIVIAL_TESTS = 1;
-    localparam SKIP_ILA_TEST = 1;
     logic clk, rst;
 
     enum logic[2:0] {IDLE, TEST, MEM_TEST_CHECK, WRESP, CHECK, DONE} testState; 
     logic[1:0] test_check; // test_check[0] = check, test_check[1] == 1 => test passed else test failed 
     logic[7:0] test_num; 
     logic[7:0] testsPassed, testsFailed, correct_steps; 
-    logic[1:0] correct_steps_changed;
+    logic[1:0] correct_edge;
     logic kill_tb; 
     logic panic = 0; 
-    logic[15:0] timer;
+    logic[15:0] timer, counter;
     logic[1:0] mt_timer; 
 
     logic[1:0] got_wresp;  //[1] == error bit (wr_if.data wasn't okay when recieved), [0] == sys saw a wr_if.data 
@@ -132,70 +131,8 @@ module sys_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] done)
     edetect #(.DATA_WIDTH(8))
     correct_ed(.clk(clk), .rst(rst),
                .val(correct_steps),
-               .comb_posedge_out(correct_steps_changed));                              
+               .comb_posedge_out(correct_edge));                              
 
-    //processor ILA statemachine (for pulling and examing samples stored on the ila)
-    enum logic[2:0] {IDLE0, POLL, WAIT, PASS, FAIL} psIlaState; 
-    logic[7:0] ila_timer, delay_timer;
-    logic[15:0] expected_out, curr_ila_sample_response; 
-    logic start_psila_statemachine; 
-
-    assign curr_ila_sample_response = sys.slave.mem_map[`DAC_ILA_RESP_ID];
-    always_ff @(posedge clk) begin
-        if (rst) begin
-            {ila_timer,start_psila_statemachine,expected_out,delay_timer} <= 0; 
-            psIlaState <= IDLE0; 
-        end else begin
-            case(psIlaState)
-                IDLE0: begin
-                    if (start_psila_statemachine) psIlaState <= POLL; 
-                end 
-                POLL: begin 
-                    if (expected_out == 192) begin
-                        expected_out <= 0;
-                        psIlaState <= PASS; 
-                    end else begin
-                        if (ila_timer == 0) begin 
-                            ra_if.data_to_send <= `DAC_ILA_RESP_VALID_ADDR;
-                            ra_if.send <= 1; 
-                            ila_timer <= 1; 
-                        end 
-                        if (ila_timer == 1) begin
-                            if (rd_if.valid_data) begin
-                                if (rd_if.data) ila_timer <= 2; 
-                                else begin 
-                                    ila_timer <= 0; 
-                                    psIlaState <= WAIT;
-                                end 
-                            end
-                        end 
-                        if (ila_timer == 2) begin 
-                            ra_if.data_to_send <= `DAC_ILA_RESP_ADDR;
-                            ra_if.send <= 1; 
-                            ila_timer <= 3; 
-                        end 
-                        if (ila_timer == 3) begin
-                            if (rd_if.valid_data) begin
-                                if (rd_if.data != expected_out) psIlaState <= FAIL; 
-                                else begin
-                                    expected_out <= expected_out + 1; 
-                                    ila_timer <= 0;
-                                    psIlaState <= WAIT; 
-                                end 
-                            end
-                        end
-                    end 
-                end 
-                WAIT: begin
-                    if (delay_timer == 150) begin
-                        delay_timer <= 0;
-                        psIlaState <= POLL;
-                    end else delay_timer <= delay_timer + 1;
-                end 
-            endcase 
-            if (~start_psila_statemachine) psIlaState <= IDLE0;
-        end
-    end
     always_comb begin
         if (test_num != 2) test_check_vector = 0; 
 
@@ -213,23 +150,23 @@ module sys_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] done)
         else if (test_num == 3)  
             test_check = (~valid_dac_batch && dac0_rdy && testState == TEST)? {1'b1, 1'b1} : 0;
         else if (test_num == 4)  
-            test_check = (testState == TEST && rd_if.valid_data && ila_timer == 3)? {rd_if.data == expected_out, 1'b1} : 0;
+            test_check = (testState == CHECK)? {counter == 651,1'b1} : 0;
         else if (test_num == 5)  
-            test_check = (rd_if.valid_data)? {rd_if.data == `MAX_ILA_BURST_SIZE, 1'b1} : 0;
+            test_check = (rd_if.valid_data)? {rd_if.data == `MAX_DAC_BURST_SIZE, 1'b1} : 0;
         else if (test_num == 6)  
             test_check = (testState == CHECK)? {1'b1, 1'b1} : 0;
         else if (test_num == 7)  
             test_check = (testState == CHECK)? {1'b1, 1'b1} : 0;
         else if (test_num == 8)
-            test_check = (correct_steps_changed != 0)? {correct_steps_changed == 1, 1'b1} : 0;
+            test_check = (correct_edge != 0)? {correct_edge == 1, 1'b1} : 0;
         else if (test_num == 9) 
-            test_check = (correct_steps_changed != 0)? {correct_steps_changed == 1, 1'b1} : 0;
+            test_check = (correct_edge != 0)? {correct_edge == 1, 1'b1} : 0;
         else if (test_num == 10) 
             test_check = (testState == CHECK)? {bufft_reg == 32'hBEEF_BEAD, 1'b1} : 0; 
         else if (test_num == 11) 
             test_check = (rd_if.valid_data)? {rd_if.data  == `FIRMWARE_VERSION, 1'b1} : 0; 
         else if (test_num == 12) 
-            test_check = (correct_steps_changed != 0 && testState == MEM_TEST_CHECK)? {correct_steps_changed == 1, 1'b1} : 0; 
+            test_check = (correct_edge != 0 && testState == MEM_TEST_CHECK)? {correct_edge == 1, 1'b1} : 0; 
         else test_check = 0; 
     end
 
@@ -242,7 +179,7 @@ module sys_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] done)
             end else begin
                 testState <= IDLE;
                 {testsPassed,testsFailed, kill_tb} <= 0; 
-                {done, timer, mt_timer,correct_steps} <= 0;
+                {done, timer, counter, mt_timer,correct_steps} <= 0;
                 test_num <= STARTING_TEST; 
 
                 {wa_if.data_to_send, wd_if.data_to_send, ra_if.data_to_send} <= 0;
@@ -322,44 +259,35 @@ module sys_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] done)
                             testState <= CHECK;
                         end 
                     end
-                    // Trigger the ila and send 3 lines of data from twave. Make sure each recieved sample is +1 from the other. 
+                    // Send a burst of 651 batches from the dac, make sure as many batches come out. 
                     if (test_num == 4) begin  
-                        if (timer == 151) begin
-                            if (psIlaState == PASS || psIlaState == FAIL) begin
-                                timer <= 0;
-                                start_psila_statemachine <= 0;
-                                $write("\n\n"); 
-                                testState <= CHECK;
-                            end 
-                        end else timer <= timer + 1; 
-
                         if (timer == 0) begin
-                            wa_if.data_to_send <= `DAC_ILA_TRIG_ADDR;
-                            wd_if.data_to_send <= 1; 
+                            wa_if.data_to_send <= `DAC_BURST_SIZE_ADDR;
+                            wd_if.data_to_send <= 651; 
                             {wa_if.send, wd_if.send} <= 3;
-                            testState <= WRESP; 
-                        end
-
-                        if (timer == 25) begin
-                            wa_if.data_to_send <= `ILA_BURST_SIZE_ADDR;
-                            wd_if.data_to_send <= 3; 
-                            {wa_if.send, wd_if.send} <= 3;
+                            timer <= 1;
                             testState <= WRESP;
-                        end 
-
-                        if (timer == 50) begin
+                        end
+                        if (timer == 1) begin
                             wa_if.data_to_send <= `TRIG_WAVE_ADDR;
                             wd_if.data_to_send <= 1; 
                             {wa_if.send, wd_if.send} <= 3;
+                            timer <= 2;
+                            counter <= 0;
                             testState <= WRESP;
-                        end 
-
-                        if (timer == 150) start_psila_statemachine <= 1; 
+                        end
+                        if (timer == 2 && valid_dac_batch) timer <= 3;
+                        if (timer == 3) begin
+                            if (~sys.dac_intf.produce_trig_wave) begin
+                                timer <= 0;
+                                testState <= CHECK;
+                            end 
+                        end
                     end
                     // Read the max burst size from the sys 
                     if (test_num == 5) begin
                         if (timer == 0) begin   
-                            ra_if.data_to_send <= `MAX_BURST_SIZE_ADDR; 
+                            ra_if.data_to_send <= `MAX_DAC_BURST_SIZE_ADDR; 
                             ra_if.send <= 1;  
                             timer <= 1; 
                         end else begin
@@ -377,7 +305,7 @@ module sys_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] done)
                         end else timer <= timer + 1; 
 
                         if (timer == 0) begin
-                            wa_if.data_to_send <= `ILA_BURST_SIZE_ADDR;
+                            wa_if.data_to_send <= `DAC_BURST_SIZE_ADDR;
                             wd_if.data_to_send <= 0; 
                             {wa_if.send, wd_if.send} <= 3;
                             testState <= WRESP;
@@ -693,9 +621,6 @@ module sys_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] done)
                     if (test_num == 5 && SKIP_TRIVIAL_TESTS) begin
                         test_num <= 8;
                         $display("\nSkipping trivial tests 6 and 7");
-                    end else if (test_num == 3 && SKIP_ILA_TEST) begin
-                        test_num <= 5;
-                        $display("\nSkipping ila test");
                     end else test_num <= test_num + 1;
                     testState <= (test_num < TOTAL_TESTS-1)? TEST : DONE; 
                 end 
@@ -734,22 +659,9 @@ module sys_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] done)
             if (ra_if.send) ra_if.send <= 0; 
             if (testState != WRESP && wr_if.valid_data) got_wresp <= {wr_if.data != `OKAY,1'b1}; 
             if (dac_check[0]) dac_check <= 0; 
+            if (valid_dac_batch) counter <= counter + 1;
 
-            if (test_num == 4) begin
-                if (test_check[0]) begin
-                    if (test_check[1]) begin 
-                        testsPassed <= testsPassed + 1;
-                        if (VERBOSE) $write("%c[1;32m",27); 
-                        if (VERBOSE) $write("t%0d_%0d+ ",test_num,expected_out);
-                        if (VERBOSE) $write("%c[0m",27); 
-                    end else begin 
-                        testsFailed <= testsFailed + 1; 
-                        if (VERBOSE) $write("%c[1;31m",27); 
-                        if (VERBOSE) $write("t%0d_%0d- ",test_num,expected_out);
-                        if (VERBOSE) $write("%c[0m",27); 
-                    end 
-                end 
-            end else if (test_num == 9 || test_num == 12 || test_num == 8) begin
+            if (test_num == 9 || test_num == 12 || test_num == 8) begin
                 if (test_check[0]) begin
                     if (test_check[1]) begin 
                         testsPassed <= testsPassed + 1;
@@ -776,13 +688,12 @@ module sys_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] done)
                         if (VERBOSE) $write("t%0d- ",test_num,);
                         if (VERBOSE) $write("%c[0m",27); 
                     end 
-                    if (test_num == 3) $write("\n\n");
                 end 
             end 
         end
     end
 
-    logic[1:0] testNum_edge, new_sample_edge;
+    logic[1:0] testNum_edge;
     enum logic {WATCH, PANIC} panicState;
     logic go; 
     logic[$clog2(TIMEOUT):0] timeout_cntr; 
@@ -790,22 +701,21 @@ module sys_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] done)
     testNum_edetect (.clk(clk), .rst(rst),
                      .val(test_num),
                      .comb_posedge_out(testNum_edge)); 
-    edetect sample_edetect(.clk(clk), .rst(rst),
-                            .val(sys.dac_sample_pulled),
-                            .comb_posedge_out(new_sample_edge)); 
 
     always_ff @(posedge clk) begin 
         if (rst) begin 
             {timeout_cntr,panic} <= 0;
             panicState <= WATCH;
-            go <= 0; 
+            if (start) go <= 1; 
+            else go <= 0; 
         end 
         else begin
+            if (start) go <= 1;
             if (go) begin
                 case(panicState) 
                     WATCH: begin
                         if (timeout_cntr <= TIMEOUT) begin
-                            if (testNum_edge == 1 || new_sample_edge == 1) timeout_cntr <= 0;
+                            if (testNum_edge == 1) timeout_cntr <= 0;
                             else timeout_cntr <= timeout_cntr + 1;
                         end else begin
                             panic <= 1; 
@@ -815,7 +725,6 @@ module sys_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] done)
                     PANIC: if (panic) panic <= 0; 
                 endcase
             end 
-            if (start) go <= 1; 
         end
     end 
 

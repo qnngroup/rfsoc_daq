@@ -3,23 +3,27 @@
 import mem_layout_pkg::*;
 
 module top_level_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] done);
-    localparam TOTAL_TESTS = 3; 
-    localparam STARTING_TEST = 0; 
+    localparam TOTAL_TESTS = 4; 
+    localparam STARTING_TEST = 0;
+    localparam SKIP_PWL_TEST = 0; 
     localparam TIMEOUT = 10_000; 
     localparam PERIODS_TO_CHECK = 3; 
     localparam BUFF_LEN = 67;
     logic clk, rst;
-    logic[15:0] timer; 
+    logic[15:0] timer, correct_steps;
+    logic test_start;  
+    logic[1:0] correct_edge;
 
-    enum logic[2:0] {IDLE, TEST, WRESP, CHECK, DONE} testState; 
+    enum logic[2:0] {IDLE, TEST,READ_DATA, WRESP, CHECK, DONE} testState; 
     logic[1:0] test_check; // test_check[0] = check, test_check[1] == 1 => test passed else test failed 
     logic[7:0] test_num; 
     logic[7:0] testsPassed, testsFailed; 
     logic kill_tb; 
     logic panic = 0; 
 
-    logic[`A_BUS_WIDTH-1:0] raddr_packet, waddr_packet;
-    logic[`WD_BUS_WIDTH-1:0] rdata_packet, wdata_packet;
+    logic[`A_BUS_WIDTH-1:0] raddr_packet, waddr_packet, mem_test_addr;
+    logic[`WD_BUS_WIDTH-1:0] rdata_packet, wdata_packet, mem_test_data;
+    logic[`WD_DATA_WIDTH-1:0] read_data; 
     logic[`DMA_DATA_WIDTH-1:0] pwl_tdata;
     logic[3:0] pwl_tkeep;
     logic pwl_tlast, pwl_tready, pwl_tvalid; 
@@ -39,6 +43,11 @@ module top_level_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0]
     logic[$clog2(PERIODS_TO_CHECK):0] periods; 
     logic[`BATCH_SAMPLES-1:0][`SAMPLE_WIDTH-1:0] curr_expected_batch;
     logic[`BATCH_SAMPLES-1:0] error_vec;
+
+    edetect #(.DATA_WIDTH(16))
+    correct_ed(.clk(clk), .rst(rst),
+               .val(correct_steps),
+               .comb_posedge_out(correct_edge));
 
     //DMA BUFFER TO SEND
     logic[BUFF_LEN-1:0][`DMA_DATA_WIDTH-1:0] dma_buff;
@@ -354,13 +363,14 @@ module top_level_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0]
         if (test_num == 0) 
             test_check = {tl.sys.rst,tl.sys.rst};
         else if (test_num == 1)
-            test_check = (rdata_valid_out && ps_read_rdy && testState == TEST)? {rdata_packet == `MAX_ILA_BURST_SIZE,1'b1} : 0; 
+            test_check = (rdata_valid_out && ps_read_rdy && testState == TEST)? {rdata_packet == `MAX_DAC_BURST_SIZE,1'b1} : 0; 
         else if (test_num == 2) begin
             if (valid_dac_batch) begin
                 for (int i = 0; i < `BATCH_WIDTH; i++) error_vec[i] = dac_samples[i] != curr_expected_batch[i]; 
             end else error_vec = 0; 
             test_check = (valid_dac_batch)? {dac_batch == curr_expected_batch,1'b1} : 0; 
-        end
+        end else if (test_num == 3)
+            test_check = (correct_edge != 0 && ~test_start)? {correct_edge == 1, 1'b1} : 0;
         else {test_check, error_vec} = 0; 
     end
 
@@ -373,10 +383,10 @@ module top_level_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0]
             end else begin
                 testState <= IDLE;
                 {testsPassed,testsFailed, kill_tb} <= 0; 
-                {done, timer} <= 0;
+                {done, timer, correct_steps, test_start} <= 0;
                 test_num <= STARTING_TEST; 
 
-                {raddr_packet, waddr_packet, wdata_packet} <= 0;
+                {raddr_packet, waddr_packet, wdata_packet, read_data, mem_test_addr,mem_test_data} <= 0;
                 {raddr_valid_packet, waddr_valid_packet, wdata_valid_packet} <= 0; 
                 {pwl_tlast, pwl_tdata, pwl_tvalid} <= 0;
                 {dma_i,exp_i,send_dma_buff,run_pwl,periods} <= 0;
@@ -443,10 +453,10 @@ module top_level_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0]
                             end
                         end
                     end
-                    // Read from MAX_ILA address
+                    // Read from MAX_DAC_BS address
                     if (test_num == 1) begin
                         if (timer == 0) begin
-                            raddr_packet <= `MAX_BURST_SIZE_ADDR;
+                            raddr_packet <= `MAX_DAC_BURST_SIZE_ADDR;
                             raddr_valid_packet <= 1; 
                             timer <= 1;
                         end else begin
@@ -474,7 +484,52 @@ module top_level_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0]
                         end 
                         if (timer == 5) send_dma_buff <= 1;                        
                     end
+                    // Perform Memory test 
+                    if (test_num == 3) begin
+                        if (timer == 0) begin
+                            mem_test_addr <= `MEM_TEST_BASE_ADDR;
+                            mem_test_data <= 20;
+                            {correct_steps,test_start} <= 1; 
+                            timer <= 1;
+                        end   
+                        if (timer == 1) begin
+                            waddr_packet <= mem_test_addr;
+                            wdata_packet <= mem_test_data; 
+                            {waddr_valid_packet, wdata_valid_packet} <= 3;
+                            testState <= WRESP;
+                            timer <= 2; 
+                        end 
+                        if (timer == 2) begin
+                            mem_test_addr <= mem_test_addr + 4; 
+                            raddr_packet <= mem_test_addr;
+                            raddr_valid_packet <= 1;
+                            testState <= READ_DATA; 
+                            timer <= 3;
+                        end      
+                        if (timer == 3) begin
+                            correct_steps <= (read_data == mem_test_data - 10)? correct_steps + 1 : correct_steps - 1;
+                            raddr_packet <= mem_test_addr;
+                            raddr_valid_packet <= 1;
+                            testState <= READ_DATA; 
+                            timer <= 4;
+                        end    
+                        if (timer == 4) begin
+                            correct_steps <= (read_data == mem_test_data + 10)? correct_steps + 1 : correct_steps - 1;
+                            mem_test_data <= mem_test_data + 10;
+                            timer <= (mem_test_addr == `MEM_TEST_END_ADDR-4)? 5 : 1; 
+                        end          
+                        if (timer == 5) begin
+                            timer <= 0;
+                            testState <= CHECK;
+                        end
+                    end
                 end
+                READ_DATA: begin
+                    if (rdata_valid_out && ps_read_rdy) begin
+                        read_data <= rdata_packet; 
+                        testState <= TEST;
+                    end
+                end 
                 WRESP: begin
                     if (wresp_valid_out && ps_wresp_rdy) begin
                         if (wresp_out != `OKAY) begin
@@ -484,7 +539,10 @@ module top_level_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0]
                     end
                 end 
                 CHECK: begin
-                    test_num <= test_num + 1;
+                    if (test_num == 1 && SKIP_PWL_TEST) begin
+                        test_num <= 3;
+                        $display("\nSkipping pwl test\n");
+                    end else test_num <= test_num + 1;
                     testState <= (test_num < TOTAL_TESTS-1)? TEST : DONE; 
                 end 
 
@@ -497,6 +555,7 @@ module top_level_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0]
             if (waddr_valid_packet) waddr_valid_packet <= 0; 
             if (wdata_valid_packet) wdata_valid_packet <= 0; 
             if (raddr_valid_packet) raddr_valid_packet <= 0; 
+            if (test_start) test_start <= 0; 
 
             if (test_num == 2) begin
                 if (test_check[0]) begin
@@ -510,6 +569,22 @@ module top_level_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0]
                         testsFailed <= testsFailed + 1; 
                         if (VERBOSE) $write("%c[1;31m",27); 
                         if (VERBOSE) $write("t%0d_%0d- ",test_num,exp_i);
+                        if (VERBOSE) $write("%c[0m",27); 
+                    end 
+                    if (VERBOSE && checked_full_wave) $write("\nChecked period #%0d\n",periods+1);
+                end 
+            end else if (test_num == 3) begin
+                if (test_check[0]) begin
+                    if (test_check[1]) begin 
+                        testsPassed <= testsPassed + 1;
+                        if (VERBOSE) $write("%c[1;32m",27); 
+                        if (VERBOSE) $write("t%0d_%0d+ ",test_num,correct_steps);
+                        if (VERBOSE) $write("%c[0m",27); 
+                    end 
+                    else begin 
+                        testsFailed <= testsFailed + 1; 
+                        if (VERBOSE) $write("%c[1;31m",27); 
+                        if (VERBOSE) $write("t%0d_%0d- ",test_num,correct_steps);
                         if (VERBOSE) $write("%c[0m",27); 
                     end 
                     if (VERBOSE && checked_full_wave) $write("\nChecked period #%0d\n",periods+1);
@@ -538,18 +613,20 @@ module top_level_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0]
     logic go; 
     enum logic {WATCH, PANIC} panicState; 
     logic[$clog2(TIMEOUT):0] timeout_cntr; 
-    edetect #(.DATA_WIDTH(11))
+    edetect #(.DATA_WIDTH(16))
     testNum_edetect (.clk(clk), .rst(rst),
-                     .val(test_num+exp_i),
+                     .val(test_num+exp_i+correct_steps),
                      .comb_posedge_out(testNum_edge)); 
 
     always_ff @(posedge clk) begin 
         if (rst) begin 
             {timeout_cntr,panic} <= 0;
             panicState <= WATCH;
-            go <= 0; 
+            if (start) go <= 1; 
+            else go <= 0; 
         end 
         else begin
+            if (start) go <= 1;
             if (go) begin
                 case(panicState) 
                     WATCH: begin
@@ -564,7 +641,6 @@ module top_level_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0]
                     PANIC: if (panic) panic <= 0; 
                 endcase
             end 
-            if (start) go <= 1; 
         end
     end 
 

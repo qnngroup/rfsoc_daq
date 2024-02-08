@@ -94,7 +94,6 @@ module pwl_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] done)
     logic[`MEM_SIZE-1:0][`WD_DATA_WIDTH-1:0] mem_map, read_resps; 
     logic[`BATCH_WIDTH-1:0] dac_batch; 
     logic[`BATCH_SAMPLES-1:0][`SAMPLE_WIDTH-1:0] dac_samples; 
-    logic[1:0] valid_dac_edge; 
     logic halt, dac0_rdy, valid_dac_batch; 
     logic[$clog2(BUFF_LEN_LONG):0] dma_i;
     logic send_dma_buff,run_pwl; 
@@ -132,7 +131,6 @@ module pwl_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] done)
                        .dac0_rdy(dac0_rdy),
                        .dac_batch(dac_batch),
                        .valid_dac_batch(valid_dac_batch),
-                       .valid_dac_edge(valid_dac_edge),
                        .pwl_dma_if(pwl_dma_if));
     always_comb begin
         for (int i = 0; i < `BATCH_SAMPLES; i++) begin
@@ -390,9 +388,11 @@ module pwl_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] done)
         if (rst) begin 
             {timeout_cntr,panic} <= 0;
             panicState <= WATCH;
-            go <= 0; 
+            if (start) go <= 1; 
+            else go <= 0; 
         end 
         else begin
+            if (start) go <= 1;
             if (go) begin
                 case(panicState) 
                     WATCH: begin
@@ -407,7 +407,6 @@ module pwl_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] done)
                     PANIC: if (panic) panic <= 0; 
                 endcase
             end 
-            if (start) go <= 1; 
         end
     end 
 

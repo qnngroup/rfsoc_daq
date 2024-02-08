@@ -4,7 +4,7 @@ import mem_layout_pkg::*;
 
 module ts_tb();
 	localparam VERBOSE = 1; 	  
-	localparam NUM_OF_TESTS = 8; 
+	localparam NUM_OF_TESTS = 7; 
 	localparam STARTING_TEST = 0; // 0-indexed test num
 	localparam TESTS_TO_RUN = -1; // Set -1 to run all tests
 
@@ -31,21 +31,17 @@ module ts_tb();
 	ai_tb(.start(runTest[3]&&signals_defined),
 	      .done({tb_passed[3],done[3]}));
 
-	ila_tb #(.VERBOSE(VERBOSE))
-	ila_tb(.start(runTest[4]),
+	pwl_tb #(.VERBOSE(VERBOSE))
+	pwl_tb(.start(runTest[4]),
 	       .done({tb_passed[4],done[4]}));
 
-	pwl_tb #(.VERBOSE(VERBOSE))
-	pwl_tb(.start(runTest[5]),
+	sys_tb #(.VERBOSE(VERBOSE))
+	sys_tb(.start(runTest[5]),
 	       .done({tb_passed[5],done[5]}));
 
-	sys_tb #(.VERBOSE(VERBOSE))
-	sys_tb(.start(runTest[6]),
-	       .done({tb_passed[6],done[6]}));
-
 	top_level_tb #(.VERBOSE(VERBOSE))
-	tl_tb(.start(runTest[7]),
-	      .done({tb_passed[7],done[7]}));
+	tl_tb(.start(runTest[6]),
+	      .done({tb_passed[6],done[6]}));
 
 	assign test_suite_done = currTestNum == NUM_OF_TESTS; 
 	always_ff @(posedge clk) begin

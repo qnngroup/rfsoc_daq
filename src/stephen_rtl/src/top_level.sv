@@ -163,9 +163,65 @@ endmodule
 
 //Wed  1/31:  7 hours
 //Thur 2/1:   6 hours
-//Sat  2/3:   
+//Sat  2/3:   5 hours
+
+//Mon  2/5:   7 hours
+//Tues 2/6:   8 hours
+//Wed  2/7:   9 hours
+//Thur 2/8:   x hours
 
 
-//TODO: Almost ready to pull shit onto lab computer. Finish testing things here (wtf is going on with the memory?? And wresp stuff is wierd. Make sure all tests work and pass). 
-//THen push to lab computer and pull. Then make sure firmware version is being printed correctly. Then figure out why the wave stored lines is 1028 and not 428 or something. 
-//Do this by adding some probes BEFORE you run the bitstream. You got this. We got this.  
+
+// WEEKLY UPDATES
+
+/*
+Mon:
+    Finished code scraping. Got rid of lots of uncecessary signals and caught a few undefined ones. Removed all the warnings vivado was screaming at me about 
+    (ignoring the unconsequential ones). Then I started the process of removing everything associated with the DAC ILA from the memory map. Had to go through
+    a few parts of the project for that. After that, I've realized that my axi_slave test bench is actually really bad. It isn't set up the best because it was one 
+    of my first test benches and I've developed lots of better ways of testing stuff. I've been wanting to redo most of my tests there for a while, but now I think I
+    should do it asap because I'm realizing that we'll be making lots of changes to the memory map moving forwards, so it should be very easy to update my tests. Spent most
+    of the day starting that process. I really hope to completely finish it tomorrow. 
+
+Tues: 
+    Fixed what would have been a problematic bug in the memory map definitions. Spent the whole day completely refactoring the slave_tb. Made really good progress, and fixed alot
+    of useless/incorrect tests. Overall, the whole thing is much more comprehensible to me. Very nearly done, still buffing out some issues. Plan is to complete the bench asap very 
+    early tomorrow before Reed gets in. Then, when he's here, we'll go over some the superconductivity meeting questions I have, LTspice work and how that might connect to my thesis,
+    and finally a pwl discussion.
+
+Wed: 
+    Reed Meeting Notes: For timing tricks, varaible limits for loops and shifting == BAD, don't use inequalities unless you need to, don't reset signals that depend on other signals
+    (valids, enables, lasts, etc). Finshed up the slave testbench reformat. Planning on working on a block diagram for the pwl module tonight or tomorrow morning to talk to Reed about.
+
+Thurs:
+    It's taken much longer than planned, but fully finished producing a stable version of the system. All tests have been finished and are passing. I then spent the rest of the morning
+    working on a test suite that can be run on the hardware in real time, and fixing my simulated interface with the DAS to test the testbench. It should be capable of checking all
+    the important aspects of my system, as well as run the DAC in an idle mode where it just switches between producing different waveform types (right now its just random samples and triangle waves).
+    I plan on going into the lab and testing this at some point. 
+*/
+
+
+// SUPERCONDUCTING MEETING QUESTIONS
+
+/*
+2/6/24
+    Terms: 
+        1. JPL films
+        2. Device constriction? Dpair current?
+        3. What is a meander? 
+        4. Transmission line "coupled to a resonator"
+        5. Etched samples, dicing? 
+
+
+    Questions:
+    1. Alejandro: You're trying to find a way to figure out a fast method of measuring inductance 
+    2. Why is measuring constriction vs Temperature important for infared detection?
+
+*/
+
+// TIMING TRICKS
+/*
+Variable limits for for loops and shifting == BAD
+Counters: don't use inequalities unless u need to
+If issues with high fannout rest, don't reset data signals. In general don't reset singals that depend (valids, enables etc, last )
+*/

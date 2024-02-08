@@ -9,7 +9,6 @@ module DAC_Interface (input wire clk,rst,
 					  input wire dac0_rdy, 
 					  output logic[`BATCH_WIDTH-1:0] dac_batch,
 					  output logic valid_dac_batch,
-					  output logic[1:0] valid_dac_edge,
 					  Axis_IF pwl_dma_if);
 
 	enum logic[1:0] {IDLE,DMA_STREAM_WAIT,BUILD_SEED} dacState;
@@ -23,10 +22,6 @@ module DAC_Interface (input wire clk,rst,
 	logic valid_pwl_batch; 
 
 	assign seed_set_in = (rst)? 0 : seed_set; 
-	edetect valid_dac_edetect (.clk(clk), .rst(rst),
-                               .val(valid_dac_batch),
-                               .comb_posedge_out(valid_dac_edge));
-
 	// For the random DAC Sampler
 	generate
 		for (genvar i = 0; i < `BATCH_SAMPLES; i++) begin: lfsr_machines

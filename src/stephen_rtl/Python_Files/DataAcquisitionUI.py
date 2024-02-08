@@ -12,7 +12,7 @@ seeds = [0xBEEF,0xABCD,0x1234,0xFEED,0xBEAD]
 seed = seeds[0]
 
 cmd = [""]
-cmds = {k:i-i%2 for i,k in enumerate(["choose",'c',"rst",'r',"random",'rs',"trig",'t',"hlt",'h',"plt",'p',"twave",'tw', "burstSize",'bs', "readBurstSize", "rbs", "help", "scale", "s", "simple_test", "st", "pwl_test", "tpw", "draw_pwl", "dpw", "full_test", "ft"])}
+cmds = {k:i-i%2 for i,k in enumerate(["choose",'c',"rst",'r',"random",'rs',"trig",'t',"hlt",'h',"twave",'tw', "burstSize",'bs', "readBurstSize", "rbs", "help", "scale", "s", "simple_test", "st", "pwl_test", "tpw", "draw_pwl", "dpw", "full_test", "ft"])}
 cmds['q'] = 0xaaaaaa
 removeBlanks = lambda li: [el for el in li if el != '']
 helpMsg = "\n\nCommands:\n\
@@ -21,7 +21,6 @@ rst (r) Resets the system\n\
 random (rs) Sends a random sequence of values to the DAC based on the selected seed\n\
 trig (t) Sets the trigger for the onboard ila system to collect (burstSize) number of samples\n\
 hlt (h) Halts the output to the DAC\n\
-plt (p) Plots the samples that were collected by the onboard ila\n\
 twave (t) Sends a triangle wave to the DAC\n\
 burstSize (bs) Sets the number of samples saved by the onboard ila to be (bs) batches of samples\n\
 readBurstSize (rbs) Returns the current burstSize value as well as the max\n\
@@ -31,8 +30,6 @@ pwl_test (tpw) Triggers pwl sequence (testing phase)\n\
 draw_pwl (dpw, T) Allows the user to draw a wave to send to the pwl (T=period of waveform in us)\n\
 full_test (ft) Runs a full system test\n\n"
 
-print("Resetting System")
-dacOverlay.rst()
 print("Entering Interface. Enter 'help' to display commands")
 
 while (cmd[0] != "q"):
@@ -84,7 +81,7 @@ while (cmd[0] != "q"):
 
     elif (cmd[0] == "simple_test" or cmd[0] == "st"):
         print("Beginning Simple Memory Test:")
-        dacOverlay.run_mem_test_simple(verbose=verbose)
+        dacOverlay.run_simple_mem_test(verbose=verbose)
 
     elif (cmd[0] == "scale" or cmd[0] == "s"):
         if (len(cmd) != 2):
@@ -114,12 +111,5 @@ while (cmd[0] != "q"):
         print("Running full system test:")
         dacOverlay.run_full_test(verbose=verbose)
 
-    elif (cmd[0] == "plt" or cmd[0] == "p"):
-        print("Plotting and clearing collected samples")
-        ex_samples = dacOverlay.dac_samples.display_stats(samp_stream_pltLabels = ["Sample Generation Snapshot","Voltage (V)"], verbose = verbose)
-        if (ex_samples):
-            print(f"Images saved under {dacOverlay.dac_samples.name}_stats")
-            ex_samples = [hex(el) for el in ex_samples]
-            print(f"First 16 collected samples:{ex_samples}")
     clear_output(wait=True)
 print("Exiting Interface")

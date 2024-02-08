@@ -23,24 +23,16 @@ module sys(input wire clk,sys_rst,
 
     logic [`MEM_SIZE-1:0] fresh_bits,rtl_read_reqs,rtl_write_reqs, rtl_rdy;
     logic[`MEM_SIZE-1:0][`WD_DATA_WIDTH-1:0] rtl_wd_in, rtl_rd_out;
-    logic[$clog2(`MAX_ILA_BURST_SIZE):0] ila_burst_size; 
+    logic[$clog2(`MAX_DAC_BURST_SIZE):0] dac_burst_size; 
     logic rst_cmd = 1;
-    logic rst,hlt_cmd,trig_dac_ila, bufft_valid_clear;
+    logic rst,hlt_cmd, bufft_valid_clear;
     logic[`BATCH_WIDTH-1:0] dac_batch_unfiltered;
     logic[$clog2(`SAMPLE_WIDTH):0] scale_factor; 
     logic [`BATCH_SAMPLES-1:0][`SAMPLE_WIDTH-1:0] dac_samples_scaled; 
-    logic[$clog2(`MAX_ILA_BURST_SIZE)+1:0] hlt_counter; 
+    logic[$clog2(`MAX_DAC_BURST_SIZE)+1:0] hlt_counter; 
 
-    logic dac_sample_pulled;
-    logic[`SAMPLE_WIDTH-1:0] dac_ila_sample;
-    logic[`WD_DATA_WIDTH-1:0] ila_resp_valid_wd, ila_resp_wd; 
-    logic ila_resp_valid_wr, ila_resp_wr, read_ila_trig; 
-    logic valid_dac_ila_sample;  
-    logic[1:0] valid_dac_edge; 
-    enum logic[1:0] {IDLE_T, SEND_SAMPLE, WRITE_WAIT, ILA_POLL_WAIT} dacIlaState; 
-    
     enum logic[1:0] {IDLE_R, RESP_WAIT, RESET} rstState; 
-    enum logic {IDLE_I, CHANGE_BURST_SIZE} ilaParamState;
+    enum logic {IDLE_DB, CHANGE_BURST_SIZE} dacBurstState;
     enum logic {IDLE_S, CHANGE_SCALE} scaleParamState;
     enum logic {IDLE_H, HALT_DAC} hltState;
     enum logic {IDLE_B, BUFFT_POLL_WAIT} bufftState;
@@ -59,9 +51,8 @@ module sys(input wire clk,sys_rst,
             case(i)
                 `RST_ID:            rtl_rdy[i] = rstState == IDLE_R; 
                 `DAC_HLT_ID:        rtl_rdy[i] = hltState == IDLE_H; 
-                `ILA_BURST_SIZE_ID: rtl_rdy[i] = ilaParamState == IDLE_I; 
+                `DAC_BURST_SIZE_ID: rtl_rdy[i] = dacBurstState == IDLE_DB; 
                 `SCALE_DAC_OUT_ID:  rtl_rdy[i] = scaleParamState == IDLE_S; 
-                `DAC_ILA_TRIG_ID:   rtl_rdy[i] = dacIlaState == IDLE_T; 
                 `TRIG_WAVE_ID:      rtl_rdy[i] = dac_intf.state_rdy;
                 `PWL_PREP_ID:       rtl_rdy[i] = dac_intf.state_rdy;
                 `RUN_PWL_ID:        rtl_rdy[i] = dac_intf.state_rdy;
@@ -73,14 +64,6 @@ module sys(input wire clk,sys_rst,
                 end 
             endcase 
             if ((`is_RTLPOLL(i)) || (`is_READONLY(i))) {rtl_read_reqs[i], rtl_write_reqs[i], rtl_wd_in[i]} = 0; //If rtl polls, no writing or reading. If it's readonly, just use the package definition
-            else if (i == `DAC_ILA_RESP_ID) begin
-                rtl_read_reqs[i] = 0; 
-                {rtl_write_reqs[i], rtl_wd_in[i]} = {ila_resp_wr, ila_resp_wd}; 
-            end 
-            else if (i == `DAC_ILA_RESP_VALID_ID) begin
-                rtl_read_reqs[i] = 0; 
-                {rtl_write_reqs[i], rtl_wd_in[i]} = {ila_resp_valid_wr, ila_resp_valid_wd}; 
-            end 
             else if (i >= `BUFF_TIME_BASE_ID && i <= `BUFF_TIME_VALID_ID) begin
                 rtl_read_reqs[i] = 0; 
                 if (bufft_valid_clear) begin
@@ -104,16 +87,16 @@ module sys(input wire clk,sys_rst,
     always_ff @(posedge clk) begin
         if (rst) begin
             {rst_cmd,hlt_cmd,hlt_counter} <= 0;
-            {ila_burst_size,scale_factor,bufft_valid_clear} <= 0; 
+            {dac_burst_size,scale_factor,bufft_valid_clear} <= 0; 
             rstState <= IDLE_R;
-            ilaParamState <= IDLE_I; 
+            dacBurstState <= IDLE_DB; 
             scaleParamState <= IDLE_S; 
             hltState <= IDLE_H; 
             bufftState <= IDLE_B; 
         end 
         else begin
-            if (valid_dac_batch && ila_burst_size != 0) begin
-                if ( (hlt_counter+1) < ila_burst_size) hlt_counter <= hlt_counter + 1; 
+            if (valid_dac_batch && dac_burst_size != 0) begin
+                if ( (hlt_counter+1) < dac_burst_size) hlt_counter <= hlt_counter + 1; 
                 else hlt_counter <= 0; 
             end 
 
@@ -132,7 +115,7 @@ module sys(input wire clk,sys_rst,
 
             case(hltState)
                 IDLE_H: begin
-                    if (fresh_bits[`DAC_HLT_ID] || ( valid_dac_batch && ila_burst_size != 0 && hlt_counter == (ila_burst_size-1) )) begin 
+                    if (fresh_bits[`DAC_HLT_ID] || ( valid_dac_batch && dac_burst_size != 0 && hlt_counter == (dac_burst_size-1) )) begin 
                         hlt_cmd <= 1;
                         hltState <= HALT_DAC; 
                     end 
@@ -154,13 +137,13 @@ module sys(input wire clk,sys_rst,
                 end 
             endcase 
 
-            case(ilaParamState)
-                IDLE_I: begin 
-                    if (fresh_bits[`ILA_BURST_SIZE_ID]) ilaParamState <= CHANGE_BURST_SIZE; 
+            case(dacBurstState)
+                IDLE_DB: begin 
+                    if (fresh_bits[`DAC_BURST_SIZE_ID]) dacBurstState <= CHANGE_BURST_SIZE; 
                 end 
                 CHANGE_BURST_SIZE: begin
-                    ila_burst_size <= rtl_rd_out[`ILA_BURST_SIZE_ID]; 
-                    ilaParamState <= IDLE_I; 
+                    dac_burst_size <= rtl_rd_out[`DAC_BURST_SIZE_ID]; 
+                    dacBurstState <= IDLE_DB; 
                 end 
             endcase 
 
@@ -191,6 +174,7 @@ module sys(input wire clk,sys_rst,
           .wresp_if(wr_if),
           .rresp_if(rr_if),
           .rtl_write_reqs(rtl_write_reqs), .rtl_read_reqs(rtl_read_reqs),
+          .clr_rd_out(1'b0),
           .rtl_rdy(rtl_rdy), 
           .rtl_wd_in(rtl_wd_in),               //in
           .rtl_rd_out(rtl_rd_out),             //out 
@@ -204,7 +188,6 @@ module sys(input wire clk,sys_rst,
                           .halt(hlt_cmd),                   //in
                           .dac_batch(dac_batch_unfiltered), //out 
                           .valid_dac_batch(valid_dac_batch),
-                          .valid_dac_edge(valid_dac_edge),
                           .pwl_dma_if(pwl_dma_if));
 
     ADC_Interface adc_intf(.clk(clk), .rst(rst),
@@ -214,60 +197,6 @@ module sys(input wire clk,sys_rst,
                            .buffc(buffc_if.stream_out),
                            .cmc(cmc_if.stream_out),
                            .sdc(sdc_if.stream_out));
-
-
-    // To manage sending of dac ila samples 
-    always_ff @(posedge clk) begin
-        if (rst) begin
-            {dac_sample_pulled, read_ila_trig, ila_resp_valid_wr,ila_resp_valid_wd, ila_resp_wr,ila_resp_wd, trig_dac_ila} <= 0;
-            dacIlaState <= IDLE_T; 
-        end else begin
-            case(dacIlaState)
-                IDLE_T: begin
-                    if (fresh_bits[`DAC_ILA_TRIG_ID]) begin
-                        trig_dac_ila <= 1; 
-                        dacIlaState <= SEND_SAMPLE; 
-                    end
-                end  
-                SEND_SAMPLE: begin
-                    if (trig_dac_ila) trig_dac_ila <= 0; 
-                    if (valid_dac_ila_sample) begin                      // a sample is ready to be sent
-                        {ila_resp_wr, ila_resp_valid_wr} <= 3;
-                        ila_resp_wd <= dac_ila_sample; 
-                        ila_resp_valid_wd <= 1; 
-                        dacIlaState <= WRITE_WAIT; 
-                    end
-                end 
-                WRITE_WAIT: dacIlaState <= ILA_POLL_WAIT;
-                ILA_POLL_WAIT: begin 
-                    if (~fresh_bits[`DAC_ILA_RESP_VALID_ID]) begin        // processor is about to pull sample 
-                        ila_resp_valid_wr <= 1;
-                        ila_resp_valid_wd <= 0; 
-                        dac_sample_pulled <= 1; 
-                    end
-                    if (~fresh_bits[`DAC_ILA_RESP_ID]) begin             // processor just polled; get ready to send next sample (or return if done)
-                        if (dac_ila.ilaState == dac_ila.IDLE) dacIlaState <= IDLE_T;
-                        else dacIlaState <= SEND_SAMPLE;   
-                    end 
-                end 
-            endcase 
-
-            if (ila_resp_wr) ila_resp_wr <= 0;
-            if (ila_resp_valid_wr) ila_resp_valid_wr <= 0;
-            if (dac_sample_pulled) dac_sample_pulled <= 0; 
-        end
-    end
-    ila #(.LINE_WIDTH(`BATCH_WIDTH), .SAMPLE_WIDTH (`SAMPLE_WIDTH), .MAX_ILA_BURST_SIZE (`MAX_ILA_BURST_SIZE)) 
-        dac_ila(.clk(clk), .rst(rst),
-            .ila_line_in(dac_batch),
-            .set_trigger(trig_dac_ila),
-            .trigger_event(valid_dac_edge == 1),
-            .save_condition({1'b1, valid_dac_batch}),
-            .ila_burst_size_in(ila_burst_size),
-            .sample_pulled(dac_sample_pulled),          //in
-            .sample_to_send(dac_ila_sample),            //out 
-            .valid_sample_out(valid_dac_ila_sample));    
-
 endmodule 
 
 `default_nettype wire

@@ -11,6 +11,7 @@ module axi_slave #(parameter A_BUS_WIDTH=2, parameter A_DATA_WIDTH=5, parameter 
 				   Recieve_Transmit_IF wresp_if,
 				   Recieve_Transmit_IF rresp_if, 
 				   input wire[`MEM_SIZE-1:0] rtl_write_reqs, rtl_read_reqs,
+				   input wire clr_rd_out, 
 				   input wire[`MEM_SIZE-1:0] rtl_rdy, 
                	   input wire[`MEM_SIZE-1:0][WD_DATA_WIDTH-1:0] rtl_wd_in,
                	   output logic[`MEM_SIZE-1:0][WD_DATA_WIDTH-1:0] rtl_rd_out,
@@ -64,18 +65,10 @@ module axi_slave #(parameter A_BUS_WIDTH=2, parameter A_DATA_WIDTH=5, parameter 
 
 	assign windex_out = (windex_out_raw > `ABS_ID_CEILING)? `ABS_ID_CEILING : windex_out_raw; 
 	assign rdata_in = (raddr_if.valid_data)? mem_map[raddr_if.data] : 0;
-	assign is_readonly_addr = windex_out == `MAX_BURST_SIZE_ID || windex_out == `MEM_SIZE_ID || windex_out == `ABS_ID_CEILING || windex_out == `ABS_ID_CEILING-1 || (windex_out >= `ABS_ID_CEILING && windex_out < `MEM_TEST_BASE_ADDR); 
+	assign is_readonly_addr = windex_out == `MAX_DAC_BURST_SIZE_ID || windex_out == `MEM_SIZE_ID || windex_out == `ABS_ID_CEILING || windex_out == `ABS_ID_CEILING-1 || (windex_out >= `ABS_ID_CEILING && windex_out < `MEM_TEST_BASE_ADDR); 
 	assign can_ps_write = (ps_write_req && ~rtl_write_reqs_full[windex_out] && ~rtl_read_reqs_full[windex_out])? 1 : 0;
 	assign can_ps_read = (ps_read_req && ~rtl_write_reqs_full[rindex_out] && ~rtl_read_reqs_full[rindex_out])? 1 : 0; 
 	
-	//TESTING
-	logic test_probe;
-	logic[`WD_DATA_WIDTH-1:0] test_val;
-	logic[`WD_DATA_WIDTH-1:0] test_val2;
-	assign test_val = mem_map[windex_out]; 
-	assign test_val2 = mem_map[windex_out+1];
-	//TESTING
-
 	always_comb begin
 		for (int i = 0; i < `MEM_SIZE; i++) begin
 			if (`is_RTLPOLL(i)) begin
@@ -93,11 +86,10 @@ module axi_slave #(parameter A_BUS_WIDTH=2, parameter A_DATA_WIDTH=5, parameter 
 
 	always_ff @(posedge clk) begin
 		if (rst) begin 
-			test_probe <= 0;
 			{fresh_bits,rtl_rd_out, wcomplete, rcomplete} <= 0;
 			for (int i = 0; i < `MEM_SIZE; i++) begin
-				if (i == `MAX_BURST_SIZE_ID) mem_map[i] <= `MAX_ILA_BURST_SIZE; 
-				else if (i == `ILA_BURST_SIZE_ID) mem_map[i] <= 0; 
+				if (i == `MAX_DAC_BURST_SIZE_ID) mem_map[i] <= `MAX_DAC_BURST_SIZE; 
+				else if (i == `DAC_BURST_SIZE_ID) mem_map[i] <= 0; 
 				else if (i == `SCALE_DAC_OUT_ID) mem_map[i] <= 0; 
 				else if (i == `MEM_SIZE_ID) mem_map[i] <= `MEM_SIZE; 
 				else if (i == `VERSION_ID) mem_map[i] <= `FIRMWARE_VERSION; 
@@ -111,23 +103,27 @@ module axi_slave #(parameter A_BUS_WIDTH=2, parameter A_DATA_WIDTH=5, parameter 
 					mem_map[i] <= rtl_wd_in[i];
 					fresh_bits[i] <= 1;
 				end
-				if (rtl_read_reqs_full[i]) begin
-					rtl_rd_out[i] <= mem_map[i];
-					if (~rtl_write_reqs_full[i]) fresh_bits[i] <= 0; 
-				end
+				if (clr_rd_out) rtl_rd_out[i] <= 0;
+				else begin 
+					if (rtl_read_reqs_full[i]) begin
+						rtl_rd_out[i] <= mem_map[i];
+						if (~rtl_write_reqs_full[i]) fresh_bits[i] <= 0; 
+					end
+				end 
 			end
 
 			if (can_ps_write) begin
 				if (~(`is_READONLY(windex_out))) begin
-					if (windex_out >= `MEM_TEST_BASE_ID && windex_out < (`VERSION_ID-1)) begin
+					if (windex_out >= `MEM_TEST_BASE_ID && windex_out < `MEM_TEST_END_ADDR) begin
 						mem_map[windex_out] <= wdata_out-10;
 						fresh_bits[windex_out] <= 1; 
-						mem_map[windex_out+1] <= wdata_out+10;
-						fresh_bits[windex_out+1] <= 1;
-						test_probe <=  1; 
+						if (windex_out != `MEM_TEST_END_ID-1) begin
+							mem_map[windex_out+1] <= wdata_out+10;
+							fresh_bits[windex_out+1] <= 1;
+						end 
 					end else 
-					if (windex_out == `ILA_BURST_SIZE_ID) begin
-						mem_map[windex_out] <= (wdata_out <= `MAX_ILA_BURST_SIZE)? wdata_out : `MAX_ILA_BURST_SIZE; 
+					if (windex_out == `DAC_BURST_SIZE_ID) begin
+						mem_map[windex_out] <= (wdata_out <= `MAX_DAC_BURST_SIZE)? wdata_out : `MAX_DAC_BURST_SIZE; 
 						fresh_bits[windex_out] <= 1;
 					end else 
 					if (windex_out == `SCALE_DAC_OUT_ID) begin

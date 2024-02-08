@@ -206,9 +206,11 @@ module axi_recieve_transmit_tb #(parameter VERBOSE = 1)(input wire start, output
 		if (rst) begin 
 			{timeout_cntr,panic} <= 0;
 			panicState <= WATCH;
-			go <= 0; 
+			if (start) go <= 1; 
+			else go <= 0; 
 		end 
 		else begin
+			if (start) go <= 1;
 			if (go) begin
 				case(panicState) 
 					WATCH: begin
@@ -223,7 +225,6 @@ module axi_recieve_transmit_tb #(parameter VERBOSE = 1)(input wire start, output
 					PANIC: if (panic) panic <= 0; 
 				endcase
 			end 
-			if (start) go <= 1; 
 		end
 	end 
 
