@@ -121,24 +121,24 @@ class DataAcquisitionOverlay():
 		addr = addr_map["scale_dac_out"]
 		self.write(addr, newScale)
 
-	def idle_mode(self):
-		print("Entering Idle Wave Production Mode. ctl-C to exit")
-		prev_bs = self.curr_dac_bs
-		self.change_burst_size(0,verbose=False)
-		wave_funcs = [("run_random_wave",0xBEEF), ("run_triangle_wave", None)]
-		i = 0
-		try:
-			while True:
-				func_call = f"self.{wave_funcs[i][0]}("
-				if wave_funcs[i][1]: func_call+=f"{wave_funcs[i][1]},"
-				eval(func_call+"verbose=False)")
-				t0 = time.time()
-				while time.time() - t0 < 3: continue
-				i = (i+1)%2
-		except KeyboardInterrupt:
-			self.write(addr_map["hlt_dac"],1)
-			self.change_burst_size(prev_bs,verbose=False)
-			print("Leaving Idle Mode")
+	 def idle_mode(self):
+        print("Entering Idle Wave Production Mode. ctl-C to exit")
+        prev_bs = self.curr_dac_bs
+        self.change_burst_size(0,verbose=False)
+        wave_funcs = [("run_random_wave",0xBEEF), ("run_triangle_wave", None), ("hlt_dac", None)]
+        i = 0
+        try:
+            while True:
+                func_call = f"self.{wave_funcs[i][0]}("
+                if wave_funcs[i][1]: func_call+=f"{wave_funcs[i][1]},"
+                eval(func_call+"verbose=False)")
+                t0 = time.time()
+                while time.time() - t0 < 3: continue
+                i = (i+1)%2
+        except KeyboardInterrupt:
+            self.write(addr_map["hlt_dac"],1)
+            self.change_burst_size(prev_bs,verbose=False)
+            print("Leaving Idle Mode")
 
 
 	def run_simple_mem_test(self,verbose=True):

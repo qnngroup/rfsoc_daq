@@ -44,7 +44,7 @@ class DataAcquisitionOverlay():
         raw_vn = self.read(addr_map["firmware_version"])
         self.firmware_version = self.raw_2_pretty_vn(raw_vn)
         print(f"Data Acquisition System (DAS) Overlay Successfully Instantiated.\nDAS Verison Number: {self.firmware_version}")
-        
+
     def write(self,offset,val): self.sys_driver.write(offset,val)
     def read(self, offset): return self.sys_driver.read(offset);
 
@@ -101,7 +101,7 @@ class DataAcquisitionOverlay():
         print("Entering Idle Wave Production Mode. ctl-C to exit")
         prev_bs = self.curr_dac_bs
         self.change_burst_size(0,verbose=False)
-        wave_funcs = [("run_random_wave",0xBEEF), ("run_triangle_wave", None)]
+        wave_funcs = [("run_random_wave",0xBEEF), ("run_triangle_wave", None), ("hlt_dac", None)]
         i = 0
         try:
             while True:
