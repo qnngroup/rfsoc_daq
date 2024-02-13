@@ -8,7 +8,7 @@
 // read/write clocks, as well as state machine to handle configuration updates
 //
 // Datastream interfaces
-// - adc_data: data,valid pairs for CHANNELS parallel stream interfaces
+// - adc_data: data,valid pairs for rx_pkg::CHANNELS parallel stream interfaces
 // - ps_readout_data: DMA data, always outputs
 //
 // Realtime I/O:
@@ -36,16 +36,14 @@
 // Status registers:
 // - ps_capture_write_depth:
 //    - outputted every time a capture finishes
-//    - flattened 2D array [CHANNELS][$clog2(BUFFER_DEPTH)+1]
+//    - flattened 2D array [rx_pkg::CHANNELS][$clog2(BUFFER_DEPTH)+1]
 //    - for each channel, MSB indicates if buffer is full
 //    - LSBs indicate the number of samples stored in the corresponding
 //      bank
 
 `timescale 1ns/1ps
 module buffer #(
-  parameter int CHANNELS = 8,
   parameter int BUFFER_DEPTH = 256,
-  parameter int DATA_WIDTH = 256,
   parameter int READ_LATENCY = 4
 ) (
   // ADC clock, reset (512 MHz)
@@ -71,7 +69,7 @@ module buffer #(
 );
 
 localparam int ADDR_WIDTH = $clog2(BUFFER_DEPTH);
-logic [DATA_WIDTH-1:0] memory [CHANNELS][BUFFER_DEPTH];
+logic [rx_pkg::DATA_WIDTH-1:0] memory [rx_pkg::CHANNELS][BUFFER_DEPTH];
 
 ////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////
@@ -84,17 +82,20 @@ enum {CAPTURE_IDLE, TRIGGER_WAIT, SAVE_SAMPLES, HOLD_SAMPLES} adc_capture_state;
 
 ////////////////////////////////////////////////////////////
 // Configuration and Status registers
+// Allows for control/communication between PS and module
 ////////////////////////////////////////////////////////////
 
 ////////////////////////
-// active channels
+// get number of active
+// channels from
+// banking_mode
 ////////////////////////
-logic [$clog2(CHANNELS+1)-1:0] adc_active_channels;
-Axis_If #(.DWIDTH($clog2($clog2(CHANNELS+1)))) adc_capture_banking_mode_sync ();
+logic [$clog2(rx_pkg::CHANNELS+1)-1:0] adc_active_channels;
+Axis_If #(.DWIDTH($clog2($clog2(rx_pkg::CHANNELS+1)))) adc_capture_banking_mode_sync ();
 assign adc_capture_banking_mode_sync.ready = adc_capture_state == CAPTURE_IDLE;
 always_ff @(posedge adc_clk) begin
   if (adc_reset) begin
-    adc_active_channels <= $clog2(CHANNELS+1)'(CHANNELS);
+    adc_active_channels <= $clog2(rx_pkg::CHANNELS+1)'(rx_pkg::CHANNELS);
   end else begin
     if (adc_capture_banking_mode_sync.ok) begin
       adc_active_channels <= 1 << adc_capture_banking_mode_sync.data;
@@ -103,7 +104,7 @@ always_ff @(posedge adc_clk) begin
 end
 // CDC for banking mode
 axis_config_reg_cdc #(
-  .DWIDTH($clog2($clog2(CHANNELS+1)))
+  .DWIDTH($clog2($clog2(rx_pkg::CHANNELS+1)))
 ) capture_banking_mode_cdc_i (
   .src_clk(ps_clk),
   .src_reset(ps_reset),
@@ -160,8 +161,8 @@ axis_config_reg_cdc #(
 // arm is gated by the adc_capture_state FSM: adc_capture_state can only transition to
 // the TRIGGER_WAIT state from the CAPTURE_IDLE state when arm is applied
 logic adc_capture_start_pls, adc_capture_stop_pls;
-assign adc_capture_start_pls = ((adc_capture_hw_start | adc_capture_sw_start) & (adc_capture_state == TRIGGER_WAIT))
-                            | (adc_capture_sw_start & (adc_capture_state == CAPTURE_IDLE));
+assign adc_capture_start_pls = ((adc_capture_state == TRIGGER_WAIT) & (adc_capture_hw_start | adc_capture_sw_start))
+                            | ((adc_capture_state == CAPTURE_IDLE) & adc_capture_sw_start);
 assign adc_capture_stop_pls = (adc_capture_hw_stop | adc_capture_sw_stop) & (adc_capture_state == SAVE_SAMPLES);
 // register start so that we can detect rising edge
 
@@ -171,16 +172,19 @@ logic adc_capture_active;
 logic adc_capture_done_pls;
 
 ////////////////////////
-// capture depth
+// capture depth: track
+// number of samples
+// that were saved into
+// each bank of the buffer
 ////////////////////////
-logic [CHANNELS-1:0][$clog2(BUFFER_DEPTH):0] adc_capture_write_depth;
-Axis_If #(.DWIDTH(CHANNELS*($clog2(BUFFER_DEPTH)+1))) adc_capture_write_depth_sync ();
+logic [rx_pkg::CHANNELS-1:0][$clog2(BUFFER_DEPTH):0] adc_capture_write_depth;
+Axis_If #(.DWIDTH(rx_pkg::CHANNELS*($clog2(BUFFER_DEPTH)+1))) adc_capture_write_depth_sync ();
 assign adc_capture_write_depth_sync.data = adc_capture_write_depth;
 assign adc_capture_write_depth_sync.valid = adc_capture_done_pls;
 assign adc_capture_write_depth_sync.last = 1'b1; // always final packet
 // CDC for capture depth
 axis_config_reg_cdc #(
-  .DWIDTH(CHANNELS*($clog2(BUFFER_DEPTH)+1))
+  .DWIDTH(rx_pkg::CHANNELS*($clog2(BUFFER_DEPTH)+1))
 ) capture_write_depth_cdc_i (
   .src_clk(adc_clk),
   .src_reset(adc_reset),
@@ -192,34 +196,36 @@ axis_config_reg_cdc #(
 
 ////////////////////////////////////////////////////////////
 // Buffer core logic
+// Save samples and stop when buffer fills up
 ////////////////////////////////////////////////////////////
 
 // delay write address to match latency of valid/data pipeline registers
-logic [CHANNELS-1:0][ADDR_WIDTH-1:0] adc_write_addr, adc_write_addr_d;
+logic [rx_pkg::CHANNELS-1:0][ADDR_WIDTH-1:0] adc_write_addr, adc_write_addr_d;
 always_ff @(posedge adc_clk) adc_write_addr_d <= adc_write_addr;
 
 // track when banks are full
-logic [CHANNELS-1:0] adc_bank_full, adc_bank_full_latch;
+logic [rx_pkg::CHANNELS-1:0] adc_bank_full, adc_bank_full_latch;
 logic adc_capture_full_d; // delay so we can detect rising edge of capture_full
 always_ff @(posedge adc_clk) adc_capture_full_d <= adc_capture_full;
 
 // reset write address and full status when readout is done (CDC'd from readout clock domain)
 logic adc_readout_done_pls;
 
+// generate write enables and full signal dependent on number of active channels
 // valid_mask and full_mask for different channel modes
 // valid_mask is AND'd with muxed adc_valid_d to generate write_enables
-logic [CHANNELS-1:0] adc_capture_full_mask, adc_capture_valid_mask;
+logic [rx_pkg::CHANNELS-1:0] adc_capture_full_mask, adc_capture_valid_mask;
 always_ff @(posedge adc_clk) begin
   if (adc_reset) begin
     {adc_capture_full_mask, adc_capture_valid_mask} <= '0;
   end else begin
-    for (int channel = 0; channel < CHANNELS; channel++) begin
+    for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
       // For 8 channels:
       // if active channels == 1: full_mask = 0x80 (10000000), valid_mask = 0x01 (00000001)
       // if active channels == 2: full_mask = 0xc0 (11000000), valid_mask = 0x03 (00000011)
       // if active channels == 4: full_mask = 0xf0 (11110000), valid_mask = 0x0f (00001111)
       // if active channels == 8: full_mask = 0xff (11111111), valid_mask = 0xff (11111111)
-      adc_capture_full_mask[CHANNELS-1-channel] <= channel + 1 > adc_active_channels ? 1'b0 : 1'b1;
+      adc_capture_full_mask[rx_pkg::CHANNELS-1-channel] <= channel + 1 > adc_active_channels ? 1'b0 : 1'b1;
       if (adc_capture_start_pls) begin
         // reset valid_mask 
         adc_capture_valid_mask[channel] <= channel + 1 > adc_active_channels ? 1'b0 : 1'b1;
@@ -233,8 +239,8 @@ always_ff @(posedge adc_clk) begin
             // if we're resetting the current valid mask (i.e. it wasn't reset
             // in a previous clock cycle), then set a subsequent mask bit whose
             // distance from the current bit is determined by the banking mode
-            if ($clog2(CHANNELS+1)'(channel) + adc_active_channels < $clog2(CHANNELS+1)'(CHANNELS)) begin
-              adc_capture_valid_mask[$clog2(CHANNELS)'($clog2(CHANNELS+1)'(channel) + adc_active_channels)] <= 1'b1;
+            if ($clog2(rx_pkg::CHANNELS+1)'(channel) + adc_active_channels < $clog2(rx_pkg::CHANNELS+1)'(rx_pkg::CHANNELS)) begin
+              adc_capture_valid_mask[$clog2(rx_pkg::CHANNELS)'($clog2(rx_pkg::CHANNELS+1)'(channel) + adc_active_channels)] <= 1'b1;
             end
           end
         end
@@ -245,31 +251,33 @@ end
 
 ////////////////////////////////////
 // Data and valid mux
+// Select one or more channels
+// depending on banking mode
 ////////////////////////////////////
 // register data in for timing
-logic [CHANNELS-1:0][DATA_WIDTH-1:0] adc_data_d;
+logic [rx_pkg::CHANNELS-1:0][rx_pkg::DATA_WIDTH-1:0] adc_data_d;
 always_ff @(posedge adc_clk) adc_data_d <= adc_data.data;
 
 // mux data based on banking_mode (registered for timing)
-logic [CHANNELS-1:0][DATA_WIDTH-1:0] adc_buffer_in;
+logic [rx_pkg::CHANNELS-1:0][rx_pkg::DATA_WIDTH-1:0] adc_buffer_in;
 always_ff @(posedge adc_clk) begin
-  for (int channel = 0; channel < CHANNELS; channel++) begin
-    adc_buffer_in[channel] <= adc_data_d[$clog2(CHANNELS)'($clog2(CHANNELS+1)'(channel) % adc_active_channels)];
+  for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
+    adc_buffer_in[channel] <= adc_data_d[$clog2(rx_pkg::CHANNELS)'($clog2(rx_pkg::CHANNELS+1)'(channel) % adc_active_channels)];
   end
 end
 
 // valid is converted to a write_enable based on the current banking mode and
 // currently selected bank (through valid_mask)
-logic [CHANNELS-1:0] adc_valid_d; // register for timing
+logic [rx_pkg::CHANNELS-1:0] adc_valid_d; // register for timing
 // adc_write_enable is an internal signal used for updating the write address
 // adc_write_enable_d is the input to the sample RAM
-logic [CHANNELS-1:0] adc_write_enable, adc_write_enable_d;
+logic [rx_pkg::CHANNELS-1:0] adc_write_enable, adc_write_enable_d;
 
 // valid->write_enable path (combinatorial, since we need to update address in a combinatorial loop ??)
 always_comb begin
-  for (int channel = 0; channel < CHANNELS; channel++) begin
+  for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
     adc_write_enable[channel] = adc_capture_active & adc_capture_valid_mask[channel]
-                                      & adc_valid_d[$clog2(CHANNELS)'($clog2(CHANNELS+1)'(channel) % adc_active_channels)];
+                                      & adc_valid_d[$clog2(rx_pkg::CHANNELS)'($clog2(rx_pkg::CHANNELS+1)'(channel) % adc_active_channels)];
   end
 end
 // register write_enable and valid
@@ -282,7 +290,7 @@ end
 // Update write address
 //////////////////////////////
 always_comb begin
-  for (int channel = 0; channel < CHANNELS; channel++) begin
+  for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
     adc_bank_full[channel] = adc_write_addr[channel] == $clog2(BUFFER_DEPTH)'(BUFFER_DEPTH - 1) & adc_write_enable[channel];
   end
 end
@@ -293,7 +301,7 @@ always_ff @(posedge adc_clk) begin
     if (adc_capture_reset | adc_readout_done_pls) begin
       adc_write_addr <= '0;
     end else begin
-      for (int channel = 0; channel < CHANNELS; channel++) begin
+      for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
         if (adc_write_enable[channel]) begin
           adc_write_addr[channel] <= adc_write_addr[channel] + 1;
         end
@@ -303,7 +311,7 @@ always_ff @(posedge adc_clk) begin
 end
 // update write depth output
 always_ff @(posedge adc_clk) begin
-  for (int channel = 0; channel < CHANNELS; channel++) begin
+  for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
     adc_capture_write_depth[channel] <= {adc_bank_full_latch[channel], adc_write_addr[channel]};
   end
 end
@@ -318,7 +326,7 @@ always_ff @(posedge adc_clk) begin
     if (adc_capture_reset | adc_readout_done_pls) begin
       adc_bank_full_latch <= '0;
     end else begin
-      for (int channel = 0; channel < CHANNELS; channel++) begin
+      for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
         if (adc_bank_full[channel]) begin
           adc_bank_full_latch[channel] <= adc_bank_full[channel];
         end
@@ -330,6 +338,9 @@ assign adc_capture_full = |(adc_capture_full_mask & adc_bank_full_latch);
 
 //////////////////////////////
 // capture_active (SR flipflop)
+// writes to buffer are only
+// enabled when capture_active
+// is high
 //////////////////////////////
 always_ff @(posedge adc_clk) begin
   if (adc_reset) begin
@@ -432,13 +443,13 @@ logic ps_readout_start_pls; // pulse high for one cycle
 // all banks are read out simultaneously, multiple times
 // the outputs of the banks are muxed based on bank_select
 logic [ADDR_WIDTH-1:0] ps_read_addr;
-logic [$clog2(CHANNELS)-1:0] ps_bank_select;
+logic [$clog2(rx_pkg::CHANNELS)-1:0] ps_bank_select;
 
 // pipeline to allow registered output of bank memory
 // bank_select needs to be delayed appropriately to match latency of data,valid,last
-logic [CHANNELS-1:0][READ_LATENCY-1:0][DATA_WIDTH-1:0] ps_readout_data_pipe;
+logic [rx_pkg::CHANNELS-1:0][READ_LATENCY-1:0][rx_pkg::DATA_WIDTH-1:0] ps_readout_data_pipe;
 logic [READ_LATENCY-1:0] ps_readout_valid_pipe, ps_readout_last_pipe;
-logic [READ_LATENCY-1:0][$clog2(CHANNELS)-1:0] ps_bank_select_pipe;
+logic [READ_LATENCY-1:0][$clog2(rx_pkg::CHANNELS)-1:0] ps_bank_select_pipe;
 
 // high while data is valid
 logic ps_readout_active;
@@ -449,7 +460,7 @@ logic ps_readout_last;
 
 // enable for read_address/bank_select update, also enable for data/valid/last/bank_sel pipelines
 assign ps_readout_enable = ps_readout_active & (ps_readout_data.ready | ~ps_readout_data.valid);
-assign ps_readout_last = (ps_read_addr == ADDR_WIDTH'(BUFFER_DEPTH - 1)) & (ps_bank_select == $clog2(CHANNELS)'(CHANNELS - 1));
+assign ps_readout_last = (ps_read_addr == ADDR_WIDTH'(BUFFER_DEPTH - 1)) & (ps_bank_select == $clog2(rx_pkg::CHANNELS)'(rx_pkg::CHANNELS - 1));
 
 // tell readout FSM and capture logic when we're done with readout
 logic ps_readout_done_pls;
@@ -500,7 +511,7 @@ always_ff @(posedge ps_clk) begin
       if (ps_readout_enable) begin
         if (ps_read_addr == ADDR_WIDTH'(BUFFER_DEPTH - 1)) begin
           ps_read_addr <= 0;
-          if (ps_bank_select == $clog2(CHANNELS)'(CHANNELS - 1)) begin
+          if (ps_bank_select == $clog2(rx_pkg::CHANNELS)'(rx_pkg::CHANNELS - 1)) begin
             ps_bank_select <= 0;
           end else begin
             ps_bank_select <= ps_bank_select + 1;
@@ -626,7 +637,7 @@ xpm_cdc_pulse #(
 // write to memory
 /////////////////////////////
 always_ff @(posedge adc_clk) begin
-  for (int channel = 0; channel < CHANNELS; channel++) begin
+  for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
     if (adc_write_enable_d[channel]) begin
       memory[channel][adc_write_addr_d[channel]] <= adc_buffer_in[channel];
     end
@@ -637,7 +648,7 @@ end
 // read from memory
 /////////////////////////////
 always_ff @(posedge ps_clk) begin
-  for (int channel = 0; channel < CHANNELS; channel++) begin
+  for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
     if (ps_readout_data.ready | ~ps_readout_data.valid) begin
       ps_readout_data_pipe[channel] <= {ps_readout_data_pipe[channel][READ_LATENCY-2:0], memory[channel][ps_read_addr]};
     end
