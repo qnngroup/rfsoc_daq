@@ -24,14 +24,21 @@ Create the module `my_module` in a file called `my_module.sv` (located in an app
 
 ### Unit test architecture
 
-Each unit test should create an instance of the `sim_util_pkg::debug` class to track errors in the module.
-The `sim_util_pkg::debug` class offers 3 levels of verbosity: `DEFAULT` (lowest verbosity, good for regression tests or sanity checks), `VERBOSE` (medium verbosity), and `DEBUG` (highest verbosity, good if something is going wrong).
+A unit test should test all of the functionality in a module. Even if for the vast majority of use cases for a module you don't intend to use a particular feature, that feature must be tested in the unit test.
+
+Unit tests should be written in a modular way, by combining SystemVerilog `task`s and `function`s into either a separate `_tb.sv` testbench module or `_pkg.sv` SystemVerilog package.
+For example, if you precompute a test vector of stimulus and expected response for your device under test (DUT), those snippets of code can be put into separate `task`s or `function`s (see these forum posts [1](https://verificationacademy.com/forums/t/task-vs-function/32019), [2](https://www.reddit.com/r/FPGA/comments/pvz4m8/when_to_use_a_function_vs_a_task/) for deciding between `task`s and `function`s).
+That way, if your module is included in another module in the hierarchy and you want to test its behavior (either as an integration test, or a thorough unit test of the super-module), you can just call the modular blocks of code in the testbench module or package, reducing code duplication.
+
+Each unit test should create an instance of the `sim_util_pkg::debug` class to track errors in the module and to provide tunable test verbosity.
 
 ```
 sim_util_pkg::debug debug = new(sim_util_pkg::DEFAULT);
 ```
 
+The `sim_util_pkg::debug` class offers 3 levels of verbosity: `DEFAULT` (lowest verbosity, good for regression tests or sanity checks), `VERBOSE` (medium verbosity), and `DEBUG` (highest verbosity, good if something is going wrong).
 The method `sim_util_pkg::debug.display(string msg, verbosity_t verbosity)` allows print statements to be generated at differing verbosity levels.
+Whenever you call `sim_util_pkg::debug.display()`, you must pass a verbosity argument, which determines the verbosity level at which that particular `display()` statement will actually print to the console.
 For example, if the method were called like so:
 
 ```
