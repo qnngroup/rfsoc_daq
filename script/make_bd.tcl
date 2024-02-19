@@ -3,6 +3,7 @@ set dir [file dirname [file normalize [info script]]]
 
 set proj_dir [file normalize $dir/../build/proj_synth]
 set project_type "synth"
+set check_for_delete 1
 source $dir/make_project.tcl
 source $dir/top.tcl
 

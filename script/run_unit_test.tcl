@@ -8,6 +8,7 @@ set script_dir [file dirname [file normalize [info script]]]
 
 # make project
 set project_type "sim"
+set check_for_delete 0
 source $script_dir/make_project.tcl
 
 set error_count 0
