@@ -7,6 +7,7 @@
 module buffer_tb #(
   parameter int BUFFER_DEPTH = 1024
 ) (
+  ref clk,
   Axis_If arm_start_stop,
   Axis_If capture_banking_mode,
   Axis_If capture_reset,
@@ -19,7 +20,6 @@ module buffer_tb #(
 /////////////////////////////////////////////////////////////////
 task automatic capture_arm_start_stop(
   inout sim_util_pkg::debug debug,
-  ref ps_clk,
   input logic [2:0] bits
 );
   logic success;
@@ -32,7 +32,7 @@ task automatic capture_arm_start_stop(
       return;
     end
   endcase
-  arm_start_stop.send_sample_with_timeout(ps_clk, bits, 10, success);
+  arm_start_stop.send_sample_with_timeout(clk, bits, 10, success);
   if (~success) begin
     debug.error("failed to start capture");
   end
@@ -40,12 +40,11 @@ endtask
 
 task automatic set_banking_mode(
   inout sim_util_pkg::debug debug,
-  ref ps_clk,
   input logic [$clog2($clog2(rx_pkg::CHANNELS+1))-1:0] banking_mode
 );
   logic success;
   debug.display($sformatf("writing banking_mode = %0d", banking_mode), sim_util_pkg::DEBUG);
-  capture_banking_mode.send_sample_with_timeout(ps_clk, banking_mode, 10, success);
+  capture_banking_mode.send_sample_with_timeout(clk, banking_mode, 10, success);
   if (~success) begin
     debug.error("failed to set banking mode");
   end
@@ -53,12 +52,11 @@ endtask
 
 task automatic reset_capture(
   inout sim_util_pkg::debug debug,
-  ref ps_clk,
   inout logic [rx_pkg::DATA_WIDTH-1:0] samples_sent [rx_pkg::CHANNELS][$]
 );
   logic success;
   debug.display("resetting capture", sim_util_pkg::DEBUG);
-  capture_reset.send_sample_with_timeout(ps_clk, 1'b1, 10, success);
+  capture_reset.send_sample_with_timeout(clk, 1'b1, 10, success);
   if (~success) begin
     debug.error("failed to reset capture");
   end
@@ -68,12 +66,11 @@ endtask
 
 task automatic reset_readout(
   inout sim_util_pkg::debug debug,
-  ref ps_clk,
   inout logic [rx_pkg::DATA_WIDTH-1:0] samples_received [$]
 );
   logic success;
   debug.display("resetting readout", sim_util_pkg::DEBUG);
-  readout_reset.send_sample_with_timeout(ps_clk, 1'b1, 10, success);
+  readout_reset.send_sample_with_timeout(clk, 1'b1, 10, success);
   if (~success) begin
     debug.error("failed to reset readout");
   end
@@ -83,12 +80,11 @@ endtask
 
 task automatic start_readout(
   inout sim_util_pkg::debug debug,
-  ref ps_clk,
   input logic expected_response
 );
   logic success;
   debug.display("starting readout", sim_util_pkg::DEBUG);
-  readout_start.send_sample_with_timeout(ps_clk, 1'b1, 10, success);
+  readout_start.send_sample_with_timeout(clk, 1'b1, 10, success);
   case (expected_response)
     1'b1: begin
       if (~success) begin
