@@ -18,6 +18,25 @@ Notable features are an arbitrary waveform generator based on piecewise-linear s
     regression.sh       creates a temporary Vivado project and runs unit tests for all test modules in src/verif/
   README.md             this file
 ```
+
+## Installation/setup
+
+Clone repository with
+```
+$ git clone git@github.com:qnngroup/rfsoc_daq.git
+```
+
+Linting is performed with [Verilator](https://www.veripool.org/verilator/) (v5.020-39-gd510e551f).
+Verilator is already installed on the lab computer, but to run linting on your personal machine, you will need to install it.
+
+See [this](https://stackoverflow.com/questions/40462111/prevent-commits-in-master-branch) StackOverflow post on protecting the main branch.
+I also added a couple other pre-commit hooks to check for file size and unresolved merge conflicts.
+Install these hooks like so:
+```
+$ pip install pre-commit
+$ pre-commit install
+```
+
 ## Writing a new module
 
 Create the module `my_module` in a file called `my_module.sv` (located in an appropriate subdirectory of `src/rtl/`), and a unit test module `my_module_test` in a file called `my_module_test.sv` (located in the same subdirectory as `my_module.sv`).
