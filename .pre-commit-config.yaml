@@ -6,3 +6,11 @@ repos:
       args: ['--branch', 'main']
     - id: check-added-large-files
     - id: check-merge-conflict
+- repo: local
+  hooks:
+    - id: xilinx-regression
+      name: xilinx-regression
+      entry: ./script/regression.sh
+      language: script
+      pass_filenames: false
+      stages: ['pre-push']
