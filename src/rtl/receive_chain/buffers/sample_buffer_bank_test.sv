@@ -36,81 +36,83 @@ sample_buffer_bank #(
   .first()
 );
 
-int sample_count;
-logic [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0] data_sent [$];
-logic [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0] data_received [$];
-int last_received [$];
+axis_driver #(
+  .DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH)
+) driver_i (
+  .clk,
+  .intf(data_in)
+);
 
-// send data to DUT and save data that was sent/received
-always @(posedge clk) begin
-  if (reset) begin
-    sample_count <= 0;
-    data_in.data <= '0;
-  end else begin
-    // send data
-    if (data_in.ok) begin
-      sample_count <= sample_count + 1;
-      for (int sample = 0; sample < PARALLEL_SAMPLES; sample++) begin
-        data_in.data[sample*SAMPLE_WIDTH+:SAMPLE_WIDTH] <= SAMPLE_WIDTH'($urandom_range({SAMPLE_WIDTH{1'b1}}));
-      end
-    end
-    // save data that was sent/received
-    if (data_in.ok) begin
-      data_sent.push_front(data_in.data);
-    end
-    if (data_out.ok) begin
-      data_received.push_front(data_out.data);
-      if (data_out.last) begin
-        last_received.push_front(data_received.size());
-      end
-    end
-  end
-end
-
+logic readout_enable;
+axis_receiver #(
+  .DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH)
+) receiver_i (
+  .clk,
+  .ready_rand(1'b1),
+  .ready_en(readout_enable),
+  .intf(data_out)
+);
 
 // check that the DUT correctly saved everything
 task check_results();
   // check last is the right size
-  if (last_received.size() !== 1) begin
-    debug.error($sformatf("expected exactly one tlast event, got %0d", last_received.size()));
+  if (receiver_i.last_q.size() !== 1) begin
+    debug.error($sformatf("expected exactly one tlast event, got %0d", receiver_i.last_q.size()));
   end else begin
-    if (last_received[$] != data_sent.size() + 2) begin
-      debug.error($sformatf("expected last on sample %0d, got it on %0d", data_sent.size() + 2, last_received[$]));
+    if (receiver_i.last_q[$] != driver_i.data_q.size() + 2) begin
+      debug.error($sformatf("expected last on sample %0d, got it on %0d", driver_i.data_q.size() + 2,receiver_i.last_q[$]));
     end
   end
-  while (last_received.size() > 0) last_received.pop_back();
+  while (receiver_i.last_q.size() > 0) receiver_i.last_q.pop_back();
   // pop first sample received since it is intended to be overwritten in
   // multibank buffer
-  data_received.pop_back();
-  debug.display($sformatf("data_sent.size() = %0d", data_sent.size()), sim_util_pkg::VERBOSE);
-  debug.display($sformatf("data_received.size() = %0d", data_received.size()), sim_util_pkg::VERBOSE);
-  if ((data_sent.size() + 1) != data_received.size()) begin
+  receiver_i.data_q.pop_back();
+  debug.display($sformatf("driver_i.data_q.size() = %0d", driver_i.data_q.size()), sim_util_pkg::VERBOSE);
+  debug.display($sformatf("receiver_i.data_q.size() = %0d", receiver_i.data_q.size()), sim_util_pkg::VERBOSE);
+  if ((driver_i.data_q.size() + 1) != receiver_i.data_q.size()) begin
     debug.error($sformatf(
       "mismatch in amount of sent/received data (sent %0d, received %0d)",
-      data_sent.size() + 1,
-      data_received.size())
+      driver_i.data_q.size() + 1,
+      receiver_i.data_q.size())
     );
   end
-  if (data_received[$] != data_sent.size()) begin
+  if (receiver_i.data_q[$] != driver_i.data_q.size()) begin
     debug.error($sformatf(
       "incorrect sample count reported by buffer (sent %0d, reported %0d)",
-      data_sent.size(),
-      data_received[$])
+      driver_i.data_q.size(),
+      receiver_i.data_q[$])
     );
   end
-  data_received.pop_back(); // remove sample count
-  while (data_sent.size() > 0 && data_received.size() > 0) begin
+  receiver_i.data_q.pop_back(); // remove sample count
+  while (driver_i.data_q.size() > 0 && receiver_i.data_q.size() > 0) begin
     // data from channel 0 can be reordered with data from channel 2
-    if (data_sent[$] != data_received[$]) begin
+    if (driver_i.data_q[$] != receiver_i.data_q[$]) begin
       debug.error($sformatf(
         "data mismatch error (received %x, sent %x)",
-        data_received[$],
-        data_sent[$])
+        receiver_i.data_q[$],
+        driver_i.data_q[$])
       );
     end
-    data_sent.pop_back();
-    data_received.pop_back();
+    driver_i.data_q.pop_back();
+    receiver_i.data_q.pop_back();
   end
+endtask
+
+task automatic do_readout (input int timeout);
+  int cycle_count;
+  cycle_count = 0;
+  readout_enable <= 1'b1;
+  data_out.ready <= 1'b0;
+  repeat (100) @(posedge clk);
+  data_out.ready <= 1'b1;
+  while ((!(data_out.last & data_out.ok)) & (cycle_count < timeout)) begin
+    @(posedge clk);
+    data_out.ready <= $urandom();
+    cycle_count = cycle_count + 1;
+  end
+  @(posedge clk);
+  data_out.ready <= 1'b0;
+  readout_enable <= 1'b0;
 endtask
 
 initial begin
@@ -118,7 +120,7 @@ initial begin
   reset <= 1'b1;
   start <= 1'b0;
   stop <= 1'b0;
-  data_in.valid <= '0;
+  driver_i.disable_valid();
   repeat (100) @(posedge clk);
   reset <= 1'b0;
   repeat (50) @(posedge clk);
@@ -128,14 +130,14 @@ initial begin
   start <= 1'b0;
   repeat (100) @(posedge clk);
   // send samples
-  data_in.send_samples(clk, 32, 1'b1, 1'b1);
-  data_in.send_samples(clk, 64, 1'b0, 1'b1);
-  data_in.send_samples(clk, 32, 1'b1, 1'b1);
+  driver_i.send_samples(32, 1'b1, 1'b1);
+  driver_i.send_samples(64, 1'b0, 1'b1);
+  driver_i.send_samples(32, 1'b1, 1'b1);
   repeat (50) @(posedge clk);
   stop <= 1'b1;
   @(posedge clk);
   stop <= 1'b0;
-  data_out.do_readout(clk, 1'b1, 100000);
+  do_readout(100000);
   debug.display("checking results for test with a few samples", sim_util_pkg::VERBOSE);
   check_results();
   // do more tests
@@ -147,12 +149,12 @@ initial begin
   start <= 1'b0;
   repeat (100) @(posedge clk);
   // send samples
-  data_in.send_samples(clk, 1, 1'b0, 1'b1);
+  driver_i.send_samples(1, 1'b0, 1'b1);
   repeat (50) @(posedge clk);
   stop <= 1'b1;
   @(posedge clk);
   stop <= 1'b0;
-  data_out.do_readout(clk, 1'b1, 1000);
+  do_readout(1000);
   debug.display("checking results for test with one sample", sim_util_pkg::VERBOSE);
   check_results();
 
@@ -167,7 +169,7 @@ initial begin
   stop <= 1'b1;
   @(posedge clk);
   stop <= 1'b0;
-  data_out.do_readout(clk, 1'b1, 1000);
+  do_readout(1000);
   debug.display("checking results for test with no samples", sim_util_pkg::VERBOSE);
   check_results();
 
@@ -178,14 +180,14 @@ initial begin
   start <= 1'b0;
   repeat (100) @(posedge clk);
   // send samples
-  data_in.send_samples(clk, 256, 1'b1, 1'b1);
-  data_in.send_samples(clk, 512, 1'b0, 1'b1);
-  data_in.send_samples(clk, 256, 1'b1, 1'b1);
+  driver_i.send_samples(256, 1'b1, 1'b1);
+  driver_i.send_samples(512, 1'b0, 1'b1);
+  driver_i.send_samples(256, 1'b1, 1'b1);
   repeat (50) @(posedge clk);
   stop <= 1'b1;
   @(posedge clk);
   stop <= 1'b0;
-  data_out.do_readout(clk, 1'b1, 100000);
+  do_readout(100000);
   debug.display("checking results for test with 1024 samples (full buffer)", sim_util_pkg::VERBOSE);
   check_results();
   repeat (500) @(posedge clk);

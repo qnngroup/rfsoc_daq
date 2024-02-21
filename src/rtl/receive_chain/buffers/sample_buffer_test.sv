@@ -59,37 +59,26 @@ sample_buffer #(
   .buffer_full()
 );
 
-int sample_count [CHANNELS];
-logic [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0] data_sent [CHANNELS][$];
-logic [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0] data_received [$];
-int last_received [$];
+logic valid_rand, valid_en;
+realtime_parallel_driver #(
+  .DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH),
+  .CHANNELS(CHANNELS)
+) driver_i (
+  .clk,
+  .valid_rand({CHANNELS{valid_rand}}),
+  .valid_en({CHANNELS{valid_en}}),
+  .intf(data_in)
+);
 
-// send data to DUT and save sent/received data
-always @(posedge clk) begin
-  for (int i = 0; i < CHANNELS; i++) begin
-    if (reset) begin
-      sample_count[i] <= 0;
-      data_in.data[i] <= '0;
-    end else begin
-      if (data_in.valid[i]) begin
-        // send new data
-        sample_count[i] <= sample_count[i] + 1;
-        for (int j = 0; j < PARALLEL_SAMPLES; j++) begin
-          data_in.data[i][j*SAMPLE_WIDTH+:SAMPLE_WIDTH] <= $urandom_range({SAMPLE_WIDTH{1'b1}});
-        end
-        // save data that was sent
-        data_sent[i].push_front(data_in.data[i]);
-      end
-    end
-  end
-  // save all data in the same buffer and postprocess it later
-  if (data_out.ok) begin
-    data_received.push_front(data_out.data);
-    if (data_out.last) begin
-      last_received.push_front(data_received.size());
-    end
-  end
-end
+logic readout_enable;
+axis_receiver #(
+  .DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH)
+) receiver_i (
+  .clk,
+  .ready_rand(1'b1),
+  .ready_en(readout_enable),
+  .intf(data_out)
+);
 
 task check_results(
   input int banking_mode,
@@ -100,35 +89,35 @@ task check_results(
   int current_channel, n_samples;
   for (int i = 0; i < CHANNELS; i++) begin
     debug.display($sformatf(
-      "data_sent[%0d].size() = %0d",
+      "driver_i.data_q[%0d].size() = %0d",
       i,
-      data_sent[i].size()),
+      driver_i.data_q[i].size()),
       sim_util_pkg::VERBOSE
     );
   end
   debug.display($sformatf(
-    "data_received.size() = %0d",
-    data_received.size()),
+    "receiver_i.data_q.size() = %0d",
+    receiver_i.data_q.size()),
     sim_util_pkg::VERBOSE
   );
   // check last
-  if (last_received.size() != 1) begin
-    debug.error($sformatf("expected a single tlast event, got %0d", last_received.size()));
+  if (receiver_i.last_q.size() != 1) begin
+    debug.error($sformatf("expected a single tlast event, got %0d", receiver_i.last_q.size()));
   end else begin
-    if ((last_received[$] != expected_last) & (~missing_ok)) begin
+    if ((receiver_i.last_q[$] != expected_last) & (~missing_ok)) begin
       // if we have some samples missing, last won't be exactly equal to
       // num_samples + 2
       debug.error($sformatf(
         "expected to receive tlast event on the %0d sample, got it on the %0d sample",
         expected_last,
-        last_received[$])
+        receiver_i.last_q[$])
       );
     end
   end
-  while (last_received.size() > 0) last_received.pop_back();
-  while (data_received.size() > 0) begin
-    current_channel = data_received.pop_back();
-    n_samples = data_received.pop_back();
+  while (receiver_i.last_q.size() > 0) receiver_i.last_q.pop_back();
+  while (receiver_i.data_q.size() > 0) begin
+    current_channel = receiver_i.data_q.pop_back();
+    n_samples = receiver_i.data_q.pop_back();
     debug.display($sformatf(
       "processing new bank with %0d samples from channel %0d",
       n_samples,
@@ -136,42 +125,42 @@ task check_results(
       sim_util_pkg::VERBOSE
     );
     for (int i = 0; i < n_samples; i++) begin
-      if (data_sent[current_channel][$] != data_received[$]) begin
+      if (driver_i.data_q[current_channel][$] != receiver_i.data_q[$]) begin
         debug.error($sformatf(
           "data mismatch error (channel = %0d, sample = %0d, received %x, sent %x)",
           current_channel,
           i,
-          data_received[$],
-          data_sent[current_channel][$])
+          receiver_i.data_q[$],
+          driver_i.data_q[current_channel][$])
         );
       end
-      data_sent[current_channel].pop_back();
-      data_received.pop_back();
+      driver_i.data_q[current_channel].pop_back();
+      receiver_i.data_q.pop_back();
     end
   end
   for (int i = 0; i < (1 << banking_mode); i++) begin
-    // make sure there are no remaining samples in data_sent queues
+    // make sure there are no remaining samples in driver_i.data_q queues
     // corresponding to channels which are enabled as per banking_mode
     // caveat: if one of the channels filled up, then it's okay for there to
     // be missing samples in the other channels
-    if ((data_sent[i].size() > 0) & (!missing_ok)) begin
+    if ((driver_i.data_q[i].size() > 0) & (!missing_ok)) begin
       debug.error($sformatf(
-        "leftover samples in data_sent[%0d]: %0d",
+        "leftover samples in driver_i.data_q[%0d]: %0d",
         i,
-        data_sent[i].size())
+        driver_i.data_q[i].size())
       );
     end
-    while (data_sent[i].size() > 0) data_sent[i].pop_back();
+    while (driver_i.data_q[i].size() > 0) driver_i.data_q[i].pop_back();
   end
   for (int i = (1 << banking_mode); i < CHANNELS; i++) begin
-    // flush out any remaining samples in data_sent queue
+    // flush out any remaining samples in driver_i.data_q queue
     debug.display($sformatf(
-      "removing %0d samples from data_sent[%0d]",
-      data_sent[i].size(),
+      "removing %0d samples from driver_i.data_q[%0d]",
+      driver_i.data_q[i].size(),
       i),
       sim_util_pkg::VERBOSE
     );
-    while (data_sent[i].size() > 0) data_sent[i].pop_back();
+    while (driver_i.data_q[i].size() > 0) driver_i.data_q[i].pop_back();
   end
 endtask
 
@@ -206,7 +195,25 @@ task stop_acq();
   start_stop.valid <= 1'b0;
 endtask
 
+task automatic do_readout (input int timeout);
+  int cycle_count;
+  cycle_count = 0;
+  readout_enable <= 1'b1;
+  data_out.ready <= 1'b0;
+  repeat (100) @(posedge clk);
+  data_out.ready <= 1'b1;
+  while ((!(data_out.last & data_out.ok)) & (cycle_count < timeout)) begin
+    @(posedge clk);
+    data_out.ready <= $urandom();
+    cycle_count = cycle_count + 1;
+  end
+  @(posedge clk);
+  data_out.ready <= 1'b0;
+  readout_enable <= 1'b0;
+endtask
+
 int samples_to_send;
+int samples_sent [CHANNELS];
 
 initial begin
   debug.display("### TESTING SAMPLE_BUFFER ###", sim_util_pkg::DEFAULT);
@@ -215,14 +222,17 @@ initial begin
   stop <= 1'b0;
   start_aux <= '0;
   banking_mode <= '0; // only enable channel 0
-  data_in.valid <= '0;
   config_in.valid <= '0;
   start_stop.valid <= '0;
+  data_out.ready <= 1'b0;
+  valid_rand <= 1'b0;
+  valid_en <= 1'b0;
   repeat (100) @(posedge clk);
   reset <= 1'b0;
   repeat (50) @(posedge clk);
   for (int start_type = 0; start_type < 2; start_type++) begin
     for (int in_valid_rand = 0; in_valid_rand < 2; in_valid_rand++) begin
+      valid_rand <= in_valid_rand;
       for (int bank_mode = 0; bank_mode < 4; bank_mode++) begin
         for (int samp_count = 0; samp_count < 3; samp_count++) begin
           set_banking_mode(bank_mode);
@@ -231,11 +241,24 @@ initial begin
             1: samples_to_send = ((BUFFER_DEPTH - $urandom_range(2,10)) / (1 << bank_mode))*CHANNELS;
             2: samples_to_send = (BUFFER_DEPTH / (1 << bank_mode))*CHANNELS; // fill all buffers
           endcase
+          for (int channel = 0; channel < CHANNELS; channel++) samples_sent[channel] = 0;
           start_acq(start_type & 1'b1);
-          data_in.send_samples(clk, samples_to_send, in_valid_rand & 1'b1, 1'b1);
+          valid_en <= 1'b1;
+          while (valid_en) begin
+            for (int channel = 0; channel < CHANNELS; channel++) begin
+              if (data_in.valid[channel]) begin
+                samples_sent[channel]++;
+                if (samples_sent[channel] == samples_to_send) begin
+                  valid_en <= 1'b0;
+                end
+              end
+            end
+            @(posedge clk);
+          end
+
           repeat (10) @(posedge clk);
           stop_acq();
-          data_out.do_readout(clk, 1'b1, 100000);
+          do_readout(100000);
           debug.display($sformatf("checking results n_samples    = %d", samples_to_send), sim_util_pkg::VERBOSE);
           debug.display($sformatf("banking mode                  = %d", bank_mode), sim_util_pkg::VERBOSE);
           debug.display($sformatf("samples sent with rand_valid  = %d", in_valid_rand), sim_util_pkg::VERBOSE);

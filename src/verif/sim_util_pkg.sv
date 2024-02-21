@@ -61,4 +61,63 @@ package sim_util_pkg;
 
   endclass
 
+  class queue #(type T=int, type T2=int);
+
+    math #(.T(T)) math_i = new;
+
+    task automatic compare_threshold(
+      debug debug_i,
+      input T a_q [$],
+      input T b_q [$],
+      input T threshold
+    );
+      debug_i.display($sformatf("a_q.size() = %0d != b_q.size() = %0d", a_q.size(), b_q.size()), DEBUG);
+      if (a_q.size() !== b_q.size()) begin
+        debug_i.error($sformatf("a_q.size() = %0d != b_q.size() = %0d", a_q.size(), b_q.size()));
+      end
+      while ((a_q.size() > 0) & (b_q.size() > 0)) begin
+        debug_i.display($sformatf("processing pair (%x, %x)", a_q[$], b_q[$]), DEBUG);
+        if ($isunknown(a_q[$])) begin
+          debug_i.error("a_q[$] is undefined");
+        end
+        if ($isunknown(b_q[$])) begin
+          debug_i.error("b_q[$] is undefined");
+        end
+        if (math_i.abs(a_q[$] - b_q[$]) > threshold) begin
+          debug_i.error($sformatf("mismatch, got %x expected %x", a_q[$], b_q[$]));
+        end
+        a_q.pop_back();
+        b_q.pop_back();
+      end
+    endtask
+
+    task automatic compare(
+      debug debug_i,
+      input T a_q [$],
+      input T b_q [$]
+    );
+      compare_threshold(debug_i, a_q, b_q, '0);
+    endtask
+
+    task automatic samples_from_batches (
+      input T2 in_q [$],
+      output T out_q [$],
+      input int sample_width,
+      input int parallel_samples
+    );
+      T2 batch;
+      T new_sample;
+      while (in_q.size() > 0) begin
+        batch = in_q.pop_back();
+        for (int sample = 0; sample < parallel_samples; sample++) begin
+          for (int b = 0; b < sample_width; b++) begin
+            new_sample[b] = batch[sample*sample_width+b];
+          end
+          out_q.push_front(new_sample);
+        end
+      end
+    endtask
+
+  endclass
+
 endpackage

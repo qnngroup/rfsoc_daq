@@ -16,8 +16,11 @@ logic reset;
 
 localparam int PARALLEL_SAMPLES = 16;
 localparam int SAMPLE_WIDTH = 16;
-localparam int INPUT_CHANNELS = 8;
+localparam int INPUT_CHANNELS = 16;
 localparam int OUTPUT_CHANNELS = 8;
+
+typedef logic [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0] sample_t;
+sim_util_pkg::queue #(.T(sample_t)) q_util = new;
 
 localparam int SELECT_BITS = $clog2(INPUT_CHANNELS);
 
@@ -39,104 +42,86 @@ axis_channel_mux #(
   .config_in
 );
 
-typedef logic [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0] sample_t;
-sample_t expected [OUTPUT_CHANNELS][$];
-sample_t received [OUTPUT_CHANNELS][$];
+logic [INPUT_CHANNELS-1:0] valid_en;
+realtime_parallel_driver #(
+  .DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH),
+  .CHANNELS(INPUT_CHANNELS)
+) driver_i (
+  .clk,
+  .reset,
+  .valid_rand('1),
+  .valid_en,
+  .intf(data_in)
+);
+
+realtime_parallel_receiver #(
+  .DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH),
+  .CHANNELS(OUTPUT_CHANNELS)
+) receiver_i (
+  .clk,
+  .intf(data_out)
+);
 
 logic [OUTPUT_CHANNELS-1:0][SELECT_BITS-1:0] source_select;
 
 always_ff @(posedge clk) begin
   if (reset) begin
-    data_in.data <= '0;
     config_in.data <= '0;
   end else begin
-    for (int in_channel = 0; in_channel < INPUT_CHANNELS; in_channel++) begin
-      if (data_in.valid[in_channel]) begin
-        for (int sample = 0; sample < PARALLEL_SAMPLES; sample++) begin
-          data_in.data[in_channel][sample*SAMPLE_WIDTH+:SAMPLE_WIDTH] <= $urandom_range(0, {SAMPLE_WIDTH{1'b1}});
-        end
-      end
-    end
     for (int out_channel = 0; out_channel < OUTPUT_CHANNELS; out_channel++) begin
       if (config_in.ok) begin
         config_in.data[SELECT_BITS*out_channel+:SELECT_BITS] <= $urandom_range(0, {SELECT_BITS{1'b1}});
         source_select[out_channel] <= config_in.data[SELECT_BITS*out_channel+:SELECT_BITS];
       end
-      if (data_out.valid[out_channel]) begin
-        received[out_channel].push_front(data_out.data[out_channel]);
-      end
-      if (data_in.valid[source_select[out_channel]]) begin
-        expected[out_channel].push_front(data_in.data[source_select[out_channel]]);
-      end
     end
   end
 end
 
-task check_results();
+task automatic check_results(
+  input logic [OUTPUT_CHANNELS-1:0][SELECT_BITS-1:0] source_select
+);
+  int sample_count;
+  int selected_input;
+  debug.display($sformatf(
+    "source_select = %x",
+    source_select),
+    sim_util_pkg::DEBUG
+  );
   for (int out_channel = 0; out_channel < OUTPUT_CHANNELS; out_channel++) begin
+    sample_count = 0;
+    selected_input = source_select[out_channel];
     debug.display($sformatf(
-      "checking results for channel %d",
+      "checking data queues for channel %d",
       out_channel),
       sim_util_pkg::VERBOSE
     );
-    debug.display($sformatf(
-      "received[%0d].size() = %0d",
-      out_channel,
-      received[out_channel].size()),
-      sim_util_pkg::VERBOSE
-    );
-    debug.display($sformatf(
-      "expected[%0d].size() = %0d",
-      out_channel,
-      expected[out_channel].size()),
-      sim_util_pkg::VERBOSE
-    );
-    if (received[out_channel].size() != expected[out_channel].size()) begin
-      debug.error($sformatf(
-        "mismatched sizes for channel %0d; got %0d samples, expected %0d samples",
-        out_channel,
-        received[out_channel].size(),
-        expected[out_channel].size())
-      );
-    end
-    while (received[out_channel].size() > 0 && expected[out_channel].size() > 0) begin
-      if (expected[out_channel][$] !== received[out_channel][$]) begin
-        debug.error($sformatf(
-          "mismatch: got %x, expected %x",
-          received[out_channel][$],
-          expected[out_channel][$])
-        );
-      end
-      received[out_channel].pop_back();
-      expected[out_channel].pop_back();
-    end
+    q_util.compare(debug, receiver_i.data_q[out_channel], driver_i.data_q[selected_input]);
   end
 endtask
 
 initial begin
   debug.display("### TESTING AXIS_CHANNEL_MUX ###", sim_util_pkg::DEFAULT);
   reset <= 1'b1;
-  config_in.data <= '0;
   config_in.valid <= 1'b0;
-  data_in.valid <= '0;
+  valid_en <= '0;
   repeat (100) @(posedge clk);
   reset <= 1'b0;
   repeat (100) @(posedge clk);
   // change the configuration a few times
   repeat (5) begin
-    data_in.valid <= '0;
+    receiver_i.clear_queues();
+    driver_i.clear_queues();
+    valid_en <= '0;
     config_in.valid <= 1'b1;
     @(posedge clk);
     config_in.valid <= 1'b0;
+    valid_en <= '1;
     repeat (200) begin
       @(posedge clk);
-      data_in.valid <= $urandom_range(0, {INPUT_CHANNELS{1'b1}});
     end
-    data_in.valid <= '1;
-    repeat (20) @(posedge clk);
-    data_in.valid <= '0;
+    valid_en <= '0;
     repeat (5) @(posedge clk);
-    check_results();
+    check_results(source_select);
   end
   debug.finish();
 end
