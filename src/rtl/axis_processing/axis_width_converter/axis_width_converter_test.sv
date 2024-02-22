@@ -56,14 +56,14 @@ generate
       );
 
       logic ready_rand, ready_en;
-      
+
       axis_driver #(
         .DWIDTH(DWIDTH_IN)
       ) driver_i (
         .clk,
         .intf(data_in)
       );
-      
+
       axis_receiver #(
         .DWIDTH(DWIDTH_OUT)
       ) receiver_i (
@@ -138,7 +138,7 @@ generate
           out_q_util.samples_from_batches(receiver_i.data_q, recv_q, WORD_SIZE, UP[up]);
           in_q_util.samples_from_batches(driver_i.data_q, sent_q, WORD_SIZE, DOWN[down]);
           // check we got the right number of samples
-          if ((recv_q.size() < sent_q.size()) 
+          if ((recv_q.size() < sent_q.size())
               || (recv_q.size() - sent_q.size() > MAX_EXTRA_SAMPLES)) begin
             debug.error($sformatf(
               "received incorrect number of samples, sent %0d got %0d (MAX_EXTRA = %0d)",
