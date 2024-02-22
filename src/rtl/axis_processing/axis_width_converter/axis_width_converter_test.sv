@@ -76,8 +76,14 @@ generate
       localparam int MAX_EXTRA_SAMPLES = UP[up]*DOWN[down]-1;
       localparam int WORD_SIZE = DWIDTH_IN/DOWN[down];
 
-      logic [WORD_SIZE-1:0] sent_q [$];
-      logic [WORD_SIZE-1:0] recv_q [$];
+      typedef logic [WORD_SIZE-1:0] sample_t;
+      typedef logic [DWIDTH_IN-1:0] in_t;
+      typedef logic [DWIDTH_OUT-1:0] out_t;
+      sim_util_pkg::queue #(.T(sample_t), .T2(in_t)) in_q_util = new;
+      sim_util_pkg::queue #(.T(sample_t), .T2(out_t)) out_q_util = new;
+
+      sample_t sent_q [$];
+      sample_t recv_q [$];
 
       initial begin
         done[down][up] <= 1'b0;
@@ -112,7 +118,7 @@ generate
             UP[up],
             DOWN[down],
             i),
-            sim_util_pkg::DEBUG
+            sim_util_pkg::VERBOSE
           );
           // make sure last_q has one element equal to data_q.size()
           if (receiver_i.last_q.size() !== 1) begin
@@ -129,18 +135,8 @@ generate
               );
             end
           end
-          while (receiver_i.data_q.size() > 0) begin
-            for (int word = 0; word < UP[up]; word++) begin
-              recv_q.push_front(receiver_i.data_q[$][word*WORD_SIZE+:WORD_SIZE]);
-            end
-            receiver_i.data_q.pop_back();
-          end
-          while (driver_i.data_q.size() > 0) begin
-            for (int word = 0; word < DOWN[down]; word++) begin
-              sent_q.push_front(driver_i.data_q[$][word*WORD_SIZE+:WORD_SIZE]);
-            end
-            driver_i.data_q.pop_back();
-          end
+          out_q_util.samples_from_batches(receiver_i.data_q, recv_q, WORD_SIZE, UP[up]);
+          in_q_util.samples_from_batches(driver_i.data_q, sent_q, WORD_SIZE, DOWN[down]);
           // check we got the right number of samples
           if ((recv_q.size() < sent_q.size()) 
               || (recv_q.size() - sent_q.size() > MAX_EXTRA_SAMPLES)) begin
@@ -152,27 +148,15 @@ generate
             );
           end
           // remove invalid subwords if an incomplete word was sent at the end
-          if (UP[up] > 1) begin
-            // if UP = 1, there cannot be invalid subwords
-            while (recv_q.size() > sent_q.size()) begin
-              recv_q.pop_front();
-            end
+          while (recv_q.size() > sent_q.size()) begin
+            recv_q.pop_front();
           end
-          // check data
-          while ((recv_q.size() > 0) && (sent_q.size() > 0)) begin
-            if (recv_q[$] !== sent_q[$]) begin
-              debug.error($sformatf(
-                "data mismatch error (received %x, sent %x)",
-                recv_q[$],
-                sent_q[$])
-              );
-            end
-            sent_q.pop_back();
-            recv_q.pop_back();
-          end
+          in_q_util.compare(debug, recv_q, sent_q);
           // clear queues
           driver_i.clear_queues();
           receiver_i.clear_queues();
+          while (recv_q.size() > 0) recv_q.pop_back();
+          while (sent_q.size() > 0) sent_q.pop_back();
         end
         repeat (10) @(posedge clk);
         done[down][up] <= 1'b1;

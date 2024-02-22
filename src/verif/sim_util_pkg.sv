@@ -71,7 +71,7 @@ package sim_util_pkg;
       input T b_q [$],
       input T threshold
     );
-      debug_i.display($sformatf("a_q.size() = %0d != b_q.size() = %0d", a_q.size(), b_q.size()), DEBUG);
+      debug_i.display($sformatf("a_q.size() = %0d, b_q.size() = %0d", a_q.size(), b_q.size()), DEBUG);
       if (a_q.size() !== b_q.size()) begin
         debug_i.error($sformatf("a_q.size() = %0d != b_q.size() = %0d", a_q.size(), b_q.size()));
       end

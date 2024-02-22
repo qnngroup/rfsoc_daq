@@ -289,9 +289,17 @@ always_ff @(posedge dac_clk) dac_awg_done <= &dac_awg_channels_done[1];
 logic dac_awg_config_done; // synchronized from DMA/PS domain, used as write enable for CDC'd configurations for DAC readout of buffer
 
 always_ff @(posedge dac_clk) begin
-  dac_data_out.valid <= {CHANNELS{dac_data_out_valid[2]}};
+  if (dac_reset) begin
+    dac_data_out_valid <= '0;
+    dac_data_out.valid <= '0;
+  end else begin
+    dac_data_out.valid <= {CHANNELS{dac_data_out_valid[2]}};
+    dac_data_out_valid <= {dac_data_out_valid[1:0], 1'b1};
+  end
+end
+
+always_ff @(posedge dac_clk) begin
   dac_data_out.data <= dac_data_out_reg;
-  dac_data_out_valid <= {dac_data_out_valid[1:0], 1'b1};
   for (int channel = 0; channel < CHANNELS; channel++) begin
     if (dac_data_select[1][channel]) begin
       dac_data_out_reg[channel] <= '0;
