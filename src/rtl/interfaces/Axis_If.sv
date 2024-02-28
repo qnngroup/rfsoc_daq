@@ -1,5 +1,8 @@
 // Axis_If.sv - Reed Foster
 // single axi-stream interface
+
+`timescale 1ns/1ps
+
 interface Axis_If #(
   parameter DWIDTH = 32
 );

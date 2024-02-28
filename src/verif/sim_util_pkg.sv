@@ -4,6 +4,8 @@
 // and a debugging class for tracking errors and printing messages with varying
 // degrees of verbosity
 
+`timescale 1ns/1ps
+
 package sim_util_pkg;
 
   class math #(type T=int);
@@ -47,7 +49,7 @@ package sim_util_pkg;
 
     task fatal(input string message);
       $display("### ENCOUNTERED A FATAL ERROR, STOPPING SIMULATION NOW ###");
-      $fatal(message);
+      $fatal(1, message);
     endtask
 
     task finish();
