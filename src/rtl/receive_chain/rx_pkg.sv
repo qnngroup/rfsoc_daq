@@ -1,6 +1,8 @@
 // rx_pkg.sv - Reed Foster
 // parameterization of receive chain
 
+`timescale 1ns/1ps
+
 package rx_pkg;
 
   // main parameters

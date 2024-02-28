@@ -1,6 +1,8 @@
 // buffer_pkg.sv - Reed Foster
 // parameterization of buffer
 
+`timescale 1ns/1ps
+
 package buffer_pkg;
 
   // main parameters

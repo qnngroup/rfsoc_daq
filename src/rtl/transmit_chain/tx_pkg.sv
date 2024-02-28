@@ -1,6 +1,8 @@
 // tx_pkg.sv - Reed Foster
 // parameterization of transmit chain
 
+`timescale 1ns/1ps
+
 package tx_pkg;
 
   localparam int CHANNELS = 8;
