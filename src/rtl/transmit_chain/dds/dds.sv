@@ -10,12 +10,26 @@ module dds #(
   parameter int PARALLEL_SAMPLES = 16,
   parameter int CHANNELS = 8
 ) (
-  input wire clk, reset,
-  Realtime_Parallel_If.Master data_out,
-  Axis_If.Slave phase_inc_in
+  input logic ps_clk, ps_reset,
+  Axis_If.Slave ps_phase_inc,
+
+  input logic dac_clk, dac_reset,
+  Realtime_Parallel_If.Master dac_data_out
 );
 
-assign phase_inc_in.ready = 1'b1; // always accept new phase increment
+Axis_If #(.DWIDTH(CHANNELS*PHASE_BITS)) dac_phase_inc ();
+axis_config_reg_cdc #(
+  .DWIDTH(CHANNELS*PHASE_BITS)
+) ps_to_dac_dds_phase_inc_cdc_i (
+  .src_clk(ps_clk),
+  .src_reset(ps_reset),
+  .src(ps_phase_inc),
+  .dest_clk(dac_clk),
+  .dest_reset(dac_reset),
+  .dest(dac_phase_inc)
+);
+
+assign dac_phase_inc.ready = 1'b1; // always accept new phase increment
 
 localparam int LUT_ADDR_BITS = PHASE_BITS - QUANT_BITS;
 localparam int LUT_DEPTH = 2**LUT_ADDR_BITS;
@@ -37,92 +51,86 @@ generate
     
     // phases, one for each parallel sample
     // precompute the different phase increments required for each parallel
-    // sample, relative to the cycle_phase offset
-    logic [PARALLEL_SAMPLES-1:0][PHASE_BITS-1:0] phase_inc;
-    // each sample_phase is the phase of an individual parallel sample
-    // all sample_phase outputs are derived from the cycle_phase, which is the
+    // sample, relative to the dac_cycle_phase offset
+    logic [PARALLEL_SAMPLES-1:0][PHASE_BITS-1:0] dac_phase_inc_reg;
+    // each dac_sample_phase is the phase of an individual parallel sample
+    // all dac_sample_phase outputs are derived from the dac_cycle_phase, which is the
     // only quantity that actually gets incremented
-    logic [PARALLEL_SAMPLES-1:0][PHASE_BITS-1:0] sample_phase;
-    logic [PHASE_BITS-1:0] cycle_phase;
+    logic [PARALLEL_SAMPLES-1:0][PHASE_BITS-1:0] dac_sample_phase;
+    logic [PHASE_BITS-1:0] dac_cycle_phase;
     
-    // delay data_valid to match phase increment + LUT latency
-    logic [4:0] data_valid;
-    assign data_out.valid[channel] = data_valid[4];
+    // delay dac_data_valid to match phase increment + LUT latency
+    logic [4:0] dac_data_valid;
+    assign dac_data_out.valid[channel] = dac_data_valid[4];
     
-    always_ff @(posedge clk) begin
-      if (reset) begin
-        phase_inc <= '0;
-        cycle_phase <= '0;
-        sample_phase <= '0;
-        data_valid <= '0;
+    always_ff @(posedge dac_clk) begin
+      if (dac_reset) begin
+        dac_phase_inc_reg <= '0;
+        dac_cycle_phase <= '0;
+        dac_sample_phase <= '0;
+        dac_data_valid <= '0;
       end else begin
-        // if there's a new phase_inc, load it
-        if (phase_inc_in.valid) begin
+        // if there's a new dac_phase_inc_reg, load it
+        if (dac_phase_inc.valid) begin
           for (int i = 0; i < PARALLEL_SAMPLES; i = i + 1) begin
-            // phase_inc[0] = 1*phase_in_in.data
-            // phase_inc[1] = 2*phase_in_in.data
+            // dac_phase_inc_reg[0] = 1*phase_in_in.data
+            // dac_phase_inc_reg[1] = 2*phase_in_in.data
             // ...
-            // the final entry in phase_inc is used to update the cycle_phase
-            phase_inc[i] <= PHASE_BITS'(phase_inc_in.data[channel*PHASE_BITS+:PHASE_BITS] * (i + 1));
+            // the final entry in dac_phase_inc_reg is used to update the dac_cycle_phase
+            dac_phase_inc_reg[i] <= PHASE_BITS'(dac_phase_inc.data[channel*PHASE_BITS+:PHASE_BITS] * (i + 1));
           end
         end
-        // increment cycle_phase
-        cycle_phase <= cycle_phase + phase_inc[PARALLEL_SAMPLES-1];
-        // first sample_phase is just the cycle_phase, following
-        // sample_phase[i>0] are derived from the cycle_phase plus some phase
+        // increment dac_cycle_phase
+        dac_cycle_phase <= dac_cycle_phase + dac_phase_inc_reg[PARALLEL_SAMPLES-1];
+        // first dac_sample_phase is just the dac_cycle_phase, following
+        // dac_sample_phase[i>0] are derived from the dac_cycle_phase plus some phase
         // increment
-        sample_phase[0] <= cycle_phase;
+        dac_sample_phase[0] <= dac_cycle_phase;
         for (int i = 1; i < PARALLEL_SAMPLES; i = i + 1) begin
-          sample_phase[i] <= cycle_phase + phase_inc[i-1];
+          dac_sample_phase[i] <= dac_cycle_phase + dac_phase_inc_reg[i-1];
         end
         // match startup latency of addition pipeline
-        data_valid <= {data_valid[3:0], 1'b1};
+        dac_data_valid <= {dac_data_valid[3:0], 1'b1};
       end
     end
     
     // Dither LFSR, used to add a random offset to the phase before quantization
     // that changes each cycle. This improves the SFDR by spreading the spectrum
     // of the phase quantization noise
-    logic [PARALLEL_SAMPLES-1:0][15:0] lfsr;
-    lfsr16_parallel #(.PARALLEL_SAMPLES(PARALLEL_SAMPLES)) lfsr_i (
-      .clk,
-      .reset,
+    logic [PARALLEL_SAMPLES-1:0][15:0] dac_lfsr;
+    lfsr16 #(.PARALLEL_SAMPLES(PARALLEL_SAMPLES)) lfsr_i (
+      .clk(dac_clk),
+      .reset(dac_reset),
       .enable(1'b1), // always update
-      .data_out(lfsr)
+      .data_out(dac_lfsr)
     );
     
-    logic [PARALLEL_SAMPLES-1:0][PHASE_BITS-1:0] phase_dithered, phase_dithered_d;
-    logic [PARALLEL_SAMPLES-1:0][LUT_ADDR_BITS-1:0] phase_quant;
+    logic [PARALLEL_SAMPLES-1:0][PHASE_BITS-1:0] dac_phase_dithered, dac_phase_dithered_d;
+    logic [PARALLEL_SAMPLES-1:0][LUT_ADDR_BITS-1:0] dac_phase_quantized;
     if (QUANT_BITS > 16) begin
       always_comb begin
         for (int i = 0; i < PARALLEL_SAMPLES; i++) begin
           // if the number of bits that are quantized is more than the
           // LFSR width, left-shift the LFSR output so that it has the
           // correct amplitude
-          assign phase_dithered[i] = {{(PHASE_BITS-QUANT_BITS){1'b0}}, lfsr[i], {(QUANT_BITS - 16){1'b0}}} + sample_phase[i];
+          dac_phase_dithered[i] = {{(PHASE_BITS-QUANT_BITS){1'b0}}, dac_lfsr[i], {(QUANT_BITS - 16){1'b0}}} + dac_sample_phase[i];
         end
       end
     end else begin
       always_comb begin
         for (int i = 0; i < PARALLEL_SAMPLES; i++) begin
           // otherwise, right shift the LFSR
-          assign phase_dithered[i] = {{(PHASE_BITS-QUANT_BITS){1'b0}}, lfsr[i][QUANT_BITS-1:0]} + sample_phase[i];
+          dac_phase_dithered[i] = {{(PHASE_BITS-QUANT_BITS){1'b0}}, dac_lfsr[i][QUANT_BITS-1:0]} + dac_sample_phase[i];
         end
       end
     end
 
-    always_ff @(posedge clk) begin
-      if (reset) begin
-        data_out.data[channel] <= '0;
-        phase_quant <= '0;
-        phase_dithered_d <= '0;
-      end else begin
-        phase_dithered_d <= phase_dithered;
-        for (int i = 0; i < PARALLEL_SAMPLES; i++) begin
-          // quantize the phase, then perform the lookup
-          phase_quant[i] <= phase_dithered_d[i][PHASE_BITS-1:QUANT_BITS];
-          data_out.data[channel][SAMPLE_WIDTH*i+:SAMPLE_WIDTH] <= lut[phase_quant[i]];
-        end
+    always_ff @(posedge dac_clk) begin
+      dac_phase_dithered_d <= dac_phase_dithered;
+      for (int i = 0; i < PARALLEL_SAMPLES; i++) begin
+        // quantize the phase, then perform the lookup
+        dac_phase_quantized[i] <= dac_phase_dithered_d[i][PHASE_BITS-1:QUANT_BITS];
+        dac_data_out.data[channel][SAMPLE_WIDTH*i+:SAMPLE_WIDTH] <= lut[dac_phase_quantized[i]];
       end
     end
   end

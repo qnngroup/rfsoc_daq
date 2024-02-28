@@ -5,7 +5,7 @@
 
 module triangle_test ();
 
-sim_util_pkg::debug debug = new(sim_util_pkg::DEBUG);
+sim_util_pkg::debug debug = new(sim_util_pkg::DEFAULT);
 
 logic dac_reset;
 logic dac_clk = 0;

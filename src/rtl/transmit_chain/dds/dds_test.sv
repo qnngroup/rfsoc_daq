@@ -20,22 +20,18 @@ localparam QUANT_BITS = 8;
 localparam PARALLEL_SAMPLES = 4;
 localparam CHANNELS = 8;
 
-localparam LUT_ADDR_BITS = PHASE_BITS - QUANT_BITS;
-localparam LUT_DEPTH = 2**LUT_ADDR_BITS;
+logic ps_reset;
+logic ps_clk = 0;
+localparam int PS_CLK_RATE_HZ = 100_000_000;
+always #(0.5s/PS_CLK_RATE_HZ) ps_clk = ~ps_clk;
 
-typedef logic signed [SAMPLE_WIDTH-1:0] sample_t;
-typedef logic [PHASE_BITS-1:0] phase_t;
-typedef logic [CHANNELS-1:0][PHASE_BITS-1:0] multi_phase_t;
+logic dac_reset;
+logic dac_clk = 0;
+localparam int DAC_CLK_RATE_HZ = 384_000_000;
+always #(0.5s/DAC_CLK_RATE_HZ) dac_clk = ~dac_clk;
 
-sim_util_pkg::math #(sample_t) math; // abs, max functions on sample_t
-
-logic reset;
-logic clk = 0;
-localparam CLK_RATE_HZ = 100_000_000;
-always #(0.5s/CLK_RATE_HZ) clk = ~clk;
-
-Axis_If #(.DWIDTH(CHANNELS*PHASE_BITS)) phase_inc_in();
-Realtime_Parallel_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES), .CHANNELS(CHANNELS)) data_out();
+Axis_If #(.DWIDTH(CHANNELS*PHASE_BITS)) ps_phase_inc();
+Realtime_Parallel_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES), .CHANNELS(CHANNELS)) dac_data_out();
 
 dds_tb #(
   .PHASE_BITS(PHASE_BITS),
@@ -44,9 +40,10 @@ dds_tb #(
   .PARALLEL_SAMPLES(PARALLEL_SAMPLES),
   .CHANNELS(CHANNELS)
 ) tb_i (
-  .clk,
-  .phase_inc_in,
-  .data_out
+  .ps_clk,
+  .ps_phase_inc,
+  .dac_clk,
+  .dac_data_out
 );
 
 dds #(
@@ -56,10 +53,12 @@ dds #(
   .PARALLEL_SAMPLES(PARALLEL_SAMPLES),
   .CHANNELS(CHANNELS)
 ) dut_i (
-  .clk,
-  .reset,
-  .data_out,
-  .phase_inc_in
+  .ps_clk,
+  .ps_reset,
+  .ps_phase_inc,
+  .dac_clk,
+  .dac_reset,
+  .dac_data_out
 );
 
 // test data at a few different frequencies
@@ -76,16 +75,20 @@ int freqs [CHANNELS] = {
 
 initial begin
   debug.display("### TESTING DDS SIGNAL GENERATOR ###", sim_util_pkg::DEFAULT);
-  reset <= 1'b1;
-  repeat (50) @(posedge clk);
-  reset <= 1'b0;
-  repeat (20) @(posedge clk);
+  ps_reset <= 1'b1;
+  dac_reset <= 1'b1;
+  tb_i.init();
+  repeat (50) @(posedge ps_clk);
+  ps_reset <= 1'b0;
+  @(posedge dac_clk);
+  dac_reset <= 1'b0;
+  repeat (20) @(posedge ps_clk);
   for (int i = 0; i < 10; i++) begin
     freqs.shuffle();
     tb_i.set_phases(debug, freqs);
-    repeat (5) @(posedge clk);
+    repeat (5) @(posedge ps_clk);
     tb_i.clear_queues();
-    repeat (1000) @(posedge clk);
+    repeat (10000) @(posedge dac_clk);
     tb_i.check_output(debug, 16'h0007);
   end
   debug.finish();
