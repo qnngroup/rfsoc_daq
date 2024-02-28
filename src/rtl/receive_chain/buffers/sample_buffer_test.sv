@@ -59,14 +59,16 @@ sample_buffer #(
   .buffer_full()
 );
 
-logic valid_rand, valid_en;
+logic valid_rand;
+logic [CHANNELS-1:0] valid_en;
 realtime_parallel_driver #(
   .DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH),
   .CHANNELS(CHANNELS)
 ) driver_i (
   .clk,
+  .reset,
   .valid_rand({CHANNELS{valid_rand}}),
-  .valid_en({CHANNELS{valid_en}}),
+  .valid_en(valid_en),
   .intf(data_in)
 );
 
@@ -199,34 +201,29 @@ task automatic do_readout (input int timeout);
   int cycle_count;
   cycle_count = 0;
   readout_enable <= 1'b1;
-  data_out.ready <= 1'b0;
-  repeat (100) @(posedge clk);
-  data_out.ready <= 1'b1;
   while ((!(data_out.last & data_out.ok)) & (cycle_count < timeout)) begin
     @(posedge clk);
-    data_out.ready <= $urandom();
-    cycle_count = cycle_count + 1;
+    cycle_count++;
   end
-  @(posedge clk);
-  data_out.ready <= 1'b0;
   readout_enable <= 1'b0;
+  @(posedge clk);
 endtask
 
 int samples_to_send;
-int samples_sent [CHANNELS];
 
 initial begin
   debug.display("### TESTING SAMPLE_BUFFER ###", sim_util_pkg::DEFAULT);
   reset <= 1'b1;
   start <= 1'b0;
   stop <= 1'b0;
+  readout_enable <= 1'b0;
   start_aux <= '0;
   banking_mode <= '0; // only enable channel 0
   config_in.valid <= '0;
   start_stop.valid <= '0;
   data_out.ready <= 1'b0;
   valid_rand <= 1'b0;
-  valid_en <= 1'b0;
+  valid_en <= '0;
   repeat (100) @(posedge clk);
   reset <= 1'b0;
   repeat (50) @(posedge clk);
@@ -241,20 +238,21 @@ initial begin
             1: samples_to_send = ((BUFFER_DEPTH - $urandom_range(2,10)) / (1 << bank_mode))*CHANNELS;
             2: samples_to_send = (BUFFER_DEPTH / (1 << bank_mode))*CHANNELS; // fill all buffers
           endcase
-          for (int channel = 0; channel < CHANNELS; channel++) samples_sent[channel] = 0;
           start_acq(start_type & 1'b1);
-          valid_en <= 1'b1;
-          while (valid_en) begin
-            for (int channel = 0; channel < CHANNELS; channel++) begin
+          valid_en = '0;
+          for (int channel = 0; channel < (1 << bank_mode); channel++) begin
+            valid_en[channel] = 1'b1;
+          end
+          do begin
+            for (int channel = 0; channel < (1 << bank_mode); channel++) begin
               if (data_in.valid[channel]) begin
-                samples_sent[channel]++;
-                if (samples_sent[channel] == samples_to_send) begin
-                  valid_en <= 1'b0;
+                if (driver_i.data_q[channel].size() == samples_to_send - 1) begin
+                  valid_en[channel] = 1'b0;
                 end
               end
             end
             @(posedge clk);
-          end
+          end while (valid_en !== '0);
 
           repeat (10) @(posedge clk);
           stop_acq();
@@ -271,6 +269,9 @@ initial begin
           // the other banks before they are full.
           // This results in "missing" samples that aren't saved
           check_results(bank_mode, (samp_count == 2) & (in_valid_rand == 1), samples_to_send*(1 << bank_mode) + 2*CHANNELS);
+          // clear queues
+          driver_i.clear_queues();
+          receiver_i.clear_queues();
         end
       end
     end
