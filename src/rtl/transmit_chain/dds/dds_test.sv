@@ -20,30 +20,31 @@ localparam QUANT_BITS = 8;
 localparam PARALLEL_SAMPLES = 4;
 localparam CHANNELS = 8;
 
-dds_pkg::util #(
+logic ps_reset;
+logic ps_clk = 0;
+localparam int PS_CLK_RATE_HZ = 100_000_000;
+always #(0.5s/PS_CLK_RATE_HZ) ps_clk = ~ps_clk;
+
+logic dac_reset;
+logic dac_clk = 0;
+localparam int DAC_CLK_RATE_HZ = 384_000_000;
+always #(0.5s/DAC_CLK_RATE_HZ) dac_clk = ~dac_clk;
+
+Axis_If #(.DWIDTH(CHANNELS*PHASE_BITS)) ps_phase_inc();
+Realtime_Parallel_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES), .CHANNELS(CHANNELS)) dac_data_out();
+
+dds_tb #(
   .PHASE_BITS(PHASE_BITS),
-  .SAMPLE_WIDTH(SAMPLE_WIDTH),
   .QUANT_BITS(QUANT_BITS),
+  .SAMPLE_WIDTH(SAMPLE_WIDTH),
   .PARALLEL_SAMPLES(PARALLEL_SAMPLES),
   .CHANNELS(CHANNELS)
-) dds_util = new;
-
-localparam LUT_ADDR_BITS = PHASE_BITS - QUANT_BITS;
-localparam LUT_DEPTH = 2**LUT_ADDR_BITS;
-
-typedef logic signed [SAMPLE_WIDTH-1:0] sample_t;
-typedef logic [PHASE_BITS-1:0] phase_t;
-typedef logic [CHANNELS-1:0][PHASE_BITS-1:0] multi_phase_t;
-
-sim_util_pkg::math #(sample_t) math; // abs, max functions on sample_t
-
-logic reset;
-logic clk = 0;
-localparam CLK_RATE_HZ = 100_000_000;
-always #(0.5s/CLK_RATE_HZ) clk = ~clk;
-
-Axis_If #(.DWIDTH(CHANNELS*PHASE_BITS)) phase_inc_in();
-Realtime_Parallel_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES), .CHANNELS(CHANNELS)) data_out();
+) tb_i (
+  .ps_clk,
+  .ps_phase_inc,
+  .dac_clk,
+  .dac_data_out
+);
 
 dds #(
   .PHASE_BITS(PHASE_BITS),
@@ -52,66 +53,43 @@ dds #(
   .PARALLEL_SAMPLES(PARALLEL_SAMPLES),
   .CHANNELS(CHANNELS)
 ) dut_i (
-  .clk,
-  .reset,
-  .data_out,
-  .phase_inc_in
+  .ps_clk,
+  .ps_reset,
+  .ps_phase_inc,
+  .dac_clk,
+  .dac_reset,
+  .dac_data_out
 );
 
 // test data at a few different frequencies
-localparam int N_FREQS = 4;
-int freqs [N_FREQS] = {12_130_000, 517_036_000, 1_729_725_000, 2_759_000};
-
-multi_phase_t phase_inc, phase_inc_prev;
-sample_t received [CHANNELS][$];
-
-localparam real PI = 3.14159265;
-
-function phase_t get_phase_inc_from_freq(input int freq);
-  return unsigned'(int'($floor((real'(freq)/6_400_000_000.0) * (2**(PHASE_BITS)))));
-endfunction
-
-logic save_data;
-
-always @(posedge clk) begin
-  if (reset) begin
-    phase_inc <= '0;
-  end else begin
-    if (phase_inc_in.valid) begin
-      phase_inc <= phase_inc_in.data;
-    end
-    if (save_data) begin
-      for (int channel = 0; channel < CHANNELS; channel++) begin
-        if (data_out.valid[channel]) begin
-          for (int i = 0; i < PARALLEL_SAMPLES; i++) begin
-            received[channel].push_front(sample_t'(data_out.data[channel][i*SAMPLE_WIDTH+:SAMPLE_WIDTH]));
-          end
-        end
-      end
-    end
-  end
-end
+int freqs [CHANNELS] = {
+  12_130_000,
+  517_036_000,
+  1_729_725_000,
+  2_759_000,
+  123_980,
+  1_429_146_012,
+  9_856_492,
+  923_686_610
+};
 
 initial begin
   debug.display("### TESTING DDS SIGNAL GENERATOR ###", sim_util_pkg::DEFAULT);
-  reset <= 1'b1;
-  phase_inc_prev <= '0;
-  save_data <= 1'b0;
-  repeat (50) @(posedge clk);
-  reset <= 1'b0;
-  repeat (20) @(posedge clk);
-  for (int i = 0; i < N_FREQS; i++) begin
-    for (int channel = 0; channel < CHANNELS; channel++) begin
-      phase_inc_in.data[channel*PHASE_BITS+:PHASE_BITS] <= get_phase_inc_from_freq(freqs[$urandom_range(0,N_FREQS-1)]);
-    end
-    phase_inc_in.valid <= 1'b1;
-    repeat (1) @(posedge clk);
-    phase_inc_in.valid <= 1'b0;
-    repeat (5) @(posedge clk);
-    save_data <= 1'b1;
-    repeat (1000) @(posedge clk);
-    dds_util.check_output(debug, phase_inc, received, 16'h0007);
-    save_data <= 1'b0;
+  ps_reset <= 1'b1;
+  dac_reset <= 1'b1;
+  tb_i.init();
+  repeat (50) @(posedge ps_clk);
+  ps_reset <= 1'b0;
+  @(posedge dac_clk);
+  dac_reset <= 1'b0;
+  repeat (20) @(posedge ps_clk);
+  for (int i = 0; i < 10; i++) begin
+    freqs.shuffle();
+    tb_i.set_phases(debug, freqs);
+    repeat (5) @(posedge ps_clk);
+    tb_i.clear_queues();
+    repeat (10000) @(posedge dac_clk);
+    tb_i.check_output(debug, 16'h0007);
   end
   debug.finish();
 end

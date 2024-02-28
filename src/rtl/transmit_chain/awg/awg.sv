@@ -171,7 +171,6 @@ always_ff @(posedge dma_clk) begin
     end
     if (dma_awg_burst_length.ok) begin
       for (int channel = 0; channel < CHANNELS; channel++) begin
-        if (dma_awg_burst_length.data[channel] == 0);
         dma_awg_burst_length_reg[channel] <= dma_awg_burst_length.data[channel*64+:64] - 1;
       end
     end
@@ -273,7 +272,7 @@ axis_width_converter #(
 enum {DAC_IDLE, DAC_ACTIVE} dac_read_state;
 
 // output signals
-logic [2:0] dac_data_out_valid = '0;
+logic [2:0] dac_data_out_valid;
 logic [1:0][CHANNELS-1:0][PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0] dac_buffer_out_reg;
 logic [CHANNELS-1:0][PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0] dac_data_out_reg;
 logic [CHANNELS-1:0][$clog2(DEPTH)-1:0] dac_read_address;
@@ -288,10 +287,20 @@ always_ff @(posedge dac_clk) dac_awg_done <= &dac_awg_channels_done[1];
 
 logic dac_awg_config_done; // synchronized from DMA/PS domain, used as write enable for CDC'd configurations for DAC readout of buffer
 
+logic dac_started; // goes high on first transition from DAC_IDLE to DAC_ACTIVE
+
 always_ff @(posedge dac_clk) begin
-  dac_data_out.valid <= {CHANNELS{dac_data_out_valid[2]}};
+  if (dac_reset) begin
+    dac_data_out_valid <= '0;
+    dac_data_out.valid <= '0;
+  end else begin
+    dac_data_out.valid <= {CHANNELS{dac_data_out_valid[2]}};
+    dac_data_out_valid <= {dac_data_out_valid[1:0], dac_started};
+  end
+end
+
+always_ff @(posedge dac_clk) begin
   dac_data_out.data <= dac_data_out_reg;
-  dac_data_out_valid <= {dac_data_out_valid[1:0], 1'b1};
   for (int channel = 0; channel < CHANNELS; channel++) begin
     if (dac_data_select[1][channel]) begin
       dac_data_out_reg[channel] <= '0;
@@ -334,6 +343,16 @@ always_ff @(posedge dac_clk) begin
       DAC_IDLE: if (dac_awg_start) dac_read_state <= DAC_ACTIVE;
       DAC_ACTIVE: if (dac_awg_stop || dac_awg_done) dac_read_state <= DAC_IDLE;
     endcase
+  end
+end
+
+always_ff @(posedge dac_clk) begin
+  if (dac_reset) begin
+    dac_started <= 1'b0;
+  end else begin
+    if (dac_awg_start) begin
+      dac_started <= 1'b1;
+    end
   end
 end
 

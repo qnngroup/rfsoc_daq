@@ -8,10 +8,10 @@ module triangle #(
   parameter int PARALLEL_SAMPLES = 16,
   parameter int SAMPLE_WIDTH = 16
 ) (
-  input wire ps_clk, ps_reset,
+  input logic ps_clk, ps_reset,
   Axis_If.Slave ps_phase_inc, // {phase_inc} for each channel
 
-  input wire dac_clk, dac_reset,
+  input logic dac_clk, dac_reset,
   Realtime_Parallel_If.Master dac_data_out,
 
   output logic [CHANNELS-1:0] dac_trigger // send a trigger at zero crossing going up
@@ -76,8 +76,7 @@ always_ff @(posedge dac_clk) begin
   end
 end
 
-// convert the phases into outputs
-logic [CHANNELS-1:0][PARALLEL_SAMPLES-1:0][PHASE_BITS-1:0] dac_out_full; // full-precision output
+// generate triggers
 logic [CHANNELS-1:0][PARALLEL_SAMPLES-1:0] dac_phase_MSB0;
 logic [CHANNELS-1:0][PARALLEL_SAMPLES-1:0] dac_phase_MSB1, dac_phase_MSB1_d;
 always_comb begin
@@ -91,20 +90,29 @@ always_comb begin
     end
   end
 end
-// if some, but not all signals are in the second quadrant (01) and all signals are either
-// in the first or second quadrant (0X), then
+// if some, but not all signals are in the second quadrant (MSBs = 01) and all signals are either
+// in the first or second quadrant (MSBs = 0X), then
+logic [CHANNELS-1:0] dac_rising_edge;
+logic [CHANNELS-1:0] dac_upper_half;
+logic [CHANNELS-1:0] dac_crossing_in_batch;
+logic [CHANNELS-1:0] dac_crossing_between_batch;
 always_ff @(posedge dac_clk) begin
   dac_phase_MSB1_d <= dac_phase_MSB1;
   for (int channel = 0; channel < CHANNELS; channel++) begin
     // make sure all of the following are met to send a trigger:
-    // - we're on a rising edge (dac_phase_MSB0 is zero for all samples)
-    // - some of the samples are in the upper half (dac_phase_MSB1 has nonzero bits)
-    // - some samples in this cycle or previous cycle are in the lower half
-    // ({dac_phase_MSB1, dac_phase_MSB1_d} has zero bits)
-    dac_trigger[channel] <= (&(~dac_phase_MSB0[channel])) & (|dac_phase_MSB1[channel]) & (~(&{dac_phase_MSB1[channel],dac_phase_MSB1_d[channel]}));
+    // - we're on a rising edge
+    //    (dac_phase_MSB0 is zero for all samples)
+    dac_rising_edge[channel] <= &(~dac_phase_MSB0[channel]);
+    // - crossing either in this batch or the previous batch
+    //    (dac_phase_MSB1 is not all 1's or dac_phase_MSB1 is all 1's and dac_phase_MSB1_d is all 0's)
+    dac_crossing_in_batch[channel] <= (~(&dac_phase_MSB1[channel])) & (|dac_phase_MSB1[channel]);
+    dac_crossing_between_batch[channel] <= (&dac_phase_MSB1[channel]) & (&(~dac_phase_MSB1_d[channel]));
   end
+  dac_trigger <= dac_rising_edge & (dac_crossing_in_batch | dac_crossing_between_batch);
 end
 
+// convert the phases into outputs
+logic [CHANNELS-1:0][PARALLEL_SAMPLES-1:0][PHASE_BITS-1:0] dac_out_full; // full-precision output
 always_ff @(posedge dac_clk) begin
   if (dac_reset) begin
     dac_out_full <= '0;

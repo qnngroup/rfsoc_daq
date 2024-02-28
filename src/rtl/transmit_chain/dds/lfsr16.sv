@@ -2,7 +2,7 @@
 // 16-bit maximal LFSR, used for DDS module as a phase-dither signal
 
 `timescale 1ns/1ps
-module lfsr16_parallel #(
+module lfsr16 #(
   parameter int PARALLEL_SAMPLES = 4
 ) (
   input wire clk, reset,

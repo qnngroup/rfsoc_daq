@@ -1,6 +1,8 @@
 // SPI_Parallel_If.sv - Reed Foster
 // interface for single master to drive multiple SPI slave devices
 
+`timescale 1ns/1ps
+
 interface SPI_Parallel_If #(
   parameter CHANNELS = 8
 );

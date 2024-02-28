@@ -12,95 +12,47 @@ localparam int SAMPLE_WIDTH = 16;
 localparam int PARALLEL_SAMPLES = 2;
 
 typedef logic signed [SAMPLE_WIDTH-1:0] sample_t; // type for signed samples (needed to check subtraction is working properly)
-sim_util_pkg::math #(sample_t) math; // abs, max functions on sample_t
+typedef logic [SAMPLE_WIDTH*PARALLEL_SAMPLES-1:0] batch_t;
+sim_util_pkg::math #(.T(sample_t)) math; // abs, max functions on sample_t
+sim_util_pkg::queue #(.T(sample_t), .T2(batch_t)) data_q_util = new;
+sim_util_pkg::queue #(.T(int)) last_q_util = new;
 
 logic reset;
 logic clk = 0;
-localparam CLK_RATE_HZ = 100_000_000;
+localparam int CLK_RATE_HZ = 100_000_000;
 always #(0.5s/CLK_RATE_HZ) clk = ~clk;
 
 Axis_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES)) data_out_if();
 Axis_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES)) data_in_if();
 
-// Save sent, expected, and actual data in queues to be processed at the end
-// of the test. Using a queue eliminates the need to account for latency in
-// the test (assuming that all of the data that is sent to the module can be
-// read out without sending new data; i.e. data_in.valid can be held low for
-// a few cycles to empty the processing pipeline)
-real d_in;
-sample_t received[$];
-sample_t expected[$];
-int last_expected[$];
-int last_received[$];
-sample_t sent[$]; // only really used for debugging purposes
+axis_driver #(
+  .DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES)
+) driver_i (
+  .clk,
+  .intf(data_in_if)
+);
 
-always @(posedge clk) begin
-  if (reset) begin
-    data_in_if.data <= '0;
-  end else begin
-    // send data
-    if (data_in_if.ok) begin
-      for (int i = 0; i < PARALLEL_SAMPLES; i++) begin
-        data_in_if.data[i*SAMPLE_WIDTH+:SAMPLE_WIDTH] <= $urandom_range({SAMPLE_WIDTH{1'b1}});
-        sent.push_front(sample_t'(data_in_if.data[i*SAMPLE_WIDTH+:SAMPLE_WIDTH]));
-        if (sent.size() > 1) begin
-          // if we've sent more than one sample, then just compute the
-          // difference of the currently-being-sent sample with the
-          // previously-sent sample
-          expected.push_front((sent[0] - sent[1]) / 2);
-        end else begin
-          // if this is the first sample, then the module will default to just
-          // sending that sample (i.e. it assumes the previous sample was zero)
-          expected.push_front(sent[0] / 2);
-        end
-      end
-      if (data_in_if.last) begin
-        last_expected.push_front(sent.size());
-      end
-    end
-    // receive data
-    if (data_out_if.ok) begin
-      for (int i = 0; i < PARALLEL_SAMPLES; i++) begin
-        received.push_front(sample_t'(data_out_if.data[i*SAMPLE_WIDTH+:SAMPLE_WIDTH]));
-      end
-      if (data_out_if.last) begin
-        last_received.push_front(received.size());
-      end
-    end
-  end
-end
+axis_receiver #(
+  .DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES)
+) receiver_i (
+  .clk,
+  .ready_rand(1'b1),
+  .ready_en(1'b1),
+  .intf(data_out_if)
+);
 
-task check_results();
-  debug.display($sformatf("received.size() = %0d", received.size()), sim_util_pkg::VERBOSE);
-  debug.display($sformatf("expected.size() = %0d", expected.size()), sim_util_pkg::VERBOSE);
-  if (received.size() != expected.size()) begin
-    debug.error("mismatched sizes; got a different number of samples than expected");
-  end
-  // check the values match, like with axis_x2_test, the rounding during
-  // type-casting could lead to an off-by-one error, so just make sure that
-  // we're within 1 LSB of the expected result
-  while (received.size() > 0 && expected.size() > 0) begin
-    if (math.abs(expected[$] - received[$]) > 1) begin
-      debug.error($sformatf("mismatch: got %x, expected %x", received[$], expected[$]));
-    end
-    received.pop_back();
-    expected.pop_back();
-  end
-  debug.display($sformatf("last_received.size() = %0d", last_received.size()), sim_util_pkg::VERBOSE);
-  debug.display($sformatf("last_expected.size() = %0d", last_expected.size()), sim_util_pkg::VERBOSE);
-  if (last_expected.size() != last_received.size()) begin
-    debug.error($sformatf(
-      "mismatched number of last signals: got %0d, expected %0d",
-      last_received.size(),
-      last_expected.size())
-    );
-  end
-  while (last_expected.size() > 0) begin
-    if (last_expected[$] !== last_received[$]) begin
-      debug.error($sformatf("last mismatch: got %0d, expected %0d", last_received[$], last_expected[$]));
-    end
-    last_expected.pop_back();
-    last_received.pop_back();
+task automatic sent_to_expected (
+  inout batch_t sent [$],
+  inout sample_t expected [$]
+);
+  sample_t sent_split [$];
+  sample_t current, prev;
+  data_q_util.samples_from_batches(sent, sent_split, SAMPLE_WIDTH, PARALLEL_SAMPLES);
+  prev = 0;
+  while (sent_split.size() > 0) begin
+    current = sent_split.pop_back();
+    expected.push_front((current - prev) / 2);
+    prev = current;
   end
 endtask
 
@@ -114,25 +66,29 @@ axis_differentiator #(
   .data_out(data_out_if)
 );
 
+sample_t expected_q [$];
+sample_t received_q [$];
+
 initial begin
   debug.display("### TESTING AXIS DIFFERENTIATOR ###", sim_util_pkg::DEFAULT);
+  driver_i.init(); // reset last
   reset <= 1'b1;
-  data_in_if.valid <= 1'b0;
-  data_out_if.ready <= 1'b1;
   repeat (100) @(posedge clk);
   reset <= 1'b0;
-  // randomize ready and valid signals
-  repeat (2000) begin
-    @(posedge clk);
-    data_in_if.valid <= $urandom() & 1'b1;
-    data_out_if.ready <= $urandom() & 1'b1;
-    data_in_if.last <= $urandom_range(0,100) < 10;
-  end
-  @(posedge clk);
-  data_out_if.ready <= 1'b1;
-  data_in_if.valid <= 1'b0;
   repeat (10) @(posedge clk);
-  check_results();
+  repeat (100) begin
+    driver_i.send_samples(50, 1'b1, 1'b1);
+    if ($urandom_range(0,100) < 20) begin
+      driver_i.send_last();
+    end
+  end
+  repeat (10) @(posedge clk);
+  debug.display("checking data", sim_util_pkg::VERBOSE);
+  sent_to_expected(driver_i.data_q, expected_q);
+  data_q_util.samples_from_batches(receiver_i.data_q, received_q, SAMPLE_WIDTH, PARALLEL_SAMPLES);
+  data_q_util.compare_threshold(debug, received_q, expected_q, 1);
+  debug.display("checking last", sim_util_pkg::VERBOSE);
+  last_q_util.compare(debug, receiver_i.last_q, driver_i.last_q);
   debug.finish();
 end
 endmodule
