@@ -18,19 +18,19 @@
 `timescale 1ns/1ps
 module buffer_test ();
 
-sim_util_pkg::debug debug = new(sim_util_pkg::DEFAULT);
+sim_util_pkg::debug debug = new(sim_util_pkg::VERBOSE);
 
 localparam int BUFFER_DEPTH = 64;
 localparam int READ_LATENCY = 4;
 
 logic adc_reset;
 logic adc_clk = 0;
-localparam ADC_CLK_RATE_HZ = 512_000_000;
+localparam int ADC_CLK_RATE_HZ = 512_000_000;
 always #(0.5s/ADC_CLK_RATE_HZ) adc_clk = ~adc_clk;
 
 logic ps_reset;
 logic ps_clk = 0;
-localparam PS_CLK_RATE_HZ = 100_000_000;
+localparam int PS_CLK_RATE_HZ = 100_000_000;
 always #(0.5s/PS_CLK_RATE_HZ) ps_clk = ~ps_clk;
 
 Realtime_Parallel_If #(.DWIDTH(rx_pkg::DATA_WIDTH), .CHANNELS(rx_pkg::CHANNELS)) adc_data ();
@@ -52,12 +52,17 @@ Axis_If #(.DWIDTH(rx_pkg::CHANNELS*($clog2(BUFFER_DEPTH)+1))) ps_capture_write_d
 buffer_tb #(
   .BUFFER_DEPTH(BUFFER_DEPTH)
 ) tb_i (
-  .clk(ps_clk),
-  .arm_start_stop(ps_capture_arm_start_stop),
-  .capture_banking_mode(ps_capture_banking_mode),
-  .capture_reset(ps_capture_sw_reset),
-  .readout_reset(ps_readout_sw_reset),
-  .readout_start(ps_readout_start)
+  .adc_clk,
+  .adc_reset,
+  .adc_data,
+  .ps_clk,
+  .ps_capture_arm_start_stop,
+  .ps_capture_banking_mode,
+  .ps_capture_sw_reset,
+  .ps_readout_sw_reset,
+  .ps_readout_start,
+  .ps_capture_write_depth,
+  .ps_readout_data
 );
 
 buffer #(
@@ -81,57 +86,11 @@ buffer #(
   .ps_capture_write_depth
 );
 
-// randomly accept write_depth data
-logic [rx_pkg::CHANNELS-1:0][$clog2(BUFFER_DEPTH):0] write_depth [$];
-always @(posedge ps_clk) begin
-  if (ps_reset) begin
-    ps_capture_write_depth.ready <= 1'b0;
-  end else begin
-    ps_capture_write_depth.ready <= $urandom_range(0, 1);
-    if (ps_capture_write_depth.ok) begin
-      write_depth.push_front(ps_capture_write_depth.data);
-    end
-  end
-end
-
-// randomly accept DMA data
-logic [rx_pkg::DATA_WIDTH-1:0] samples_received [$];
-int dma_last_received [$];
-always @(posedge ps_clk) begin
-  if (ps_reset) begin
-    ps_readout_data.ready <= 1'b0;
-  end else begin
-    ps_readout_data.ready <= $urandom_range(0, 1);
-    if (ps_readout_data.ok) begin
-      samples_received.push_front(ps_readout_data.data);
-      if (ps_readout_data.last) begin
-        dma_last_received.push_front(samples_received.size());
-      end
-    end
-  end
-end
-
-// always save samples that may have been sent
-// we'll throw away samples in samples_sent until the first sample matches
-// what was received
-logic [rx_pkg::DATA_WIDTH-1:0] samples_sent [rx_pkg::CHANNELS][$];
-always @(posedge adc_clk) begin
-  if (adc_reset) begin
-    adc_data.valid <= '0;
-  end else begin
-    adc_data.valid <= $urandom_range(0, {rx_pkg::CHANNELS{1'b1}});
-    for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
-      if (adc_data.valid[channel]) begin
-        samples_sent[channel].push_front(adc_data.data[channel]);
-        for (int sample = 0; sample < rx_pkg::PARALLEL_SAMPLES; sample++) begin
-          adc_data.data[channel][sample*rx_pkg::SAMPLE_WIDTH+:rx_pkg::SAMPLE_WIDTH] <= $urandom_range(0, {rx_pkg::SAMPLE_WIDTH{1'b1}});
-        end
-      end
-    end
-  end
-end
-
-logic success;
+enum {SW_TRIGGER, HW_TRIGGER_WITH_ARM, HW_TRIGGER_NO_ARM} trigger_mode;
+enum {SW_STOP, HW_STOP} stop_mode;
+enum {STOP_MANUAL, STOP_FULL} stop_condition;
+enum {CAPTURE_NO_RESET, CAPTURE_ARM_RESET, CAPTURE_ACTIVE_RESET, CAPTURE_HOLD_RESET} capture_reset_mode;
+enum {READOUT_NO_RESET, READOUT_RESET} readout_reset_mode;
 
 initial begin
   debug.display("### TESTING BUFFER TOPLEVEL WITH FSM ###", sim_util_pkg::DEFAULT);
@@ -143,74 +102,55 @@ initial begin
   adc_capture_hw_start <= 1'b0;
   adc_capture_hw_stop <= 1'b0;
 
-  ps_capture_arm_start_stop.valid <= 1'b0;
-  ps_capture_banking_mode.valid <= 1'b0;
-  ps_capture_sw_reset.valid <= 1'b0;
-  ps_readout_sw_reset.valid <= 1'b0;
-  ps_readout_start.valid <= 1'b0;
-
-  // unused; don't really need to assign these, but this way there's no
-  // X values in simulation
-  ps_capture_arm_start_stop.last <= 1'b0;
-  ps_capture_banking_mode.last <= 1'b0;
-  ps_capture_sw_reset.last <= 1'b0;
-  ps_readout_sw_reset.last <= 1'b0;
-  ps_readout_start.last <= 1'b0;
+  tb_i.init();
 
   repeat (100) @(posedge ps_clk);
   ps_reset <= 1'b0;
   @(posedge adc_clk);
   adc_reset <= 1'b0;
 
-  for (int readout_reset_mode = 0; readout_reset_mode < 2; readout_reset_mode++) begin
-    for (int capture_reset_mode = 0; capture_reset_mode < 4; capture_reset_mode++) begin
-      for (int save_until_full = 0; save_until_full < 2; save_until_full++) begin
-        for (int stop_mode = 0; stop_mode < 2; stop_mode++) begin
-          for (int trigger_mode = 0; trigger_mode < 3; trigger_mode++) begin
+  trigger_mode = trigger_mode.first;
+  stop_mode = stop_mode.first;
+  capture_reset_mode = capture_reset_mode.first;
+  readout_reset_mode = readout_reset_mode.first;
+  stop_condition = stop_condition.first;
+
+  do begin: readout_rst
+    do begin: capture_rst
+      do begin: stop_cond
+        do begin: trigger
+          for (int save_until_full = 0; save_until_full < 2; save_until_full++) begin
             // sw, hw w/ arm, hw w/out arm
             for (int banking_mode = 0; banking_mode <= $clog2(rx_pkg::CHANNELS); banking_mode++) begin
-              debug.display($sformatf(
-                "testing for banking_mode = %0d",
-                banking_mode),
-                sim_util_pkg::VERBOSE
-              );
-              case (trigger_mode)
-                0: debug.display("testing sw trigger", sim_util_pkg::VERBOSE);
-                1: debug.display("testing hw trigger with arm", sim_util_pkg::VERBOSE);
-                2: debug.display("testing hw trigger without arm", sim_util_pkg::VERBOSE);
-              endcase
-              case (stop_mode)
-                0: debug.display("testing sw stop", sim_util_pkg::VERBOSE);
-                1: debug.display("testing hw stop", sim_util_pkg::VERBOSE);
-              endcase
-              case (capture_reset_mode)
-                0: debug.display("testing without capture reset", sim_util_pkg::VERBOSE);
-                1: debug.display("testing with capture reset after arming", sim_util_pkg::VERBOSE);
-                2: debug.display("testing with capture reset during sample saving", sim_util_pkg::VERBOSE);
-                3: debug.display("testing with capture reset during sample hold", sim_util_pkg::VERBOSE);
-              endcase
-              case (readout_reset_mode)
-                0: debug.display("testing without readout reset", sim_util_pkg::VERBOSE);
-                1: debug.display("testing with readout reset", sim_util_pkg::VERBOSE);
-              endcase
+              debug.display($sformatf("testing for banking_mode = %0d", banking_mode), sim_util_pkg::VERBOSE);
+              debug.display($sformatf("trigger_mode = %0p", trigger_mode), sim_util_pkg::VERBOSE);
+              debug.display($sformatf("stop_mode = %0p", stop_mode), sim_util_pkg::VERBOSE);
+              debug.display($sformatf("save_until_full = %0d", save_until_full), sim_util_pkg::VERBOSE);
+              debug.display($sformatf("capture_reset_mode = %0p", capture_reset_mode), sim_util_pkg::VERBOSE);
+              debug.display($sformatf("readout_reset_mode = %0p", readout_reset_mode), sim_util_pkg::VERBOSE);
+
               @(posedge ps_clk);
               tb_i.set_banking_mode(debug, banking_mode);
-              for (int reset_during_hold = 0; reset_during_hold < ((capture_reset_mode == 3) ? 2 : 1); reset_during_hold++) begin
-                for (int reset_during_save = 0; reset_during_save < ((capture_reset_mode == 2) ? 2 : 1); reset_during_save++) begin
-                  for (int reset_during_arm = 0; reset_during_arm < ((capture_reset_mode == 1) ? 2 : 1); reset_during_arm++) begin
-                    if (trigger_mode == 1) begin
+              for (int reset_during_hold = 0; reset_during_hold < ((capture_reset_mode == CAPTURE_HOLD_RESET) ? 2 : 1); reset_during_hold++) begin
+                for (int reset_during_save = 0; reset_during_save < ((capture_reset_mode == CAPTURE_ACTIVE_RESET) ? 2 : 1); reset_during_save++) begin
+                  for (int reset_during_arm = 0; reset_during_arm < ((capture_reset_mode == CAPTURE_ARM_RESET) ? 2 : 1); reset_during_arm++) begin
+                    if (trigger_mode == HW_TRIGGER_WITH_ARM) begin
                       // arm if we're testing hw trigger_mode with arm
                       @(posedge ps_clk);
                       tb_i.capture_arm_start_stop(debug, 3'b100);
                       // wait to make sure DUT is armed (since there is a CDC delay)
                       repeat (10) @(posedge ps_clk);
-                      if ((capture_reset_mode == 1) && (reset_during_arm == 0)) begin
-                        tb_i.reset_capture(debug, samples_sent);
+                      if ((capture_reset_mode == CAPTURE_ARM_RESET) && (reset_during_arm == 0)) begin
+                        // send reset after arming but before capture actually
+                        // starts
+                        tb_i.reset_capture(debug);
+                        // clear samples sent
+                        tb_i.clear_sent_data();
                       end
                     end
                   end
                   // start capture
-                  if (trigger_mode == 0) begin
+                  if (trigger_mode == SW_TRIGGER) begin
                     // software trigger_mode
                     repeat (10) @(posedge ps_clk);
                     tb_i.capture_arm_start_stop(debug, 3'b010);
@@ -221,22 +161,26 @@ initial begin
                     @(posedge adc_clk);
                     adc_capture_hw_start <= 1'b0;
                   end
-                  if ((capture_reset_mode == 2) && (reset_during_save == 0)) begin
+                  if ((capture_reset_mode == CAPTURE_ACTIVE_RESET) && (reset_during_save == 0)) begin
                     // save some samples first
                     repeat ($urandom_range(40, 60)) @(posedge adc_clk);
-                    // send reset
+                    // send reset while samples are actively being saved
                     @(posedge ps_clk);
-                    tb_i.reset_capture(debug, samples_sent);
+                    tb_i.reset_capture(debug);
+                    tb_i.clear_sent_data();
                   end else begin
-                    if (save_until_full && (trigger_mode != 2)) begin
-                      // don't ever send stop signal, just wait until buffers fill up
-                      // don't do this if trigger_mode == 2, because then we would be waiting forever
+                    if (save_until_full && (trigger_mode != HW_TRIGGER_NO_ARM)) begin
+                      // for trigger modes in which we actually triggered
+                      // a capture, wait until buffer fills up, without
+                      // sending a stop signal
+                      // don't do this if trigger_mode == HW_TRIGGER_NO_ARM,
+                      // because then we would be waiting forever
                       debug.display("waiting until adc_capture_full", sim_util_pkg::DEBUG);
                       do @(posedge adc_clk); while (~adc_capture_full);
                     end else begin
                       // stop capture after a few samples
                       repeat ($urandom_range(40, 60)) @(posedge adc_clk);
-                      if (stop_mode == 0) begin
+                      if (stop_mode == SW_STOP) begin
                         // software stop
                         @(posedge ps_clk);
                         tb_i.capture_arm_start_stop(debug, 3'b001);
@@ -251,60 +195,74 @@ initial begin
                   end
                   // wait a few cycles so that write_depth gets sent out
                   // before we continue to the next loop
-                  repeat (10) @(posedge ps_clk);
+                  repeat (20) @(posedge ps_clk);
                 end
-                if ((capture_reset_mode == 3) && (reset_during_hold == 0)) begin
-                  // send reset
+                if ((capture_reset_mode == CAPTURE_HOLD_RESET) && (reset_during_hold == 0)) begin
+                  // send reset after capture is complete but before readout
                   repeat (10) @(posedge ps_clk);
-                  tb_i.reset_capture(debug, samples_sent);
-                  // also clear write_depth, since we would have two transactions
-                  while (write_depth.size() > 0) write_depth.pop_back();
+                  tb_i.reset_capture(debug);
+                  // wait a clock cycle
+                  @(posedge ps_clk);
+                  // clear sent data
+                  tb_i.clear_sent_data();
+                  // also clear write_depth, since we would have an extra transaction otherwise
+                  tb_i.clear_write_depth();
                 end
               end
               // done saving data
               // wait a few cycles before doing readout
               repeat (20) @(posedge ps_clk);
-              // first, check that write_depth only had a single transfer
-              tb_i.check_write_depth_num_packets(debug, write_depth, (trigger_mode == 2) ? 0 : 1, success);
-              if (trigger_mode != 2) begin
+              // first, check that write_depth only had a single transfer (for
+              // trigger_mode != 2)
+              // if trigger_mode == 2, then we don't expect any packets
+              tb_i.check_write_depth_num_packets(debug, (trigger_mode == 2) ? 0 : 1);
+              if (trigger_mode != HW_TRIGGER_NO_ARM) begin
                 // if trigger_mode == 2, then we didn't actually save any data, so don't attempt to read out
-                if (success && save_until_full) begin
+                if (save_until_full) begin
                   // if we sent data until capture_full went high, check that write_depth filled up
-                  tb_i.check_write_depth_full(debug, write_depth, 1 << banking_mode, success);
+                  tb_i.check_write_depth_full(debug, 1 << banking_mode);
                 end
-                for (int reset_during_readout = 0; reset_during_readout < ((readout_reset_mode == 1) ? 2 : 1); reset_during_readout++) begin
+                for (int reset_during_readout = 0; reset_during_readout < ((readout_reset_mode == READOUT_RESET) ? 2 : 1); reset_during_readout++) begin
                   // start readout
                   repeat (10) @(posedge ps_clk);
                   tb_i.start_readout(debug, 1'b1);
                   repeat (BUFFER_DEPTH*rx_pkg::CHANNELS/2) begin
                     do @(posedge ps_clk); while (~ps_readout_data.ok);
                   end
-                  if ((readout_reset_mode == 1) && (reset_during_readout == 0)) begin
-                    // send reset
-                    tb_i.reset_readout(debug, samples_received);
+                  if ((readout_reset_mode == READOUT_RESET) && (reset_during_readout == 0)) begin
+                    // send reset in the middle of readout
+                    tb_i.reset_readout(debug);
+                    // clear received data
+                    tb_i.clear_received_data();
                   end else begin
                     // finish readout
                     debug.display("waiting for readout to finish", sim_util_pkg::DEBUG);
                     do @(posedge ps_clk); while (~(ps_readout_data.ok & ps_readout_data.last));
                   end
                 end
+                // extra clock cycle to make sure we get the last sample
+                @(posedge ps_clk);
                 // check data we read out is correct
-                tb_i.check_output(debug, samples_sent, samples_received, write_depth, 1 << banking_mode);
+                tb_i.check_output(debug, 1 << banking_mode);
               end else begin
                 repeat (10) @(posedge ps_clk);
                 debug.display("attempting starting readout (expecting failure since we didn't save any data)", sim_util_pkg::DEBUG);
                 tb_i.start_readout(debug, 1'b0);
-                // clear queues
-                tb_i.clear_samples_sent(samples_sent);
-                while (samples_received.size() > 0) samples_received.pop_back();
-                while (write_depth.size() > 0) write_depth.pop_back();
               end
+              // clear queues
+              tb_i.clear_sent_data();
+              tb_i.clear_received_data();
+              tb_i.clear_write_depth();
             end
           end
-        end
-      end
-    end
-  end
+          trigger_mode = trigger_mode.next;
+        end while (trigger_mode != trigger_mode.first);
+        stop_condition = stop_condition.next;
+      end while (stop_condition != stop_condition.first);
+      capture_reset_mode = capture_reset_mode.next;
+    end while (capture_reset_mode != capture_reset_mode.first);
+    readout_reset_mode = readout_reset_mode.next;
+  end while (readout_reset_mode != readout_reset_mode.first);
   debug.finish();
 end
 
