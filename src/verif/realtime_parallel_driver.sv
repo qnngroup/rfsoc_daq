@@ -5,8 +5,8 @@
 
 `timescale 1ns/1ps
 module realtime_parallel_driver #(
-  parameter DWIDTH = 32,
-  parameter CHANNELS = 1
+  parameter int DWIDTH = 32,
+  parameter int CHANNELS = 1
 ) (
   input logic clk,
   input logic reset,
