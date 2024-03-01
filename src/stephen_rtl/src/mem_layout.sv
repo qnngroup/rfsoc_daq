@@ -25,11 +25,15 @@
         `define CHAN_SAMPLES          (`CHANNEL_MUX_WIDTH/`WD_DATA_WIDTH)    // Number of mem_map entries for one channel mux register (2)
         `define BUFF_TIMESTAMP_WIDTH  32                                     // Bit width for buffer timestamp register (32) 
         `define BUFF_SAMPLES          (`BUFF_TIMESTAMP_WIDTH/`WD_DATA_WIDTH) // Number of mem_map entries for one buff_timestamp register (2)
-        `define FIRMWARE_VERSION      16'h1_002                              // Data Acquisition System (DAS) Version Number
+        `define FIRMWARE_VERSION      16'h1_003                              // Data Acquisition System (DAS) Version Number
         
-        // IDs for internal mem_map usages (NOTE: RPOLL = RTL_POLL => address is a polling address => after ps writes, freshbits are cleared once the rtl is ready to poll)
+        // IDs for internal mem_map usages. Note:
+        // RPOLL = RTL_POLL => address is a polling address => after ps writes, freshbits are cleared once the rtl is ready to poll
+        // PS_BIGREG = Large registers the ps writes to and rtl reads from (valid addr handled appropriately)
+        // RTL_BIGREG = Large registers the rtl writes to and ps reads from (valid addr handled appropriately)
+        // READONLY = rtl and ps cannot write to this addr
         `define RST_ID                0                                  // (RPOLL)  Reset register
-        `define PS_SEED_BASE_ID       ({$clog2(`MEM_SIZE){1'b0}} + 1)    // (RPOLLs) Register for seeds that will be used by the random signal generator (This and next BATCH_SAMPLES addresses)
+        `define PS_SEED_BASE_ID       ({$clog2(`MEM_SIZE){1'b0}} + 1)    // (RPOLLs, PS_BIGREG) Register for seeds that will be used by the random signal generator (This and next BATCH_SAMPLES addresses)
         `define PS_SEED_VALID_ID      (`PS_SEED_BASE_ID +`BATCH_SAMPLES) // (RPOLL)  Indicates to rtl that a batch of seeds have been stored. 
         `define TRIG_WAVE_ID          (`PS_SEED_VALID_ID + 1)            // (RPOLL)  Triggers the triangle wave generation 
         `define DAC_HLT_ID            (`PS_SEED_VALID_ID + 2)            // (RPOLL)  Halts the DAC output
@@ -41,11 +45,11 @@
         `define PWL_PREP_ID           (`PS_SEED_VALID_ID + 8)            // (RPOLL)  Signals to the PWL generator to expect a burst of tuples upon which a waveform should be constructed. 
         `define RUN_PWL_ID            (`PS_SEED_VALID_ID + 9)            // (RPOLL)  Run whatever waveform was last saved to the pwl
         `define BUFF_CONFIG_ID        (`PS_SEED_VALID_ID + 10)           // (RPOLL)  Buffer config register
-        `define BUFF_TIME_BASE_ID     (`PS_SEED_VALID_ID + 11)           // Buffer timestamp base register (This and next BUFF_SAMPLES addresses)
+        `define BUFF_TIME_BASE_ID     (`PS_SEED_VALID_ID + 11)           // (RTL_BIGREG) Buffer timestamp base register (This and next BUFF_SAMPLES addresses).
         `define BUFF_TIME_VALID_ID    (`BUFF_TIME_BASE_ID+`BUFF_SAMPLES) // Indicates to rtl that a full buffer timestamp value has been sent to the previous BUFF_SAMPLES address.
-        `define CHAN_MUX_BASE_ID      (`BUFF_TIME_VALID_ID + 1)          // (RPOLLs) Channel mux base register (This and next CHAN_SAMPLES addresses) 
+        `define CHAN_MUX_BASE_ID      (`BUFF_TIME_VALID_ID + 1)          // (RPOLLs, PS_BIGREG) Channel mux base register (This and next CHAN_SAMPLES addresses) 
         `define CHAN_MUX_VALID_ID     (`CHAN_MUX_BASE_ID+`CHAN_SAMPLES)  // (RPOLL)  Indicates to rtl that a full channel mux value has been sent to the previous CHAN_SAMPLES address.
-        `define SDC_BASE_ID           (`CHAN_MUX_VALID_ID + 1)           // (RPOLLs) Sample discriminator base register (This and next SDC_SAMPLES addresses)
+        `define SDC_BASE_ID           (`CHAN_MUX_VALID_ID + 1)           // (RPOLLs, PS_BIGREG) Sample discriminator base register (This and next SDC_SAMPLES addresses)
         `define SDC_VALID_ID          (`SDC_BASE_ID + `SDC_SAMPLES)      // (RPOLL)  Indicates to rtl that a full sdc value has been sent to the previous SDC_SAMPLES address.  
         `define VERSION_ID            (`SDC_VALID_ID + 1)                // (READONLY) Reports the firmware version
         `define MEM_SIZE_ID           (`SDC_VALID_ID + 2)                // (READONLY)  stores the memory size. 
@@ -94,9 +98,21 @@
         logic[`ADDR_NUM-1:0][31:0] ids = {32'(`MEM_SIZE_ID), 32'(`VERSION_ID), 32'(`SDC_VALID_ID), 32'(`SDC_BASE_ID), 32'(`CHAN_MUX_VALID_ID), 32'(`CHAN_MUX_BASE_ID), 32'(`BUFF_TIME_VALID_ID), 32'(`BUFF_TIME_BASE_ID), 32'(`BUFF_CONFIG_ID), 32'(`RUN_PWL_ID), 32'(`PWL_PREP_ID), 32'(`DAC2_ID), 32'(`DAC1_ID), 32'(`SCALE_DAC_OUT_ID), 32'(`MAX_DAC_BURST_SIZE_ID), 32'(`DAC_BURST_SIZE_ID), 32'(`DAC_HLT_ID), 32'(`TRIG_WAVE_ID), 32'(`PS_SEED_VALID_ID), 32'(`PS_SEED_BASE_ID), 32'(`RST_ID)};
 
         `define flash_sig(sig) sig = 1; #10; sig = 0; #10;
-        `define is_READONLY(index) (index == `MAX_DAC_BURST_SIZE_ID || index == `VERSION_ID || index == `MEM_SIZE_ID ||  (index >= `MAPPED_ID_CEILING && index < `MEM_TEST_BASE_ID) || (index >= `MEM_TEST_BASE_ID+50 && index < `ABS_ID_CEILING) || index == `ABS_ID_CEILING)
-        `define is_RTLPOLL(index)  (index == `RST_ID || (index >= `PS_SEED_BASE_ID && index <= `PS_SEED_VALID_ID) || index == `TRIG_WAVE_ID || index == `DAC_HLT_ID || index == `PWL_PREP_ID || index == `RUN_PWL_ID || index == `DAC_BURST_SIZE_ID || index == `SCALE_DAC_OUT_ID || index == `BUFF_CONFIG_ID || (index >= `CHAN_MUX_BASE_ID && index <= `CHAN_MUX_VALID_ID)  || (index >= `SDC_BASE_ID && index <= `SDC_VALID_ID))
-        `define is_RTLPOLL_addr(addr)  (addr == `RST_ADDR || (addr >= `PS_SEED_BASE_ADDR && addr <= `PS_SEED_VALID_ADDR) || addr == `TRIG_WAVE_ADDR || addr == `DAC_HLT_ADDR || addr == `PWL_PREP_ADDR || addr == `RUN_PWL_ADDR || addr == `DAC_BURST_SIZE_ADDR || addr == `SCALE_DAC_OUT_ADDR || addr == `BUFF_CONFIG_ADDR || (addr >= `CHAN_MUX_BASE_ADDR && addr <= `CHAN_MUX_VALID_ADDR)  || (addr >= `SDC_BASE_ADDR && addr <= `SDC_VALID_ADDR))
+        `define ADDR2ID(addr)        ((addr - `PS_BASE_ADDR) >> 2)
+        `define ID2ADDR(index)       ((index << 2) + `PS_BASE_ADDR)
+        /*
+        is_RTLPOLL => regs where rtl only reads from and ps writes to. 
+        is_PS_BIGREG => large regs the processor writes to and rtl reads from
+        is_RTL_BIGREG => large regs the rtl writes to and ps reads from
+        is_PS_VALID => the valid signal for large regs of type PS_BIGREG
+        is_RTL_VALID => the valid signal for large regs of type RTL_BIGREG
+        */
+        `define is_READONLY(index)   (index == `MAX_DAC_BURST_SIZE_ID || index == `VERSION_ID || index == `MEM_SIZE_ID ||  (index >= `MAPPED_ID_CEILING && index < `MEM_TEST_BASE_ID) || (index >= `MEM_TEST_BASE_ID+50 && index < `ABS_ID_CEILING) || index == `ABS_ID_CEILING)
+        `define is_RTLPOLL(index)    (index == `RST_ID || (index >= `PS_SEED_BASE_ID && index <= `PS_SEED_VALID_ID) || index == `TRIG_WAVE_ID || index == `DAC_HLT_ID || index == `PWL_PREP_ID || index == `RUN_PWL_ID || index == `DAC_BURST_SIZE_ID || index == `SCALE_DAC_OUT_ID || index == `BUFF_CONFIG_ID || (index >= `CHAN_MUX_BASE_ID && index <= `CHAN_MUX_VALID_ID)  || (index >= `SDC_BASE_ID && index <= `SDC_VALID_ID))
+        `define is_PS_BIGREG(index)  ((index >= `PS_SEED_BASE_ID && index <= `PS_SEED_VALID_ID) || (index >= `CHAN_MUX_BASE_ID && index <= `CHAN_MUX_VALID_ID)  || (index >= `SDC_BASE_ID && index <= `SDC_VALID_ID))
+        `define is_RTL_BIGREG(index) (index >= `BUFF_TIME_BASE_ID && index <= `BUFF_TIME_VALID_ID) 
+        `define is_PS_VALID(index)   (index == `PS_SEED_VALID_ID || index == `CHAN_MUX_VALID_ID  || index == `SDC_VALID_ID)
+        `define is_RTL_VALID(index)  (index == `BUFF_TIME_VALID_ID)
     endpackage 
 
 `endif

@@ -3,13 +3,13 @@
 import mem_layout_pkg::*;
 
 module sys_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] done);
-    localparam TOTAL_TESTS = 13; 
+    localparam TOTAL_TESTS = 15; 
     localparam STARTING_TEST = 0; 
     localparam TIMEOUT = 10_000; 
     localparam SKIP_TRIVIAL_TESTS = 1;
     logic clk, rst;
 
-    enum logic[2:0] {IDLE, TEST, MEM_TEST_CHECK, WRESP, CHECK, DONE} testState; 
+    enum logic[2:0] {IDLE, TEST, READ_DATA, MEM_TEST_CHECK, WRESP, CHECK, DONE} testState; 
     logic[1:0] test_check; // test_check[0] = check, test_check[1] == 1 => test passed else test failed 
     logic[7:0] test_num; 
     logic[7:0] testsPassed, testsFailed, correct_steps; 
@@ -17,7 +17,9 @@ module sys_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] done)
     logic kill_tb; 
     logic panic = 0; 
     logic[15:0] timer, counter;
-    logic[1:0] mt_timer; 
+    logic[`A_DATA_WIDTH-1:0] timer2;  
+    logic test_start; 
+    logic[`WD_DATA_WIDTH-1:0] read_data, curr_reg; 
 
     logic[1:0] got_wresp;  //[1] == error bit (wr_if.data wasn't okay when recieved), [0] == sys saw a wr_if.data 
     logic[`BATCH_WIDTH-1:0] dac_batch;
@@ -31,7 +33,12 @@ module sys_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] done)
     logic[`CHAN_SAMPLES-1:0][`WD_DATA_WIDTH-1:0] exp_cmc_data; 
     logic[`SDC_SAMPLES-1:0][`WD_DATA_WIDTH-1:0] exp_sdc_data; 
     logic[`BUFF_SAMPLES-1:0][`WD_DATA_WIDTH-1:0] bufft_reg; 
-    logic[`WD_DATA_WIDTH-1:0] rand_val; 
+    logic[`WD_DATA_WIDTH-1:0] rand_val;
+
+    logic[`WD_DATA_WIDTH-1:0] bufft0,bufft1,bufftvalid;
+    assign bufft0 = sys.slave.mem_map[`BUFF_TIME_BASE_ID];
+    assign bufft1 = sys.slave.mem_map[`BUFF_TIME_BASE_ID+1];
+    assign bufftvalid = sys.slave.mem_map[`BUFF_TIME_BASE_ID+2]; 
 
     Recieve_Transmit_IF #(`A_BUS_WIDTH, `A_DATA_WIDTH)   wa_if (); 
     Recieve_Transmit_IF #(`WD_BUS_WIDTH, `WD_DATA_WIDTH) wd_if (); 
@@ -52,6 +59,7 @@ module sys_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] done)
     assign rr_if.dev_rdy = 1;
     assign {rr_if.data_to_send, rr_if.data, rr_if.send, rr_if.trans_rdy} = 0;
     assign {pwl_dma_if.data, pwl_dma_if.last, pwl_dma_if.valid} = 0;
+    assign curr_reg = sys.slave.mem_map[`ADDR2ID(timer2)]; 
 
     axi_transmit #(.BUS_WIDTH(`A_BUS_WIDTH), .DATA_WIDTH(`A_DATA_WIDTH))
     waddr_ps_transmitter(.clk(clk), .rst(rst),
@@ -157,16 +165,14 @@ module sys_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] done)
             test_check = (testState == CHECK)? {1'b1, 1'b1} : 0;
         else if (test_num == 7)  
             test_check = (testState == CHECK)? {1'b1, 1'b1} : 0;
-        else if (test_num == 8)
-            test_check = (correct_edge != 0)? {correct_edge == 1, 1'b1} : 0;
-        else if (test_num == 9) 
-            test_check = (correct_edge != 0)? {correct_edge == 1, 1'b1} : 0;
         else if (test_num == 10) 
             test_check = (testState == CHECK)? {bufft_reg == 32'hBEEF_BEAD, 1'b1} : 0; 
         else if (test_num == 11) 
             test_check = (rd_if.valid_data)? {rd_if.data  == `FIRMWARE_VERSION, 1'b1} : 0; 
         else if (test_num == 12) 
             test_check = (correct_edge != 0 && testState == MEM_TEST_CHECK)? {correct_edge == 1, 1'b1} : 0; 
+        else if (test_num == 8 || test_num == 9 || test_num == 13 || test_num == 14)
+            test_check = (test_start == 0)? {correct_edge == 1, correct_edge != 0} : 0;
         else test_check = 0; 
     end
 
@@ -179,7 +185,7 @@ module sys_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] done)
             end else begin
                 testState <= IDLE;
                 {testsPassed,testsFailed, kill_tb} <= 0; 
-                {done, timer, counter, mt_timer,correct_steps} <= 0;
+                {done, timer, read_data, counter, timer2, test_start, correct_steps} <= 0;
                 test_num <= STARTING_TEST; 
 
                 {wa_if.data_to_send, wd_if.data_to_send, ra_if.data_to_send} <= 0;
@@ -187,6 +193,7 @@ module sys_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] done)
                 {dac_check,first_batch,seen_first_batch} <= 0;
                 {buffc_if.ready, cmc_if.ready, sdc_if.ready} <= 0;
                 {bufft_if.data, bufft_if.valid, bufft_reg} <= 0;
+                got_wresp <= 0; 
             end
         end else begin
             case(testState)
@@ -430,6 +437,7 @@ module sys_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] done)
                     // Start up different modes sequentially and ensure they get initiated. 
                     if (test_num == 8) begin 
                         if (timer == 0) begin
+                            {correct_steps,test_start} <= 1;
                             wa_if.data_to_send <= `PS_SEED_VALID_ADDR;
                             wd_if.data_to_send <= 1; 
                             {wa_if.send, wd_if.send} <= 3;
@@ -487,6 +495,7 @@ module sys_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] done)
                         end else timer <= timer + 1; 
 
                         if (timer >= 0 && timer < `SDC_SAMPLES) begin
+                            if (timer == 0) {correct_steps,test_start} <= 1;
                             wa_if.data_to_send <= `SDC_BASE_ADDR+(timer<<2); 
                             wd_if.data_to_send <= timer; 
                             {wa_if.send, wd_if.send} <= 3;
@@ -566,12 +575,15 @@ module sys_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] done)
                         if (rd_if.valid_data) begin
                             testState <= CHECK;
                             timer <= 0;
-                            {correct_steps,mt_timer} <= 0;
+                            {correct_steps,timer2} <= 0;
                         end else timer <= timer + 1; 
                     end 
                     // Run simple memory test
                     if (test_num == 12) begin
                         if (timer == 50) begin
+                            timer <= 51;
+                            testState <= WRESP;
+                        end else if (timer == 51) begin
                             timer <= 0;
                             testState <= CHECK;
                         end else timer <= timer + 1; 
@@ -582,28 +594,145 @@ module sys_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] done)
                             {wa_if.send, wd_if.send} <= 3; 
                             testState <= MEM_TEST_CHECK;
                         end
-                    end          
+                    end 
+                    // Confirm that writing to all registers with valid bit implements correct back pressure (ie writes back a 0 on the valid reg)
+                    if (test_num == 13) begin
+                        if (timer == 0) begin
+                            {correct_steps,test_start} <= 1;
+                            timer <= -1; 
+                        end
+                        if ($signed(timer) == -1) begin
+                            if (timer2 == 0) timer2 <= `PS_BASE_ADDR; 
+                            else if (`is_PS_BIGREG(`ADDR2ID(timer2))) timer <= 1;
+                            else if (timer2 == `MAPPED_ADDR_CEILING) begin
+                                timer2 <= 0;
+                                timer <= 0; 
+                                testState <= CHECK; 
+                            end
+                            else timer2 <= timer2 + 4;
+                        end
+                        if (timer == 1) begin
+                            if (`is_PS_VALID(`ADDR2ID(timer2))) begin
+                                wa_if.data_to_send <= timer2; 
+                                wd_if.data_to_send <= 1;
+                                {wa_if.send, wd_if.send} <= 3; 
+                                correct_steps <= ($signed(curr_reg) == 0)? correct_steps + 1 : correct_steps - 1; 
+                                timer <= 2;
+                            end else begin
+                                wa_if.data_to_send <= timer2; 
+                                wd_if.data_to_send <= rand_val;
+                                {wa_if.send, wd_if.send} <= 3; 
+                                testState <= WRESP;
+                                timer2 <= timer2 + 4; 
+                            end
+                        end
+                        if (timer == 2) begin
+                            if (curr_reg == 1) begin
+                                correct_steps <= correct_steps + 1;
+                                timer <= 3;
+                            end 
+                        end
+                        if (timer == 3) begin
+                            if (curr_reg == 0) begin
+                                correct_steps <= correct_steps + 1;
+                                testState <= WRESP; 
+                                timer <= 4;
+                                timer2 <= timer2 + 4; 
+                            end
+                        end
+                        if (timer == 4) begin
+                            {sdc_if.ready,cmc_if.ready,buffc_if.ready} <= {3'b111};
+                            correct_steps <= (sys.fresh_bits == 0)? correct_steps + 1 : correct_steps - 1; 
+                            timer <= -1; 
+                        end
+                    end  
+                    // Confirm rtl-written big reg implements back pressure correctly (rtl writes, valid is set. Once ps reads, valid is cleared)
+                    if (test_num == 14) begin
+                        if (timer == 0) begin
+                            {correct_steps,test_start} <= 1;
+                            wa_if.data_to_send <= `RST_ADDR;
+                            wd_if.data_to_send <= 1;
+                            {wa_if.send, wd_if.send} <= 3; 
+                            timer <= 1; 
+                            testState <= WRESP;
+                        end
+                        if (timer == 1) begin
+                            ra_if.data_to_send <= `BUFF_TIME_VALID_ADDR; 
+                            ra_if.send <= 1;
+                            timer <= 2; 
+                            testState <= READ_DATA; 
+                        end
+                        if (timer == 2) begin
+                            correct_steps <= (read_data == 0)? correct_steps + 1 : correct_steps - 1;
+                            bufft_if.data <= 69; 
+                            bufft_if.valid <= 1; 
+                            timer <= 3; 
+                        end
+                        if (timer == 3) begin
+                            if (bufft_if.ready) begin
+                                {bufft_if.valid,bufft_if.data} <= 0; 
+                                timer <= 4; 
+                            end
+                        end
+                        if (timer == 4) begin
+                            correct_steps <= (sys.fresh_bits[`BUFF_TIME_VALID_ID] && sys.fresh_bits[`BUFF_TIME_BASE_ID] && sys.fresh_bits[`BUFF_TIME_BASE_ID+1])? correct_steps + 1 : correct_steps - 1;
+                            ra_if.send <= 1;
+                            timer <= 5;
+                            testState <= READ_DATA; 
+                        end
+                        if (timer == 5) begin
+                            correct_steps <= (read_data == 1 && ~sys.fresh_bits[`BUFF_TIME_VALID_ID] && sys.fresh_bits[`BUFF_TIME_BASE_ID] && sys.fresh_bits[`BUFF_TIME_BASE_ID+1])? correct_steps + 1 : correct_steps - 1;
+                            timer <= 6;
+                            ra_if.send <= 1;
+                            testState <= READ_DATA;  
+                        end
+                        if (timer == 6) begin
+                            correct_steps <= (read_data == 0)? correct_steps + 1 : correct_steps - 1;
+                            ra_if.data_to_send <= `BUFF_TIME_BASE_ADDR; 
+                            ra_if.send <= 1;
+                            timer <= 7;
+                            testState <= READ_DATA; 
+                        end
+                        if (timer == 7) begin
+                            correct_steps <= (read_data == 69 && ~sys.fresh_bits[`BUFF_TIME_VALID_ID] && ~sys.fresh_bits[`BUFF_TIME_BASE_ID] && sys.fresh_bits[`BUFF_TIME_BASE_ID+1])? correct_steps + 1 : correct_steps - 1;
+                            ra_if.data_to_send <= `BUFF_TIME_BASE_ADDR + 4; 
+                            ra_if.send <= 1;
+                            timer <= 8;
+                            testState <= READ_DATA; 
+                        end
+                        if (timer == 8) begin
+                            correct_steps <= (read_data == 0 && sys.fresh_bits == 0)? correct_steps + 1 : correct_steps - 1;
+                            timer <= 0;
+                            testState <= CHECK; 
+                        end
+                    end         
+                end 
+                READ_DATA: begin
+                    if (rd_if.valid_data) begin
+                        read_data <= rd_if.data; 
+                        testState <= TEST; 
+                    end
                 end 
                 MEM_TEST_CHECK: begin
-                    if (mt_timer == 0) begin
+                    if (timer2 == 0) begin
                         if (wr_if.valid_data && wr_if.data == `OKAY) begin
                             ra_if.data_to_send <= wa_if.data_to_send; 
                             ra_if.send <= 1; 
-                            mt_timer <= 1; 
+                            timer2 <= 1; 
                         end 
                     end
-                    if (mt_timer == 1) begin
+                    if (timer2 == 1) begin
                         if (rd_if.valid_data) begin
                             correct_steps <= (rd_if.data  == wd_if.data_to_send - 10)? correct_steps + 1 : correct_steps - 1; 
                             ra_if.data_to_send <= wa_if.data_to_send+4; 
                             ra_if.send <= 1;
-                            mt_timer <= 2; 
+                            timer2 <= 2; 
                         end 
                     end 
-                    if (mt_timer == 2) begin
+                    if (timer2 == 2) begin
                         if (rd_if.valid_data) begin
                             correct_steps <= (rd_if.data  == wd_if.data_to_send + 10)? correct_steps + 1 : correct_steps - 1; 
-                            mt_timer <= 0;
+                            timer2 <= 0;
                             testState <= TEST; 
                         end 
                     end 
@@ -660,8 +789,9 @@ module sys_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] done)
             if (testState != WRESP && wr_if.valid_data) got_wresp <= {wr_if.data != `OKAY,1'b1}; 
             if (dac_check[0]) dac_check <= 0; 
             if (valid_dac_batch) counter <= counter + 1;
+            if (test_start) test_start <= 0; 
 
-            if (test_num == 9 || test_num == 12 || test_num == 8) begin
+            if (test_num == 9 || test_num == 12 || test_num == 8 || test_num == 13 || test_num == 14) begin
                 if (test_check[0]) begin
                     if (test_check[1]) begin 
                         testsPassed <= testsPassed + 1;
@@ -754,7 +884,7 @@ module sys_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] done)
             #100;
         end else begin
             $write("%c[1;31m",27); 
-            $display("\nFull System Tests Timed out on test %d!\n", test_num);
+            $display("\nFull System Tests timed out on test %d!\n", test_num);
             $write("%c[0m",27);
             #100; 
         end

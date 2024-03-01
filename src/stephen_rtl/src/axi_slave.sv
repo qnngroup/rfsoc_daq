@@ -91,6 +91,7 @@ module axi_slave #(parameter A_BUS_WIDTH=2, parameter A_DATA_WIDTH=5, parameter 
 				if (i == `MAX_DAC_BURST_SIZE_ID) mem_map[i] <= `MAX_DAC_BURST_SIZE; 
 				else if (i == `DAC_BURST_SIZE_ID) mem_map[i] <= 0; 
 				else if (i == `SCALE_DAC_OUT_ID) mem_map[i] <= 0; 
+				else if (`is_PS_VALID(i) || `is_RTL_VALID(i)) mem_map[i] <= 0;
 				else if (i == `MEM_SIZE_ID) mem_map[i] <= `MEM_SIZE; 
 				else if (i == `VERSION_ID) mem_map[i] <= `FIRMWARE_VERSION; 
 				else if (i == `ABS_ID_CEILING) mem_map[i] <= -2; 
@@ -102,6 +103,8 @@ module axi_slave #(parameter A_BUS_WIDTH=2, parameter A_DATA_WIDTH=5, parameter 
 				if (rtl_write_reqs_full[i]) begin
 					mem_map[i] <= rtl_wd_in[i];
 					fresh_bits[i] <= 1;
+				end else if (`is_PS_BIGREG(i) && `is_PS_VALID(i)) begin
+					if (fresh_bits[i] && rtl_rdy[i]) mem_map[i] <= 0; 
 				end
 				if (clr_rd_out) rtl_rd_out[i] <= 0;
 				else begin 
@@ -139,7 +142,7 @@ module axi_slave #(parameter A_BUS_WIDTH=2, parameter A_DATA_WIDTH=5, parameter 
 			end	else wcomplete <= 0; 
 
 			if (can_ps_read) begin 
-				fresh_bits[rindex_out] <= 0; 
+				if (~`is_RTLPOLL(rindex_out)) fresh_bits[rindex_out] <= 0; 
 				rcomplete <= 1; 
 			end else rcomplete <= 0; 
 		end

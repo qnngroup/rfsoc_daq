@@ -35,7 +35,7 @@ module sys(input wire clk,sys_rst,
     enum logic {IDLE_DB, CHANGE_BURST_SIZE} dacBurstState;
     enum logic {IDLE_S, CHANGE_SCALE} scaleParamState;
     enum logic {IDLE_H, HALT_DAC} hltState;
-    enum logic {IDLE_B, BUFFT_POLL_WAIT} bufftState;
+    enum logic[1:0] {IDLE_B, BUFFT_POLL_WAIT, BUFFT_CLR_FB} bufftState;
     assign rst = sys_rst || rst_cmd;
     assign pl_rstn = ~rst; 
     assign dac_batch = dac_samples_scaled;  
@@ -65,9 +65,10 @@ module sys(input wire clk,sys_rst,
             endcase 
             if ((`is_RTLPOLL(i)) || (`is_READONLY(i))) {rtl_read_reqs[i], rtl_write_reqs[i], rtl_wd_in[i]} = 0; //If rtl polls, no writing or reading. If it's readonly, just use the package definition
             else if (i >= `BUFF_TIME_BASE_ID && i <= `BUFF_TIME_VALID_ID) begin
-                rtl_read_reqs[i] = 0; 
+                if (i == `BUFF_TIME_VALID_ID) rtl_read_reqs[i] = (bufftState == BUFFT_CLR_FB); 
+                else rtl_read_reqs[i] = 0; 
                 if (bufft_valid_clear) begin
-                    if (i == `BUFF_TIME_VALID_ID) {rtl_write_reqs[i], rtl_wd_in[i]} = {1'b1, 1'b0}; 
+                    if (i == `BUFF_TIME_VALID_ID) {rtl_wd_in[i], rtl_write_reqs[i]} = 1; 
                     else {rtl_write_reqs[i], rtl_wd_in[i]} = 0;
                 end else begin
                     rtl_write_reqs[i] = adc_intf.buff_timestamp_writereq; 
@@ -155,10 +156,13 @@ module sys(input wire clk,sys_rst,
                 end 
                 BUFFT_POLL_WAIT: begin
                     if (~fresh_bits[`BUFF_TIME_VALID_ID]) begin // processor is about to pull bufft reg, clear the valid addr
-                        bufft_valid_clear <= 1; 
-                        bufftState <= IDLE_B; 
+                        if (bufft_valid_clear) bufftState <= BUFFT_CLR_FB; 
+                        else bufft_valid_clear <= 1; 
                     end 
                 end 
+                BUFFT_CLR_FB: begin //freshbit will be cleared here
+                    bufftState <= IDLE_B; 
+                end
             endcase 
 
             if (bufft_valid_clear) bufft_valid_clear <= 0; 

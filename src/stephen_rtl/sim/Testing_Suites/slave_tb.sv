@@ -3,7 +3,8 @@
 import mem_layout_pkg::*;
 
 module slave_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] done);
-	localparam TOTAL_TESTS = 13; 
+	localparam STARTING_TEST = 0; 
+	localparam TOTAL_TESTS = 14; 
 	localparam OSC_DELAY = 5;
 	localparam TIMEOUT = 10_000; 
 
@@ -31,7 +32,6 @@ module slave_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] don
 	logic curr_freshbit;
 	logic[`A_DATA_WIDTH-1:0] curr_id, curr_addr, curr_addr_clkd; 
 	logic clr_rd_out; 
-
 
 	Recieve_Transmit_IF #(`A_BUS_WIDTH, `A_DATA_WIDTH)   wa_if (); 
 	Recieve_Transmit_IF #(`WD_BUS_WIDTH, `WD_DATA_WIDTH) wd_if (); 
@@ -103,11 +103,6 @@ module slave_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] don
 	assign curr_rtl_rd = rtl_rd_out[curr_id]; 
 	assign curr_freshbit = fresh_bits[curr_id];
 
-	logic probe;
-	logic[15:0] probe_data; 
-	assign probe = fresh_bits[curr_id_clkd] == 0;
-	assign probe_data = rtl_rd_out[curr_id_clkd];
-
 	always_comb begin
 		test_check = (test_start == 0)? {correct_edge == 1, correct_edge != 0} : 0;
 		if (test_num < 6) begin 
@@ -129,7 +124,8 @@ module slave_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] don
 				panic <= 0;
 			end else begin
 				testState <= IDLE;
-				{test_num,testsPassed,testsFailed, kill_tb} <= 0; 
+				test_num <= STARTING_TEST; 
+				{testsPassed,testsFailed, kill_tb} <= 0; 
 				{done,timer,curr_id_clkd,test_start} <= 0;
 				
 				{rtl_write_reqs, rtl_read_reqs, rtl_wd_in} <= 0; 
@@ -424,7 +420,7 @@ module slave_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] don
 							timer <= 1; 
 						end
 						if (timer == 1) begin
-							if (`is_RTLPOLL_addr(curr_addr_clkd)) begin 
+							if (`is_RTLPOLL(`ADDR2ID(curr_addr_clkd))) begin 
 								wa_if.data_to_send <= curr_addr_clkd; 
 								wd_if.data_to_send <= ((curr_addr_clkd-`PS_BASE_ADDR)>>2)+25;
 								{wa_if.send, wd_if.send} <= 3;
@@ -519,6 +515,8 @@ module slave_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] don
 										correct_steps <= (read_data == wd_if.data_to_send - 10)? correct_steps + 1 : correct_steps - 1; 	
 									else if (curr_addr_clkd >= `MEM_TEST_END_ADDR && curr_addr_clkd < `ABS_ADDR_CEILING) 
 										correct_steps <= ($signed(read_data) == -1)? correct_steps + 1 : correct_steps - 1; 	
+									else if (`is_PS_VALID(`ADDR2ID(curr_addr_clkd)))
+										correct_steps <= (read_data == 0)? correct_steps + 1 : correct_steps - 1; 	
 									else 
 										correct_steps <= (read_data == wd_if.data_to_send)? correct_steps + 1 : correct_steps - 1;  
 								end 
@@ -551,8 +549,66 @@ module slave_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] don
 						end 
 						if (timer == 2) begin
 							correct_steps <= ($signed(read_data) == -2)? correct_steps + 1 : correct_steps - 1;
+							testState <= WRESP_WAIT; 
+							timer <= 3;
+						end
+						if (timer == 3) begin
 							timer <= 0;
 							testState <= CHECK;
+						end
+					end
+					// Confirm big reg back pressure is implemented correctly (ie valid register is written 0 after rtl reads)
+					if (test_num == 13) begin
+						if (timer < 100) begin
+							if (timer == 0) {correct_steps,rtl_rdy,test_start} <= 1; 
+							if (timer != `SDC_SAMPLES) begin
+								wa_if.data_to_send <= `SDC_BASE_ADDR + (timer << 2); 
+								wd_if.data_to_send <= timer; 
+								{wa_if.send, wd_if.send} <= 3;  
+								testState <= WRESP_WAIT; 
+								timer <= timer + 1;
+							end else timer <= 100; 
+						end
+						if (timer == 100) begin
+							ra_if.data_to_send <= `SDC_VALID_ADDR; 
+							ra_if.send <= 1; 
+							testState <= READ_DATA; 
+							timer <= 101; 
+						end
+						if (timer == 101) begin
+							correct_steps <= (read_data == 0)? correct_steps + 1 : correct_steps - 1; 
+							wa_if.data_to_send <= `SDC_VALID_ADDR; 
+							wd_if.data_to_send <= 1; 
+							{wa_if.send, wd_if.send} <= 3;  
+							testState <= WRESP_WAIT; 
+							timer <= 102;
+						end
+						if (timer == 102) begin
+							ra_if.data_to_send <= `SDC_VALID_ADDR; 
+							ra_if.send <= 1; 
+							testState <= READ_DATA; 
+							timer <= 103; 
+						end
+						if (timer == 103) begin
+							correct_steps <= (read_data == 1)? correct_steps + 1 : correct_steps - 1; 
+							rtl_rdy[`SDC_BASE_ID+:`SDC_SAMPLES+1] <= -1; 
+							timer <= 104;
+						end
+						if (timer == 104) begin
+							rtl_rdy[`SDC_BASE_ID+:`SDC_SAMPLES+1] <= 0; 
+							ra_if.data_to_send <= `SDC_VALID_ADDR; 
+							ra_if.send <= 1; 
+							testState <= READ_DATA; 
+							timer <= 105; 
+						end 
+						if (timer == 105) begin
+							correct_steps <= (read_data == 0)? correct_steps + 1 : correct_steps - 1; 
+							timer <= 106;
+						end
+						if (timer == 106) begin
+							correct_steps <= (fresh_bits == 0)? correct_steps + 1 : correct_steps - 1; 
+							timer <= 0;
+							testState <= CHECK; 
 						end
 					end
 				end

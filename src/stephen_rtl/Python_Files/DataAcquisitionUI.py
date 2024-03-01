@@ -1,5 +1,5 @@
-# from DataAcquisitionOverlay_TEST import *
-from DataAcquisitionOverlay import *
+from DataAcquisitionOverlay_TEST import *
+# from DataAcquisitionOverlay import *
 from IPython.display import clear_output
 
 download = input("Download bitstream? (y/n) ")

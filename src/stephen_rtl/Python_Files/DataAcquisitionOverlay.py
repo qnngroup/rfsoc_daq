@@ -216,6 +216,35 @@ class DataAcquisitionOverlay():
         if wrong != 0: total_wrong+=1
         else: total_right+= 1
         correct,wrong = 0,0
+        # Write to large register poll check
+        sdc_vec = [r.randrange(0,0xffff) for el in range(sdc_samples)]
+        addr = addr_map["sdc_base"]
+        for i in range(sdc_samples):
+            self.write(addr,sdc_vec[i])
+            addr += 4
+        val = self.read(addr)
+        correct, wrong = self.test_print(val == -1, "large_reg", correct, wrong,i=0)
+        self.write(addr, 1)
+        val = self.read(addr)
+        correct, wrong = self.test_print(val == 0, "large_reg", correct, wrong,i=1)
+        sdc_vec_in = []
+        addr = addr_map["sdc_base"]
+        for i in range(sdc_samples):
+            sdc_vec_in.append(self.read(addr))
+            addr+=4
+        for i in range(len(sdc_vec_in)): correct, wrong = self.test_print(sdc_vec[i] == sdc_vec_in[i], "large_reg", correct, wrong,i=2+i)
+        if wrong == 0: print(Fore.GREEN+"\nLarge Register Write Test Passed\n")
+        else: print(Fore.RED+"\nLarge Register Write Test Failed\n")
+        if wrong != 0: total_wrong+=1
+        else: total_right+= 1
+        correct,wrong = 0,0
+        # Simple Mem Test
+        correct, wrong = self.run_simple_mem_test(verbose=False)
+        if wrong == 0: print(Fore.GREEN+"Simple Mem Test Passed\n")
+        else: print(Fore.RED+f"Simple Mem Test Failed ({correct} correct, {wrong} wrong)\n")
+        if wrong != 0: total_wrong+=1
+        else: total_right+= 1
+        correct,wrong = 0,0
         # Reset Test
         self.rst()
         for i, addr in enumerate(addr_map_inverted):

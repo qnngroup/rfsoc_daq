@@ -1,6 +1,6 @@
 from math import log2
-firmware_version = 1.002
-raw_fv = 0x1002
+firmware_version = 1.003
+raw_fv = 0x1003
 mem_size = 256
 max_dac_burst_size = 32767
 base_addr = 0x9000_0000
