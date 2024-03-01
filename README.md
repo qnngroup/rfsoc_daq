@@ -26,9 +26,14 @@ Clone repository with
 $ git clone git@github.com:qnngroup/rfsoc_daq.git
 ```
 
-Linting is performed with [Verilator](https://www.veripool.org/verilator/) (v5.020-39-gd510e551f).
-Verilator is already installed on the lab computer, but to run linting on your personal machine, you will need to install it.
+### Tools
+Linting is performed with [`verible-verilog-lint`](https://github.com/chipsalliance/verible) (`v0.0-3567-gfeb51185`) and [`slang`](https://sv-lang.com/) (`5.0.33+f904c154`).
+Both tools are already installed on the lab computer, but to run linting on your personal machine, you will need to install them.
+Verible already has prebuilt packages for Windows, macOS, and Linux, but slang requires building from source.
+The latest version of slang uses features of C++20, and thus requires a recent version of gcc/clang to be installed.
 
+### Pre-commit hooks
+To prevent accidentally pushing broken code, or pushing code to the wrong branch, I've added a couple pre-commit checks which run before any commits can be executed.
 See [this](https://stackoverflow.com/questions/40462111/prevent-commits-in-master-branch) StackOverflow post on protecting the main branch.
 I also added a couple other pre-commit hooks to check for file size and unresolved merge conflicts.
 Install these hooks like so:
@@ -43,19 +48,24 @@ Create the module `my_module` in a file called `my_module.sv` (located in an app
 
 ### Unit test architecture
 
-A unit test should test all of the functionality in a module. Even if for the vast majority of use cases for a module you don't intend to use a particular feature, that feature must be tested in the unit test.
+A unit test should test all of the functionality in a module. Even if a particular function of the module gets used rarely, that function must be tested in the unit test.
 
-Unit tests should be written in a modular way, by combining SystemVerilog `task`s and `function`s into either a separate `_tb.sv` testbench module or `_pkg.sv` SystemVerilog package.
+Unit tests should generally be written in a modular way, by combining SystemVerilog `task`s and `function`s into either a separate `_tb.sv` testbench module or `_pkg.sv` SystemVerilog package.
+However, in some cases, if the unit test is simple enough, adding a separate module or package with utilities just introduces overhead and complexity and doesn't really improve code clarity.
 For example, if you precompute a test vector of stimulus and expected response for your device under test (DUT), those snippets of code can be put into separate `task`s or `function`s (see these forum posts [1](https://verificationacademy.com/forums/t/task-vs-function/32019), [2](https://www.reddit.com/r/FPGA/comments/pvz4m8/when_to_use_a_function_vs_a_task/) for deciding between `task`s and `function`s).
 That way, if your module is included in another module in the hierarchy and you want to test its behavior (either as an integration test, or a thorough unit test of the super-module), you can just call the modular blocks of code in the testbench module or package, reducing code duplication.
 
-Each unit test should create an instance of the `sim_util_pkg::debug` class to track errors in the module and to provide tunable test verbosity.
+See [dds_tb.sv](src/rtl/transmit_chain/dds/dds_tb.sv) and [dds_test.sv](src/rtl/transmit_chain/dds/dds_test.sv) for an example of a use case where introducing a `_tb.sv` testbench module is helpful.
+In the case of [axis_differentiator_test.sv](src/rtl/axis_processing/axis_differentiator), the test is simple enough that introducing a `_tb.sv` testbench module would make the test more confusing to understand and would do little to improve reusability.
+
+Each unit test should create an instance of the [`sim_util_pkg::debug` class](src/verif/sim_util_pkg.sv) to track errors in the module and to provide tunable test verbosity.
+This instance should be named `debug` and is used by the [run_unit_test.tcl](script/run_unit_test.tcl) script that is called during unit/regression tests to determine if a specific simulation test passes or fails.
 
 ```
 sim_util_pkg::debug debug = new(sim_util_pkg::DEFAULT);
 ```
 
-The `sim_util_pkg::debug` class offers 3 levels of verbosity: `DEFAULT` (lowest verbosity, good for regression tests or sanity checks), `VERBOSE` (medium verbosity), and `DEBUG` (highest verbosity, good if something is going wrong).
+The `sim_util_pkg::debug` class offers 3 levels of verbosity for stdout: `DEFAULT` (lowest verbosity, good for regression tests or sanity checks to make sure that your simulation actually ran), `VERBOSE` (medium verbosity, useful to check if the individual parts of your simulation ran), and `DEBUG` (highest verbosity, good if something is going wrong).
 The method `sim_util_pkg::debug.display(string msg, verbosity_t verbosity)` allows print statements to be generated at differing verbosity levels.
 Whenever you call `sim_util_pkg::debug.display()`, you must pass a verbosity argument, which determines the verbosity level at which that particular `display()` statement will actually print to the console.
 For example, if the method were called like so:
@@ -82,6 +92,11 @@ sim_util_pkg::debug debug = new(sim_util_pkg::DEBUG);
 
 Here's a template:
 ```
+// my_module_test.sv - Your Name
+// Brief description of the goal of the test
+// - more detailed bullets of specifics
+// - make sure to keep this comment updated when you change the file
+
 `timescale 1ns / 1ps
 module my_module_test ();
 
@@ -115,11 +130,9 @@ endmodule
 ### Linting your module
 
 To make sure you don't have any syntax errors and don't have sloppy coding practices, run the linter (`./script/lint.sh` from the repository root).
-There are a couple violations that are ignored:
- - `INITIALDLY` in `*_test.sv`, `*_If.sv`, and `*/verif/*.sv` (this allows for the use of blocking assignments in initial blocks for code used in simulation, which is standard).
- - `MULTITOP` (this allows all of the modules to be linted)
- - `WIDTHEXPAND`, `WIDTHTRUNC`, and `WIDTHCONCAT` in `*_test.sv` and `*/verif/*.sv` (this allows for sloppier comparison/assignment regarding bitwidths of quantities in simulation-only code)
-
+This will run `verible-verilog-lint` and `slang` on all `*.v` and `*.sv` files in the project.
+`verible-verilog-lint` primarly checks for coding style, since it only parses a single file at a time.
+`slang` parses dependencies and can check that modules are used correctly.
 
 ### Testing your module
 
