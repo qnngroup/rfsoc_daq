@@ -17,7 +17,7 @@ sim_util_pkg::debug debug = new(sim_util_pkg::DEFAULT); // printing, error track
 
 logic reset;
 logic clk = 0;
-localparam CLK_RATE_HZ = 100_000_000;
+localparam int CLK_RATE_HZ = 100_000_000;
 always #(0.5s/CLK_RATE_HZ) clk = ~clk;
 
 localparam int SAMPLE_WIDTH = 16;
@@ -35,6 +35,8 @@ typedef logic signed [SCALE_WIDTH-1:0] sc_int_t;
 typedef logic signed [OFFSET_WIDTH-1:0] os_int_t;
 
 sim_util_pkg::math #(int_t) math; // abs, max functions on signed sample type
+typedef logic [SAMPLE_WIDTH*PARALLEL_SAMPLES-1:0] batch_t;
+sim_util_pkg::queue #(.T(int_t), .T2(batch_t)) data_q_util = new;
 
 Realtime_Parallel_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES), .CHANNELS(CHANNELS)) data_out_if();
 Realtime_Parallel_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES), .CHANNELS(CHANNELS)) data_in_if();
@@ -49,92 +51,38 @@ always_comb begin
 end
 assign scale_offset_if.valid = 1'b1;
 
-real d_in;
-real scale;
-real offset;
+logic send_data;
+realtime_parallel_driver #(
+  .DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES),
+  .CHANNELS(CHANNELS)
+) driver_i (
+  .clk,
+  .reset,
+  .valid_rand(1'b1),
+  .valid_en({CHANNELS{send_data}}),
+  .intf(data_in_if)
+);
 
-int_t sent_data [CHANNELS][$];
-sc_int_t sent_scale [CHANNELS][$];
-os_int_t sent_offset [CHANNELS][$];
-int_t expected [CHANNELS][$];
-int_t received [CHANNELS][$];
+realtime_parallel_receiver #(
+  .DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES),
+  .CHANNELS(CHANNELS)
+) receiver_i (
+  .clk,
+  .intf(data_out_if)
+);
 
-always @(posedge clk) begin
-  if (reset) begin
-    data_in_if.data <= '0;
-  end else begin
-    // save data/scale_factor we send, as well as what should be outputted based on the
-    // scale factor and sent data
-    for (int channel = 0; channel < CHANNELS; channel++) begin
-      if (data_in_if.valid[channel]) begin
-        for (int i = 0; i < PARALLEL_SAMPLES; i++) begin
-          data_in_if.data[channel][i*SAMPLE_WIDTH+:SAMPLE_WIDTH] <= SAMPLE_WIDTH'($urandom_range({{(32-SAMPLE_WIDTH){1'b0}}, {SAMPLE_WIDTH{1'b1}}}));
-          d_in = real'(int_t'(data_in_if.data[channel][i*SAMPLE_WIDTH+:SAMPLE_WIDTH]));
-          scale = real'(sc_int_t'(scale_factor[channel]));
-          offset = real'(os_int_t'(offset_amount[channel]));
-          sent_data[channel].push_front(int_t'(data_in_if.data[channel][i*SAMPLE_WIDTH+:SAMPLE_WIDTH]));
-          sent_scale[channel].push_front(sc_int_t'(scale_factor[channel]));
-          sent_offset[channel].push_front(os_int_t'(offset_amount[channel]));
-          expected[channel].push_front(int_t'((d_in/(2.0**SAMPLE_WIDTH) * scale/(2.0**SCALE_FRAC_BITS) + offset/(2.0**OFFSET_WIDTH))* 2.0**SAMPLE_WIDTH));
-        end
-      end
-      // save data we got
-      if (data_out_if.valid[channel]) begin
-        for (int i = 0; i < PARALLEL_SAMPLES; i++) begin
-          received[channel].push_front(int_t'(data_out_if.data[channel][i*SAMPLE_WIDTH+:SAMPLE_WIDTH]));
-        end
-      end
-    end
-  end
-end
-
-task check_results();
-  for (int channel = 0; channel < CHANNELS; channel++) begin
-    debug.display($sformatf(
-      "received[%0d].size() = %0d",
-      channel,
-      received[channel].size()),
-      sim_util_pkg::VERBOSE
-    );
-    debug.display($sformatf(
-      "expected[%0d].size() = %0d",
-      channel,
-      expected[channel].size()),
-      sim_util_pkg::VERBOSE
-    );
-    if (received[channel].size() != expected[channel].size()) begin
-      debug.error("mismatched sizes; got a different number of samples than expected");
-    end
-    // check the values match
-    // casting to uint_t seems to perform a rounding operation, so the test data may be slightly too large
-    while (received[channel].size() > 0 && expected[channel].size() > 0) begin
-      debug.display($sformatf(
-        "processing data, scale = %x (%0f), offset = %x (%0f), sent_data = %x (%0f), expected = %x (%0f), received = %x (%0f)",
-        sent_scale[channel][$],
-        real'(sent_scale[channel][$])/(2.0**SCALE_FRAC_BITS),
-        sent_offset[channel][$],
-        real'(sent_offset[channel][$])/(2.0**OFFSET_WIDTH),
-        sent_data[channel][$],
-        real'(sent_data[channel][$])/(2.0**SAMPLE_WIDTH),
-        expected[channel][$],
-        real'(expected[channel][$])/(2.0**SAMPLE_WIDTH),
-        received[channel][$],
-        real'(received[channel][$])/(2.0**SAMPLE_WIDTH)),
-        sim_util_pkg::DEBUG
-      );
-      if (math.abs(expected[channel][$] - received[channel][$]) > 1) begin
-        debug.error($sformatf(
-          "mismatch: got %x, expected %x",
-          received[channel][$],
-          expected[channel][$])
-        );
-      end
-      received[channel].pop_back();
-      expected[channel].pop_back();
-      sent_scale[channel].pop_back();
-      sent_offset[channel].pop_back();
-      sent_data[channel].pop_back();
-    end
+task automatic sent_to_expected (
+  inout batch_t sent [$],
+  inout int_t expected [$],
+  input real scale,
+  input real offset
+);
+  real d_in;
+  int_t sent_split [$];
+  data_q_util.samples_from_batches(sent, sent_split, SAMPLE_WIDTH, PARALLEL_SAMPLES);
+  while (sent_split.size() > 0) begin
+    d_in = real'(sent_split.pop_back());
+    expected.push_front(int_t'((d_in/(2.0**SAMPLE_WIDTH) * scale/(2.0**SCALE_FRAC_BITS) + offset/(2.0**OFFSET_WIDTH))* 2.0**SAMPLE_WIDTH));
   end
 endtask
 
@@ -153,66 +101,38 @@ dac_prescaler #(
   .scale_offset(scale_offset_if)
 );
 
+int_t expected_q [$];
+int_t received_q [$];
+
 initial begin
   debug.display("### RUNNING TEST FOR DAC_PRESCALER ###", sim_util_pkg::DEFAULT);
   reset <= 1'b1;
-  data_in_if.data <= '0;
-  data_in_if.valid <= '0;
   repeat (500) @(posedge clk);
   reset <= 1'b0;
   repeat(5) @(posedge clk);
 
-  debug.display("setting scale = 0, offset = non-zero", sim_util_pkg::VERBOSE);
-  // send zero scale factor with non-zero offset
-  repeat (20) begin
-    // don't send any data while we're changing scale factor
-    data_in_if.valid <= '0;
-    for (int channel = 0; channel < CHANNELS; channel++) begin
-      scale_factor[channel] <= '0;
-      offset_amount[channel] <= os_int_t'($urandom_range(32'h3fff));
-    end
-    repeat (5) @(posedge clk);
-    data_in_if.send_samples(clk, 20, 1'b0, 1'b1);
-    repeat (50) @(posedge clk);
-    data_in_if.send_samples(clk, 20, 1'b1, 1'b1);
-    repeat (50) @(posedge clk);
-  end
-
-  debug.display("setting scale = non-zero, offset = 0", sim_util_pkg::VERBOSE);
-  // send non-zero scale factor with zero offset
-  repeat (20) begin
-    // don't send any data while we're changing scale factor
-    data_in_if.valid <= '0;
-    for (int channel = 0; channel < CHANNELS; channel++) begin
-      scale_factor[channel] <= sc_int_t'($urandom_range(32'h3ffff));
-      offset_amount[channel] <= '0;
-    end
-    repeat (5) @(posedge clk);
-    data_in_if.send_samples(clk, 20, 1'b0, 1'b1);
-    repeat (50) @(posedge clk);
-    data_in_if.send_samples(clk, 20, 1'b1, 1'b1);
-    repeat (50) @(posedge clk);
-  end
-
-  // send non-zero scale factor with non-zero offset
-  debug.display("setting scale = non-zero, offset = non-zero", sim_util_pkg::VERBOSE);
-  repeat (20) begin
-    // don't send any data while we're changing scale factor
-    data_in_if.valid <= '0;
+  repeat (50) begin
+    // send_data = 0 -> don't send any data while we're changing scale factor
     for (int channel = 0; channel < CHANNELS; channel++) begin
       scale_factor[channel] <= sc_int_t'($urandom_range(32'h3ffff));
       offset_amount[channel] <= os_int_t'($urandom_range(32'h3fff));
     end
     repeat (5) @(posedge clk);
-    data_in_if.send_samples(clk, 20, 1'b0, 1'b1);
-    repeat (50) @(posedge clk);
-    data_in_if.send_samples(clk, 20, 1'b1, 1'b1);
-    repeat (50) @(posedge clk);
+    send_data <= 1'b1;
+    repeat (1000) @(posedge clk);
+    send_data <= 1'b0;
+    repeat (10) @(posedge clk);
+    for (int channel = 0; channel < CHANNELS; channel++) begin
+      debug.display($sformatf("ch %0d: checking data", channel), sim_util_pkg::VERBOSE);
+      sent_to_expected(driver_i.data_q[channel], expected_q, real'(scale_factor[channel]), real'(offset_amount[channel]));
+      data_q_util.samples_from_batches(receiver_i.data_q[channel], received_q, SAMPLE_WIDTH, PARALLEL_SAMPLES);
+      data_q_util.compare_threshold(debug, received_q, expected_q, 1);
+      while (expected_q.size() > 0) expected_q.pop_back();
+      while (received_q.size() > 0) received_q.pop_back();
+    end
+    driver_i.clear_queues();
+    receiver_i.clear_queues();
   end
-  // stop sending data and finish reading out anything that is in the pipeline
-  data_in_if.valid <= '0;
-  repeat (10) @(posedge clk);
-  check_results();
 
   debug.finish();
 end

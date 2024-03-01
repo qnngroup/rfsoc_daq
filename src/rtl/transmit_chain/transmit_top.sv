@@ -57,7 +57,6 @@ module transmit_top #(
 // CDC for configuration registers for DAC prescaler and DDS
 ////////////////////////////////////////////////////////////////////////////////
 Axis_If #(.DWIDTH((SCALE_WIDTH+OFFSET_WIDTH)*CHANNELS)) dac_scale_offset ();
-Axis_If #(.DWIDTH(DDS_PHASE_BITS*CHANNELS)) dac_dds_phase_inc ();
 Axis_If #(.DWIDTH(1+2*CHANNELS)) dac_trigger_config ();
 Axis_If #(.DWIDTH($clog2(CHANNELS*3)*CHANNELS)) dac_channel_mux_config ();
 
@@ -71,18 +70,6 @@ axis_config_reg_cdc #(
   .dest_clk(dac_clk),
   .dest_reset(dac_reset),
   .dest(dac_scale_offset)
-);
-
-// synchronize DDS phase increment
-axis_config_reg_cdc #(
-  .DWIDTH(DDS_PHASE_BITS*CHANNELS)
-) ps_to_dac_dds_phase_inc_cdc_i (
-  .src_clk(ps_clk),
-  .src_reset(ps_reset),
-  .src(ps_dds_phase_inc),
-  .dest_clk(dac_clk),
-  .dest_reset(dac_reset),
-  .dest(dac_dds_phase_inc)
 );
 
 // synchronize trigger configuration to RFDAC clock domain
@@ -148,10 +135,12 @@ dds #(
   .PARALLEL_SAMPLES(PARALLEL_SAMPLES),
   .CHANNELS(CHANNELS)
 ) dds_i (
-  .clk(dac_clk),
-  .reset(dac_reset),
-  .data_out(dac_dds_data_out),
-  .phase_inc_in(dac_dds_phase_inc)
+  .ps_clk,
+  .ps_reset,
+  .ps_phase_inc(ps_dds_phase_inc),
+  .dac_clk,
+  .dac_reset,
+  .dac_data_out(dac_dds_data_out)
 );
 
 // triangle wave
