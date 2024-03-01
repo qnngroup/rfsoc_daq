@@ -51,9 +51,13 @@ axis_driver #(
 );
 
 logic adc_send_samples;
-realtime_parallel_driver #(
+
+realtime_parallel_driver_constrained #(
   .DWIDTH(rx_pkg::DATA_WIDTH),
-  .CHANNELS(rx_pkg::CHANNELS)
+  .CHANNELS(rx_pkg::CHANNELS),
+  .SAMPLE_WIDTH(rx_pkg::SAMPLE_WIDTH),
+  .PARALLEL_SAMPLES(rx_pkg::PARALLEL_SAMPLES),
+  .sample_t(rx_pkg::sample_t)
 ) adc_data_in_tx_i (
   .clk(adc_clk),
   .reset(adc_reset),
@@ -94,10 +98,17 @@ task automatic disable_send ();
   adc_send_samples <= 1'b0;
 endtask
 
+task automatic set_input_range (
+  input rx_pkg::sample_t min,
+  input rx_pkg::sample_t max
+);
+  adc_data_in_tx_i.set_data_range(min, max);
+endtask
+
 task automatic set_thresholds (
   inout sim_util_pkg::debug debug,
-  input [rx_pkg::CHANNELS-1:0][rx_pkg::SAMPLE_WIDTH-1:0] low_thresholds,
-  input [rx_pkg::CHANNELS-1:0][rx_pkg::SAMPLE_WIDTH-1:0] high_thresholds
+  input logic [rx_pkg::CHANNELS-1:0][rx_pkg::SAMPLE_WIDTH-1:0] low_thresholds,
+  input logic [rx_pkg::CHANNELS-1:0][rx_pkg::SAMPLE_WIDTH-1:0] high_thresholds
 );
   logic success;
   logic [rx_pkg::CHANNELS-1:0][2*rx_pkg::SAMPLE_WIDTH-1:0] threshold_word;
@@ -112,9 +123,9 @@ endtask
 
 task automatic set_delays (
   inout sim_util_pkg::debug debug,
-  input [rx_pkg::CHANNELS-1:0][TIMER_BITS-1:0] start_delays,
-  input [rx_pkg::CHANNELS-1:0][TIMER_BITS-1:0] stop_delays,
-  input [rx_pkg::CHANNELS-1:0][TIMER_BITS-1:0] digital_delays
+  input logic [rx_pkg::CHANNELS-1:0][TIMER_BITS-1:0] start_delays,
+  input logic [rx_pkg::CHANNELS-1:0][TIMER_BITS-1:0] stop_delays,
+  input logic [rx_pkg::CHANNELS-1:0][TIMER_BITS-1:0] digital_delays
 );
   logic success;
   logic [rx_pkg::CHANNELS-1:0][3*TIMER_BITS-1:0] delay_word;
@@ -129,7 +140,7 @@ endtask
 
 task automatic set_trigger_sources(
   inout sim_util_pkg::debug debug,
-  input [rx_pkg::CHANNELS-1:0][$clog2(rx_pkg::CHANNELS+tx_pkg::CHANNELS)-1:0] sources
+  input logic [rx_pkg::CHANNELS-1:0][$clog2(rx_pkg::CHANNELS+tx_pkg::CHANNELS)-1:0] sources
 );
   logic success;
   ps_trigger_select_tx_i.send_sample_with_timeout(10, sources, success);
@@ -140,7 +151,7 @@ endtask
 
 task automatic set_discrimination_channels(
   inout sim_util_pkg::debug debug,
-  input [rx_pkg::CHANNELS-1:0] disabled_mask
+  input logic [rx_pkg::CHANNELS-1:0] disabled_mask
 );
   logic success;
   ps_disable_discriminator_tx_i.send_sample_with_timeout(10, disabled_mask, success);

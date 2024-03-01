@@ -1,11 +1,19 @@
 // sample_discriminator_test.sv - Reed Foster
+// test sample_discriminator with various delays, digital/analog triggering,
+// various thresholds for the analog trigger, enable/disable of the
+// discriminator
+//
+// for each test:
 // update configuration registers, wait a few cycles to synchronize, then
-// reset the analog hysteresis and sample_count
+// reset the analog hysteresis and sample_count (with adc_reset_state)
+//
+// when disabled, check that all samples got through and that no timestamps were sent
+//
 
 `timescale 1ns / 1ps
 module sample_discriminator_test();
 
-sim_util_pkg::debug debug = new(sim_util_pkg::DEFAULT); // printing, error tracking
+sim_util_pkg::debug debug = new(sim_util_pkg::DEBUG); // printing, error tracking
 
 logic adc_reset;
 logic adc_clk = 0;
@@ -71,6 +79,30 @@ initial begin
   adc_reset <= 1'b1;
   adc_reset_state <= 1'b0;
   adc_digital_trigger_in <= '0;
+
+  repeat (10) @(posedge ps_clk);
+  ps_reset <= 1'b0;
+  @(posedge adc_clk);
+  adc_reset <= 1'b0;
+
+  repeat (100) @(posedge adc_clk);
+  tb_i.enable_send();
+
+  repeat (50) @(posedge adc_clk);
+  tb_i.set_input_range(
+    .min('0),
+    .max(24)
+  );
+  repeat (50) @(posedge adc_clk);
+  debug.display($sformatf(
+    "sent_data = %0p",
+    tb_i.adc_data_in_tx_i.data_q[0]),
+    sim_util_pkg::DEBUG
+  );
+  
+
+  // test digital trigger
+  // test analog trigger
 
   debug.finish();
 end

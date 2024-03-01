@@ -229,7 +229,7 @@ generate
   for (genvar i = 0; i < rx_pkg::CHANNELS; i++) begin
     pulse_delay #(
       .TIMER_BITS(TIMER_BITS),
-      .RETRIGGER_MODE(1) // each time we get a new input, reset the counter so that we can capture a burst of pulses
+      .RETRIGGER_MODE(1) // each time we get a new input, reset the delay counter so that we can capture a burst of pulses
     ) adc_start_delay_i (
       .clk(adc_clk),
       .reset(adc_reset | adc_reset_state),
