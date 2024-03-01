@@ -1,5 +1,5 @@
 // sample discriminator - Reed Foster
-// Saves samples when events of interest occur
+// Starts saving samples when events of interest occur
 // Event can be specified by a digital trigger or analog trigger
 // Various event sources can be multiplexed to each capture channel
 // E.g. a digital trigger may be used across multiple capture channels,
