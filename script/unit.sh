@@ -12,10 +12,11 @@ echo "modules to test: $@"
 
 script_dir=$(dirname "$(realpath $0)")
 
-vivado -mode batch -source $script_dir/run_unit_test.tcl -notrace -tclargs $@
-return_code=$?
+vivado -mode batch -source $script_dir/run_unit_test.tcl -notrace -tclargs $@ | tee $script_dir/vivado.log
+return_code=${PIPESTATUS[0]}
+fatal_error=$(grep 'FATAL_ERROR' $script_dir/vivado.log)
 
-if [[ $return_code -eq 0 ]]; then
+if [[ $return_code -eq 0 ]] && [[ -z $fatal_error ]]; then
   echo "####################################################################################"
   echo "#                               Passed unit test                                   #"
   echo "####################################################################################"
@@ -23,6 +24,10 @@ else
   echo "####################################################################################"
   echo "#                               Failed unit test                                   #"
   echo "####################################################################################"
-  cat $script_dir/errors.out
-  rm $script_dir/errors.out
+  if [[ -z $fatal_error ]]; then
+    cat $script_dir/errors.out
+    rm $script_dir/errors.out
+  else
+    echo "encountered a fatal error"
+  fi
 fi
