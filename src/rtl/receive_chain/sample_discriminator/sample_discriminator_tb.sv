@@ -50,19 +50,29 @@ axis_driver #(
   .intf(ps_disable_discriminator)
 );
 
-logic adc_send_samples;
+logic adc_send_samples, adc_driver_enabled;
+int adc_send_samples_decimation, adc_send_samples_counter;
+
+always @(posedge adc_clk) begin
+  if (adc_send_samples_counter == adc_send_samples_decimation - 1) begin
+    adc_send_samples_counter <= 0;
+    adc_driver_enabled <= adc_send_samples;
+  end else begin
+    adc_send_samples_counter <= adc_send_samples_counter + 1;
+    adc_driver_enabled <= 1'b0;
+  end
+end
 
 realtime_parallel_driver_constrained #(
   .DWIDTH(rx_pkg::DATA_WIDTH),
   .CHANNELS(rx_pkg::CHANNELS),
   .SAMPLE_WIDTH(rx_pkg::SAMPLE_WIDTH),
-  .PARALLEL_SAMPLES(rx_pkg::PARALLEL_SAMPLES),
-  .sample_t(rx_pkg::sample_t)
+  .PARALLEL_SAMPLES(rx_pkg::PARALLEL_SAMPLES)
 ) adc_data_in_tx_i (
   .clk(adc_clk),
   .reset(adc_reset),
   .valid_rand('1),
-  .valid_en({rx_pkg::CHANNELS{adc_send_samples}}),
+  .valid_en({rx_pkg::CHANNELS{adc_driver_enabled}}),
   .intf(adc_data_in)
 );
 
@@ -88,6 +98,8 @@ task automatic init ();
   ps_trigger_select_tx_i.init();
   ps_disable_discriminator_tx_i.init();
   disable_send();
+  adc_send_samples_decimation <= 1;
+  adc_send_samples_counter <= 0;
 endtask
 
 task automatic enable_send ();
@@ -96,6 +108,12 @@ endtask
 
 task automatic disable_send ();
   adc_send_samples <= 1'b0;
+endtask
+
+task automatic set_decimation (
+  input int decimation
+);
+  adc_send_samples_decimation <= decimation;
 endtask
 
 task automatic set_input_range (

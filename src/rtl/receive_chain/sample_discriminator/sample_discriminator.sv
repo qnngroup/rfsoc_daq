@@ -74,7 +74,7 @@ localparam int TIMER_BITS = $clog2(MAX_DELAY_CYCLES);
 logic [rx_pkg::CHANNELS-1:0][TIMER_BITS-1:0] adc_pipe_delay;
 logic [rx_pkg::CHANNELS-1:0][TIMER_BITS-1:0] adc_total_delay;
 logic [rx_pkg::CHANNELS-1:0][TIMER_BITS-1:0] adc_digital_delay;
-Axis_If #(.DWIDTH(TIMER_BITS*rx_pkg::CHANNELS)) adc_delays_sync ();
+Axis_If #(.DWIDTH(3*TIMER_BITS*rx_pkg::CHANNELS)) adc_delays_sync ();
 assign adc_delays_sync.ready = 1'b1; // always accept new config
 always_ff @(posedge adc_clk) begin
   if (adc_reset) begin
@@ -109,7 +109,7 @@ axis_config_reg_cdc #(
 localparam int TRIGGER_SELECT_WIDTH = $clog2(rx_pkg::CHANNELS + tx_pkg::CHANNELS);
 logic [rx_pkg::CHANNELS-1:0][TRIGGER_SELECT_WIDTH-1:0] adc_trigger_source;
 logic [rx_pkg::CHANNELS-1:0] adc_trigger_is_digital;
-Axis_If #(.DWIDTH(rx_pkg::CHANNELS*(TRIGGER_SELECT_WIDTH))) adc_trigger_select_sync ();
+Axis_If #(.DWIDTH(rx_pkg::CHANNELS*TRIGGER_SELECT_WIDTH)) adc_trigger_select_sync ();
 assign adc_trigger_select_sync.ready = 1'b1; // always accept new config
 always_ff @(posedge adc_clk) begin
   if (adc_reset) begin
@@ -127,7 +127,7 @@ always_ff @(posedge adc_clk) begin
   end
 end
 axis_config_reg_cdc #(
-  .DWIDTH(TRIGGER_SELECT_WIDTH)
+  .DWIDTH(rx_pkg::CHANNELS*TRIGGER_SELECT_WIDTH)
 ) trigger_select_cdc_i (
   .src_clk(ps_clk),
   .src_reset(ps_reset),

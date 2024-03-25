@@ -1,7 +1,7 @@
 // sample_discriminator_test.sv - Reed Foster
 // test sample_discriminator with various delays, digital/analog triggering,
 // various thresholds for the analog trigger, enable/disable of the
-// discriminator
+// discriminator.
 //
 // for each test:
 // update configuration registers, wait a few cycles to synchronize, then
@@ -14,6 +14,7 @@
 module sample_discriminator_test();
 
 sim_util_pkg::debug debug = new(sim_util_pkg::DEBUG); // printing, error tracking
+sim_util_pkg::queue #(.T(rx_pkg::sample_t), .T2(rx_pkg::batch_t)) q_util = new;
 
 logic adc_reset;
 logic adc_clk = 0;
@@ -33,6 +34,7 @@ logic [tx_pkg::CHANNELS-1:0] adc_digital_trigger_in;
 
 localparam int MAX_DELAY_CYCLES = 64;
 localparam int TIMER_BITS = $clog2(MAX_DELAY_CYCLES);
+typedef logic [TIMER_BITS-1:0] delay_t;
 Axis_If #(.DWIDTH(2*rx_pkg::CHANNELS*rx_pkg::SAMPLE_WIDTH)) ps_thresholds ();
 Axis_If #(.DWIDTH(3*rx_pkg::CHANNELS*TIMER_BITS)) ps_delays ();
 Axis_If #(.DWIDTH(rx_pkg::CHANNELS*$clog2(rx_pkg::CHANNELS+tx_pkg::CHANNELS))) ps_trigger_select ();
@@ -71,6 +73,11 @@ sample_discriminator #(
   .ps_disable_discriminator
 );
 
+logic [rx_pkg::CHANNELS-1:0][rx_pkg::SAMPLE_WIDTH-1:0] low_thresholds, high_thresholds;
+logic [rx_pkg::CHANNELS-1:0][TIMER_BITS-1:0] start_delays, stop_delays, digital_delays;
+logic [rx_pkg::CHANNELS-1:0][$clog2(rx_pkg::CHANNELS+tx_pkg::CHANNELS)-1:0] trigger_sources;
+rx_pkg::sample_t sample_q [$];
+
 initial begin
   debug.display("### TESTING SAMPLE DISCRIMINATOR ###", sim_util_pkg::DEFAULT);
 
@@ -86,19 +93,63 @@ initial begin
   adc_reset <= 1'b0;
 
   repeat (100) @(posedge adc_clk);
-  tb_i.enable_send();
+  tb_i.set_input_range(.min(rx_pkg::sample_t'(-32)), .max(rx_pkg::sample_t'(31)));
 
-  repeat (50) @(posedge adc_clk);
-  tb_i.set_input_range(
-    .min('0),
-    .max(24)
-  );
-  repeat (50) @(posedge adc_clk);
+  repeat (100) @(posedge adc_clk);
+  ///////////////////////
+  // configure DUT
+  ///////////////////////
+  // set thresholds
+  @(posedge ps_clk);
+  for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
+    low_thresholds[channel] = rx_pkg::MIN_SAMP;
+    high_thresholds[channel] = rx_pkg::MIN_SAMP; // save everything
+  end
+  tb_i.set_thresholds(debug, low_thresholds, high_thresholds);
+  // set delays
+  for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
+    digital_delays[channel] = '0;
+    stop_delays[channel] = '0;
+    start_delays[channel] = '0;
+  end
+  tb_i.set_delays(debug, start_delays, stop_delays, digital_delays);
+  // set trigger sources
+  for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
+    trigger_sources[channel] = channel; // use analog channels
+  end
+  tb_i.set_trigger_sources(debug, trigger_sources);
+
+  // wait for delays/thresholds to synchronize before sending data
+  repeat (10) @(posedge ps_clk);
+  @(posedge adc_clk);
+  tb_i.enable_send();
+  adc_reset_state <= 1'b1;
+  @(posedge adc_clk);
+  adc_reset_state <= 1'b0;
+
+  repeat (50) @(posedge adc_clk); // send some data
+  q_util.samples_from_batches(tb_i.adc_data_in_tx_i.data_q[0], sample_q, rx_pkg::SAMPLE_WIDTH, rx_pkg::PARALLEL_SAMPLES);
   debug.display($sformatf(
     "sent_data = %0p",
-    tb_i.adc_data_in_tx_i.data_q[0]),
+    sample_q),
     sim_util_pkg::DEBUG
   );
+
+  q_util.samples_from_batches(tb_i.adc_data_out_rx_i.data_q[0], sample_q, rx_pkg::SAMPLE_WIDTH, rx_pkg::PARALLEL_SAMPLES);
+  debug.display($sformatf(
+    "received_data = %0p",
+    sample_q),
+    sim_util_pkg::DEBUG
+  );
+
+  debug.display($sformatf(
+    "received_timestamps = %0p",
+    tb_i.adc_timestamps_out_rx_i.data_q[0]),
+    sim_util_pkg::DEBUG
+  );
+
+  // reset sample index
+  adc_reset_state <= 1'b1;
   
 
   // test digital trigger

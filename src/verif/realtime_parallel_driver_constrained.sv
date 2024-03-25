@@ -8,8 +8,7 @@ module realtime_parallel_driver_constrained #(
   parameter int DWIDTH = 32,
   parameter int CHANNELS = 1,
   parameter int SAMPLE_WIDTH = 16,
-  parameter int PARALLEL_SAMPLES = 2,
-  type sample_t=logic signed [SAMPLE_WIDTH-1:0]
+  parameter int PARALLEL_SAMPLES = 2
 ) (
   input logic clk,
   input logic reset,
@@ -17,6 +16,8 @@ module realtime_parallel_driver_constrained #(
   input logic [CHANNELS-1:0] valid_en,
   Realtime_Parallel_If.Master intf
 );
+
+typedef logic signed [SAMPLE_WIDTH-1:0] sample_t;
 
 localparam int WORD_WIDTH = 32;
 localparam int NUM_WORDS = (DWIDTH + WORD_WIDTH - 1)/WORD_WIDTH;

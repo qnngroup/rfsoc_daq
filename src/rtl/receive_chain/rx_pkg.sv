@@ -16,5 +16,9 @@ package rx_pkg;
   localparam int DATA_WIDTH = PARALLEL_SAMPLES*SAMPLE_WIDTH;
 
   typedef logic signed [SAMPLE_WIDTH-1:0] sample_t;
+  typedef logic [DATA_WIDTH-1:0] batch_t;
+
+  localparam sample_t MIN_SAMP = {1'b1, {(SAMPLE_WIDTH-1){1'b0}}};
+  localparam sample_t MAX_SAMP = {1'b0, {(SAMPLE_WIDTH-1){1'b1}}};
 
 endpackage
