@@ -132,60 +132,12 @@ endmodule
 
 `default_nettype wire
 
-
-//Thu  11/23: 8 hours
-//Sat  11/24: 6 hours
-//Mon  11/27: 9 hours (stopping at 4:18pm) + 9 hours (stopping at 5am)
-//Tues 11/28: 7 hours
-//Wed  11/29: 16 hours
-//Thur 11/30: 1 hour
-//Tue  12/5:  7 hours
-//Wed  12/6:  3+12 hours
-//Thur 12/7:  5 hours
-//Fri  12/8:  18 hours
-//Sat  12/9:  15 hours 
-//Sun  12/10: 12 hours 
-//Tues 12/19: 13 hours
-//Wed  12/20: 19 hours
-
-//Tues 12/26: 4 hours 
-//Weds 12/27: 4 hours
-//Thur 12/28: 8 hours
-//Sat  1/6:   
-//Sun  1/7:  
-//Mon  1/8:   14 hours  
-//Tues 1/9:   8 hours
-//Wed  1/10:  7 hours
-//Thur 1/11:  4 hours
-//Fri  1/12:  7 hours
-//Mon  1/15:  10 hours
-//Tues 1/16:  7 hours
-
-//Mon  1/22:  9 hours
-
-//Wed  1/31:  7 hours
-//Thur 2/1:   6 hours
-//Sat  2/3:   5 hours
-
-//Mon  2/5:   7 hours
-//Tues 2/6:   8 hours
-//Wed  2/7:   9 hours
-//Thur 2/8:   9 hours
-//Fri  2/9:   5 hours 
-
-//Mon  2/12:  4 hours
-//Tues 
-
-
 // WEEKLY UPDATES
 
 /*
 Weekly updates:
-
 Monday:
-    
-
-
+ 
 */
 
 
