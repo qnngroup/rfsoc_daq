@@ -70,7 +70,8 @@ axis_config_reg_cdc #(
 );
 
 // start/stop delay
-localparam int TIMER_BITS = $clog2(MAX_DELAY_CYCLES);
+localparam int DISC_LATENCY = 3; // extra latency for pipeline because of sample discriminator
+localparam int TIMER_BITS = $clog2(MAX_DELAY_CYCLES+DISC_LATENCY);
 logic [rx_pkg::CHANNELS-1:0][TIMER_BITS-1:0] adc_pipe_delay;
 logic [rx_pkg::CHANNELS-1:0][TIMER_BITS-1:0] adc_total_delay;
 logic [rx_pkg::CHANNELS-1:0][TIMER_BITS-1:0] adc_digital_delay;
@@ -85,10 +86,10 @@ always_ff @(posedge adc_clk) begin
     if (adc_delays_sync.ok) begin
       for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
         // just start delay for data/valid pipeline delay
-        adc_pipe_delay[channel] <= adc_delays_sync.data[(2*channel)*TIMER_BITS+:TIMER_BITS];
+        adc_pipe_delay[channel] <= adc_delays_sync.data[(2*channel)*TIMER_BITS+:TIMER_BITS] + DISC_LATENCY;
         // start + stop delay for total
         adc_total_delay[channel] <= adc_delays_sync.data[(2*channel+1)*TIMER_BITS+:TIMER_BITS]
-                                    + adc_delays_sync.data[(2*channel)*TIMER_BITS+:TIMER_BITS];
+                                    + adc_delays_sync.data[(2*channel)*TIMER_BITS+:TIMER_BITS] + DISC_LATENCY;
         adc_digital_delay[channel] <= adc_delays_sync.data[(2*channel+2)*TIMER_BITS+:TIMER_BITS];
       end
     end
@@ -165,12 +166,12 @@ always_comb begin
   end
 end
 
-logic [MAX_DELAY_CYCLES-1:0][rx_pkg::CHANNELS-1:0][rx_pkg::DATA_WIDTH-1:0] adc_data_pipe;
-logic [MAX_DELAY_CYCLES-1:0][rx_pkg::CHANNELS-1:0] adc_valid_pipe;
+logic [MAX_DELAY_CYCLES+DISC_LATENCY-1:0][rx_pkg::CHANNELS-1:0][rx_pkg::DATA_WIDTH-1:0] adc_data_pipe;
+logic [MAX_DELAY_CYCLES+DISC_LATENCY-1:0][rx_pkg::CHANNELS-1:0] adc_valid_pipe;
 logic [rx_pkg::CHANNELS-1:0] adc_data_any_above_high, adc_data_all_below_low;
 always_ff @(posedge adc_clk) begin
-  adc_data_pipe <= {adc_data_pipe[MAX_DELAY_CYCLES-2:0], adc_data_in.data};
-  adc_valid_pipe <= {adc_valid_pipe[MAX_DELAY_CYCLES-2:0], adc_data_in.valid};
+  adc_data_pipe <= {adc_data_pipe[MAX_DELAY_CYCLES+DISC_LATENCY-2:0], adc_data_in.data};
+  adc_valid_pipe <= {adc_valid_pipe[MAX_DELAY_CYCLES+DISC_LATENCY-2:0], adc_data_in.valid};
 
   // amplitude-based triggering
   adc_data_any_above_high <= '0;
@@ -191,8 +192,10 @@ end
 
 // select data and valid output from delay pipelines based on start_delay
 always_ff @(posedge adc_clk) begin
-  adc_data_out.data <= adc_data_pipe[adc_pipe_delay];
-  adc_data_out.valid <= adc_valid_pipe[adc_pipe_delay] & adc_active;
+  for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
+    adc_data_out.data[channel] <= adc_data_pipe[adc_pipe_delay[channel]][channel];
+    adc_data_out.valid[channel] <= adc_valid_pipe[adc_pipe_delay[channel]][channel] & adc_active[channel];
+  end
 end
 
 // combine analog triggers and digital triggers
