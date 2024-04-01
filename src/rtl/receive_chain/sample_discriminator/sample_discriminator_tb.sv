@@ -71,7 +71,7 @@ realtime_parallel_driver_constrained #(
 ) adc_data_in_tx_i (
   .clk(adc_clk),
   .reset(adc_reset),
-  .valid_rand('1),
+  .valid_rand('0),
   .valid_en({rx_pkg::CHANNELS{adc_driver_enabled}}),
   .intf(adc_data_in)
 );

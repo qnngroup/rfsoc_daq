@@ -9,6 +9,8 @@
 //
 // when disabled, check that all samples got through and that no timestamps were sent
 //
+//
+// TODO test maximum delay
 
 `timescale 1ns / 1ps
 module sample_discriminator_test();
@@ -32,7 +34,7 @@ Realtime_Parallel_If #(.DWIDTH(buffer_pkg::TSTAMP_WIDTH), .CHANNELS(rx_pkg::CHAN
 logic adc_reset_state;
 logic [tx_pkg::CHANNELS-1:0] adc_digital_trigger_in;
 
-localparam int MAX_DELAY_CYCLES = 64;
+localparam int MAX_DELAY_CYCLES = 16;
 localparam int TIMER_BITS = $clog2(MAX_DELAY_CYCLES);
 typedef logic [TIMER_BITS-1:0] delay_t;
 Axis_If #(.DWIDTH(2*rx_pkg::CHANNELS*rx_pkg::SAMPLE_WIDTH)) ps_thresholds ();
@@ -77,6 +79,7 @@ logic [rx_pkg::CHANNELS-1:0][rx_pkg::SAMPLE_WIDTH-1:0] low_thresholds, high_thre
 logic [rx_pkg::CHANNELS-1:0][TIMER_BITS-1:0] start_delays, stop_delays, digital_delays;
 logic [rx_pkg::CHANNELS-1:0][$clog2(rx_pkg::CHANNELS+tx_pkg::CHANNELS)-1:0] trigger_sources;
 rx_pkg::sample_t sample_q [$];
+rx_pkg::sample_t temp_q [$];
 
 initial begin
   debug.display("### TESTING SAMPLE DISCRIMINATOR ###", sim_util_pkg::DEFAULT);
@@ -102,15 +105,15 @@ initial begin
   // set thresholds
   @(posedge ps_clk);
   for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
-    low_thresholds[channel] = rx_pkg::MIN_SAMP;
-    high_thresholds[channel] = rx_pkg::MIN_SAMP; // save everything
+    low_thresholds[channel] = 12;//rx_pkg::MIN_SAMP;
+    high_thresholds[channel] = 17;//rx_pkg::MIN_SAMP; // save everything
   end
   tb_i.set_thresholds(debug, low_thresholds, high_thresholds);
   // set delays
   for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
     digital_delays[channel] = '0;
-    stop_delays[channel] = '0;
-    start_delays[channel] = '0;
+    stop_delays[channel] = 2;
+    start_delays[channel] = 1;
   end
   tb_i.set_delays(debug, start_delays, stop_delays, digital_delays);
   // set trigger sources
@@ -127,20 +130,32 @@ initial begin
   @(posedge adc_clk);
   adc_reset_state <= 1'b0;
 
-  repeat (50) @(posedge adc_clk); // send some data
+  repeat (30) @(posedge adc_clk); // send some data
+  tb_i.disable_send();
+  repeat (4+MAX_DELAY_CYCLES) @(posedge adc_clk);
   q_util.samples_from_batches(tb_i.adc_data_in_tx_i.data_q[0], sample_q, rx_pkg::SAMPLE_WIDTH, rx_pkg::PARALLEL_SAMPLES);
-  debug.display($sformatf(
-    "sent_data = %0p",
-    sample_q),
-    sim_util_pkg::DEBUG
-  );
+  debug.display("sent data =", sim_util_pkg::DEBUG);
+  while (sample_q.size() > 0) begin
+    repeat (rx_pkg::PARALLEL_SAMPLES) temp_q.push_front(sample_q.pop_back());
+    debug.display($sformatf(
+      "%0p",
+      temp_q),
+      sim_util_pkg::DEBUG
+    );
+    repeat (rx_pkg::PARALLEL_SAMPLES) temp_q.pop_back();
+  end
 
+  debug.display("received data =", sim_util_pkg::DEBUG);
   q_util.samples_from_batches(tb_i.adc_data_out_rx_i.data_q[0], sample_q, rx_pkg::SAMPLE_WIDTH, rx_pkg::PARALLEL_SAMPLES);
-  debug.display($sformatf(
-    "received_data = %0p",
-    sample_q),
-    sim_util_pkg::DEBUG
-  );
+  while (sample_q.size() > 0) begin
+    repeat (rx_pkg::PARALLEL_SAMPLES) temp_q.push_front(sample_q.pop_back());
+    debug.display($sformatf(
+      "%0p",
+      temp_q),
+      sim_util_pkg::DEBUG
+    );
+    repeat (rx_pkg::PARALLEL_SAMPLES) temp_q.pop_back();
+  end
 
   debug.display($sformatf(
     "received_timestamps = %0p",

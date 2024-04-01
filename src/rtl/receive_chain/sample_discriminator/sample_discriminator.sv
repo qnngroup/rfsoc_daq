@@ -70,8 +70,8 @@ axis_config_reg_cdc #(
 );
 
 // start/stop delay
-localparam int DISC_LATENCY = 3; // extra latency for pipeline because of sample discriminator
-localparam int TIMER_BITS = $clog2(MAX_DELAY_CYCLES+DISC_LATENCY);
+localparam int DISC_LATENCY = 2; // extra latency for pipeline because of sample discriminator
+localparam int TIMER_BITS = $clog2(MAX_DELAY_CYCLES);
 logic [rx_pkg::CHANNELS-1:0][TIMER_BITS-1:0] adc_pipe_delay;
 logic [rx_pkg::CHANNELS-1:0][TIMER_BITS-1:0] adc_total_delay;
 logic [rx_pkg::CHANNELS-1:0][TIMER_BITS-1:0] adc_digital_delay;
@@ -89,8 +89,8 @@ always_ff @(posedge adc_clk) begin
         adc_pipe_delay[channel] <= adc_delays_sync.data[(2*channel)*TIMER_BITS+:TIMER_BITS] + DISC_LATENCY;
         // start + stop delay for total
         adc_total_delay[channel] <= adc_delays_sync.data[(2*channel+1)*TIMER_BITS+:TIMER_BITS]
-                                    + adc_delays_sync.data[(2*channel)*TIMER_BITS+:TIMER_BITS] + DISC_LATENCY;
-        adc_digital_delay[channel] <= adc_delays_sync.data[(2*channel+2)*TIMER_BITS+:TIMER_BITS];
+                                    + adc_delays_sync.data[(2*channel)*TIMER_BITS+:TIMER_BITS];
+        adc_digital_delay[channel] <= adc_delays_sync.data[(2*channel+2)*TIMER_BITS+:TIMER_BITS] + 1;
       end
     end
   end
@@ -236,7 +236,7 @@ generate
     ) adc_start_delay_i (
       .clk(adc_clk),
       .reset(adc_reset | adc_reset_state),
-      .delay(adc_total_delay[i]),
+      .delay(adc_total_delay[i] - 1),
       .in_pls(adc_fsm_start[i]),
       .out_pls(adc_fsm_start_d[i])
     );
@@ -246,7 +246,7 @@ generate
     ) adc_stop_delay_i (
       .clk(adc_clk),
       .reset(adc_reset | adc_reset_state),
-      .delay(adc_total_delay[i]),
+      .delay(adc_total_delay[i] - 1),
       .in_pls(adc_fsm_stop[i]),
       .out_pls(adc_fsm_stop_d[i])
     );
@@ -296,13 +296,24 @@ always_ff @(posedge adc_clk) begin
   end else begin
     for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
       unique case (adc_states[channel])
-        DISABLED: if (adc_fsm_start[channel]) adc_states[channel] <= PRECAPTURE;
+        DISABLED: if (adc_fsm_start[channel]) adc_states[channel] <=
+                    (|adc_total_delay[channel]) ? PRECAPTURE : CAPTURE;
         PRECAPTURE: begin
           if (adc_fsm_start_d[channel]) begin
             adc_states[channel] <= adc_trigger_is_digital[channel] ? DISABLED : CAPTURE;
           end
         end
-        CAPTURE: if (adc_fsm_stop_d[channel]) adc_states[channel] <= DISABLED;
+        CAPTURE: begin
+          if (adc_fsm_start[channel]) begin
+            adc_states[channel] <= (|adc_total_delay[channel]) ? PRECAPTURE : CAPTURE;
+          end else begin
+            if (|adc_total_delay[channel]) begin
+              if (adc_fsm_stop_d[channel]) adc_states[channel] <= DISABLED;
+            end else begin
+              if (adc_fsm_stop[channel]) adc_states[channel] <= DISABLED;
+            end
+          end
+        end
       endcase
     end
   end
