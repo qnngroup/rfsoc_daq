@@ -22,6 +22,8 @@ module sample_discriminator_tb #(
 
 localparam int TIMER_BITS = $clog2(MAX_DELAY_CYCLES);
 
+sim_util_pkg::queue #(.T(rx_pkg::sample_t), .T2(rx_pkg::batch_t)) q_util = new;
+
 axis_driver #(
   .DWIDTH(2*rx_pkg::CHANNELS*rx_pkg::SAMPLE_WIDTH)
 ) ps_thresholds_tx_i (
@@ -177,5 +179,34 @@ task automatic set_discrimination_channels(
     debug.error("failed to set disabled channels");
   end
 endtask
+
+task automatic check_results(
+  inout sim_util_pkg::debug debug,
+  input logic [rx_pkg::CHANNELS-1:0][rx_pkg::SAMPLE_WIDTH-1:0] low_thresholds, high_thresholds,
+  input logic [rx_pkg::CHANNELS-1:0][TIMER_BITS-1:0] start_delays, stop_delays, digital_delays,
+  input logic [rx_pkg::CHANNELS-1:0][$clog2(rx_pkg::CHANNELS+tx_pkg::CHANNELS)-1:0] trigger_sources
+);
+  rx_pkg::sample_t sample_q [$];
+
+endtask
+
+task automatic print_data(
+  inout sim_util_pkg::debug debug,
+  input logic [rx_pkg::DATA_WIDTH-1:0] data_q [$]
+);
+  rx_pkg::sample_t sample_q [$];
+  rx_pkg::sample_t temp_q [$];
+  q_util.samples_from_batches(data_q, sample_q, rx_pkg::SAMPLE_WIDTH, rx_pkg::PARALLEL_SAMPLES);
+  while (sample_q.size() > 0) begin
+    repeat (rx_pkg::PARALLEL_SAMPLES) temp_q.push_front(sample_q.pop_back());
+    debug.display($sformatf(
+      "%0p",
+      temp_q),
+      sim_util_pkg::DEBUG
+    );
+    repeat (rx_pkg::PARALLEL_SAMPLES) temp_q.pop_back();
+  end
+endtask
+
 
 endmodule

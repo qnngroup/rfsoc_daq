@@ -14,35 +14,23 @@ always #(0.5s/CLK_RATE_HZ) clk = ~clk;
 localparam int TIMER_BITS = 8;
 logic [TIMER_BITS-1:0] delay;
 logic in_pls;
-logic [1:0] out_pls;
+logic out_pls;
 
 pulse_delay #(
-  .TIMER_BITS(TIMER_BITS),
-  .RETRIGGER_MODE(0)
-) dut_no_retrigger_i (
+  .TIMER_BITS(TIMER_BITS)
+) dut_i (
   .clk,
   .reset,
   .delay,
   .in_pls,
-  .out_pls(out_pls[0])
-);
-
-pulse_delay #(
-  .TIMER_BITS(TIMER_BITS),
-  .RETRIGGER_MODE(1)
-) dut_retrigger_i (
-  .clk,
-  .reset,
-  .delay,
-  .in_pls,
-  .out_pls(out_pls[1])
+  .out_pls
 );
 
 int timer = 0;
 always @(posedge clk) timer <= timer + 1;
 
-int expected_times [2][$];
-int received_times [2][$];
+int expected_times [$];
+int received_times [$];
 always @(posedge clk) begin
   if (in_pls) begin
     debug.display($sformatf(
@@ -50,55 +38,41 @@ always @(posedge clk) begin
       timer),
       sim_util_pkg::DEBUG
     );
-    for (int i = 0; i < 2; i++) begin
-      debug.display($sformatf(
-        "expected_times[%0d][0] = %0d",
-        i,
-        expected_times[i][0]),
-        sim_util_pkg::DEBUG
-      );
-      if (expected_times[i][0] <= timer) begin
-        expected_times[i].push_front(timer+delay+1);
-      end else begin
-        if (i == 1) begin
-          expected_times[i][0] = timer+delay+1;
-        end
-      end
+    debug.display($sformatf(
+      "expected_times[0] = %0d",
+      expected_times[0]),
+      sim_util_pkg::DEBUG
+    );
+    if (expected_times[0] <= timer) begin
+      expected_times.push_front(timer+delay+1);
+    end else begin
+      expected_times[0] = timer+delay+1;
     end
   end
-  if (out_pls[0]) begin
-    received_times[0].push_front(timer);
-  end
-  if (out_pls[1]) begin
-    received_times[1].push_front(timer);
+  if (out_pls) begin
+    received_times.push_front(timer);
   end
 end
 
 task check_results();
-  for (int i = 0; i < 2; i++) begin
-    debug.display($sformatf(
-      "checking results for dut[%0d]",
-      i),
-      sim_util_pkg::DEBUG
+  debug.display("checking results for dut", sim_util_pkg::DEBUG);
+  if (expected_times.size() !== received_times.size()) begin
+    debug.error($sformatf(
+      "expected_times.size() != received_times.size() (%0d != %0d)",
+      expected_times.size(),
+      received_times.size())
     );
-    if (expected_times[i].size() !== received_times[i].size()) begin
+  end
+  while (expected_times.size() > 0 && received_times.size() > 0) begin
+    if (expected_times[$] !== received_times[$]) begin
       debug.error($sformatf(
-        "expected_times.size() != received_times.size() (%0d != %0d)",
-        expected_times[i].size(),
-        received_times[i].size())
+        "time mismatch: expected %0d, got %0d",
+        expected_times[$],
+        received_times[$])
       );
     end
-    while (expected_times[i].size() > 0 && received_times[i].size() > 0) begin
-      if (expected_times[i][$] !== received_times[i][$]) begin
-        debug.error($sformatf(
-          "time mismatch: expected %0d, got %0d",
-          expected_times[i][$],
-          received_times[i][$])
-        );
-      end
-      expected_times[i].pop_back();
-      received_times[i].pop_back();
-    end
+    expected_times.pop_back();
+    received_times.pop_back();
   end
 endtask
 

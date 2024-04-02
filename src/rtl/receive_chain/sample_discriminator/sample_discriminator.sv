@@ -235,31 +235,38 @@ always_ff @(posedge adc_clk) begin
   adc_fsm_stop <= adc_data_all_below_low;
 end
 
-// delay start/stop controls
+// delay stop with a shiftreg/pipeline delay so we don't miss any stop signals
 always_ff @(posedge adc_clk) begin
   if (adc_reset) begin
-    adc_fsm_start_pipe <= '0;
     adc_fsm_stop_pipe <= '0;
   end else begin
     if (adc_reset_state) begin
-      adc_fsm_start_pipe <= '0;
       adc_fsm_stop_pipe <= '0;
     end else begin
-      adc_fsm_start_pipe <= {adc_fsm_start_pipe, adc_fsm_start};
       adc_fsm_stop_pipe <= {adc_fsm_stop_pipe, adc_fsm_stop};
     end
   end
 end
 
+// delay start signal with a pulse_delay counter which is reset to COUNT_MAX
+// every time an input pulse arrives so we don't miss any_above_high
+generate
+  for (genvar channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
+    pulse_delay #(
+      .TIMER_BITS(TIMER_BITS)
+    ) adc_start_pulse_delay_i (
+      .clk(adc_clk),
+      .reset(adc_reset | adc_reset_state),
+      .delay(adc_total_delay[channel] - 1),
+      .in_pls(adc_fsm_start[channel]),
+      .out_pls(adc_fsm_start_d[channel])
+    );
+  end
+endgenerate
+
 always_comb begin
   for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
-    if (|adc_total_delay[channel]) begin
-      adc_fsm_stop_d[channel] = adc_fsm_stop_pipe[adc_total_delay[channel]-1][channel];
-      adc_fsm_start_d[channel] = adc_fsm_start_pipe[adc_total_delay[channel]-1][channel];
-    end else begin
-      adc_fsm_start_d[channel] = adc_fsm_start[channel];
-      adc_fsm_stop_d[channel] = adc_fsm_stop[channel];
-    end
+    adc_fsm_stop_d[channel] = adc_fsm_stop_pipe[adc_total_delay[channel]-1][channel];
   end
 end
 
