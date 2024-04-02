@@ -105,15 +105,15 @@ initial begin
   // set thresholds
   @(posedge ps_clk);
   for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
-    low_thresholds[channel] = 12;//rx_pkg::MIN_SAMP;
-    high_thresholds[channel] = 17;//rx_pkg::MIN_SAMP; // save everything
+    low_thresholds[channel] = 19;//rx_pkg::MIN_SAMP;
+    high_thresholds[channel] = 25;//rx_pkg::MIN_SAMP; // save everything
   end
   tb_i.set_thresholds(debug, low_thresholds, high_thresholds);
   // set delays
   for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
     digital_delays[channel] = '0;
-    stop_delays[channel] = 2;
-    start_delays[channel] = 1;
+    stop_delays[channel] = 5;
+    start_delays[channel] = 0;
   end
   tb_i.set_delays(debug, start_delays, stop_delays, digital_delays);
   // set trigger sources

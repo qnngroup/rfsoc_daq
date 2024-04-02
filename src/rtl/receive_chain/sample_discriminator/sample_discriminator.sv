@@ -202,56 +202,66 @@ end
 // also apply delay to digital triggers
 logic [rx_pkg::CHANNELS+tx_pkg::CHANNELS-1:0] adc_triggers;
 logic [tx_pkg::CHANNELS-1:0] adc_digital_trigger_in_d;
-generate
-  for (genvar i = 0; i < tx_pkg::CHANNELS; i++) begin
-    pulse_delay #(
-      .TIMER_BITS(TIMER_BITS),
-      .RETRIGGER_MODE(0) // if we get a very active input, make sure we send an output for first pulse
-    ) adc_digital_pulse_delay_i (
-      .clk(adc_clk),
-      .reset(adc_reset | adc_reset_state),
-      .delay(adc_digital_delay[i]),
-      .in_pls(adc_digital_trigger_in[i]),
-      .out_pls(adc_digital_trigger_in_d[i])
-    );
+logic [MAX_DELAY_CYCLES-1:0][tx_pkg::CHANNELS-1:0] adc_digital_trigger_in_pipe;
+always_ff @(posedge adc_clk) begin
+  if (adc_reset) begin
+    adc_digital_trigger_in_pipe <= '0;
+  end else begin
+    if (adc_reset_state) begin
+      adc_digital_trigger_in_pipe <= '0;
+    end else begin
+      adc_digital_trigger_in_pipe <= {adc_digital_trigger_in_pipe, adc_digital_trigger_in};
+    end
   end
-endgenerate
+end
+always_comb begin
+  for (int channel = 0; channel < tx_pkg::CHANNELS; channel++) begin
+    adc_digital_trigger_in_d[channel] = adc_digital_trigger_in_pipe[adc_digital_delay[channel]][channel];
+  end
+end
+
 assign adc_triggers = {adc_digital_trigger_in_d, adc_data_any_above_high};
 logic [rx_pkg::CHANNELS-1:0] adc_fsm_start, adc_fsm_start_d, adc_fsm_stop, adc_fsm_stop_d;
+logic [MAX_DELAY_CYCLES-1:0][rx_pkg::CHANNELS-1:0] adc_fsm_start_pipe, adc_fsm_stop_pipe;
 always_ff @(posedge adc_clk) begin
   // mux triggers
   for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
     adc_fsm_start[channel] <= adc_triggers[adc_trigger_source[channel]];
   end
 end
+
 // FSM start and stop inputs
 always_ff @(posedge adc_clk) begin
   adc_fsm_stop <= adc_data_all_below_low;
 end
-generate
-  for (genvar i = 0; i < rx_pkg::CHANNELS; i++) begin
-    pulse_delay #(
-      .TIMER_BITS(TIMER_BITS),
-      .RETRIGGER_MODE(1) // each time we get a new input, reset the delay counter so that we can capture a burst of pulses
-    ) adc_start_delay_i (
-      .clk(adc_clk),
-      .reset(adc_reset | adc_reset_state),
-      .delay(adc_total_delay[i] - 1),
-      .in_pls(adc_fsm_start[i]),
-      .out_pls(adc_fsm_start_d[i])
-    );
-    pulse_delay #(
-      .TIMER_BITS(TIMER_BITS),
-      .RETRIGGER_MODE(0) // make sure the first stop pulse makes it through
-    ) adc_stop_delay_i (
-      .clk(adc_clk),
-      .reset(adc_reset | adc_reset_state),
-      .delay(adc_total_delay[i] - 1),
-      .in_pls(adc_fsm_stop[i]),
-      .out_pls(adc_fsm_stop_d[i])
-    );
+
+// delay start/stop controls
+always_ff @(posedge adc_clk) begin
+  if (adc_reset) begin
+    adc_fsm_start_pipe <= '0;
+    adc_fsm_stop_pipe <= '0;
+  end else begin
+    if (adc_reset_state) begin
+      adc_fsm_start_pipe <= '0;
+      adc_fsm_stop_pipe <= '0;
+    end else begin
+      adc_fsm_start_pipe <= {adc_fsm_start_pipe, adc_fsm_start};
+      adc_fsm_stop_pipe <= {adc_fsm_stop_pipe, adc_fsm_stop};
+    end
   end
-endgenerate
+end
+
+always_comb begin
+  for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
+    if (|adc_total_delay[channel]) begin
+      adc_fsm_stop_d[channel] = adc_fsm_stop_pipe[adc_total_delay[channel]-1][channel];
+      adc_fsm_start_d[channel] = adc_fsm_start_pipe[adc_total_delay[channel]-1][channel];
+    end else begin
+      adc_fsm_start_d[channel] = adc_fsm_start[channel];
+      adc_fsm_stop_d[channel] = adc_fsm_stop[channel];
+    end
+  end
+end
 
 // timestamps
 logic [rx_pkg::CHANNELS-1:0][buffer_pkg::SAMPLE_INDEX_WIDTH-1:0] adc_sample_index;
