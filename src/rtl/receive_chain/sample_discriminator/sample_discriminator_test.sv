@@ -130,12 +130,12 @@ initial begin
   repeat (30) @(posedge adc_clk); // send some data
   tb_i.disable_send();
   repeat (4+MAX_DELAY_CYCLES) @(posedge adc_clk);
-  //tb_i.check_results(
-  //  debug,
-  //  low_thresholds, high_thresholds,
-  //  start_delays, stop_delays, digital_delays,
-  //  trigger_sources
-  //);
+  tb_i.check_results(
+    debug,
+    low_thresholds, high_thresholds,
+    start_delays, stop_delays, digital_delays,
+    trigger_sources
+  );
   debug.display("sent data =", sim_util_pkg::DEBUG);
   tb_i.print_data(debug, tb_i.adc_data_in_tx_i.data_q[0]);
   debug.display("received data =", sim_util_pkg::DEBUG);

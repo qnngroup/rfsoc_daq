@@ -22,7 +22,8 @@ module sample_discriminator_tb #(
 
 localparam int TIMER_BITS = $clog2(MAX_DELAY_CYCLES);
 
-sim_util_pkg::queue #(.T(rx_pkg::sample_t), .T2(rx_pkg::batch_t)) q_util = new;
+sim_util_pkg::queue #(.T(rx_pkg::sample_t), .T2(rx_pkg::batch_t)) sample_q_util = new;
+sim_util_pkg::queue #(.T(rx_pkg::batch_t)) batch_q_util = new;
 
 axis_driver #(
   .DWIDTH(2*rx_pkg::CHANNELS*rx_pkg::SAMPLE_WIDTH)
@@ -180,23 +181,64 @@ task automatic set_discrimination_channels(
   end
 endtask
 
+function automatic bit any_above_threshold(
+  input rx_pkg::batch_t batch,
+  input rx_pkg::sample_t threshold
+);
+  for (int sample = 0; sample < rx_pkg::PARALLEL_SAMPLES; sample++) begin
+    if (rx_pkg::sample_t'(batch[sample*rx_pkg::SAMPLE_WIDTH+:rx_pkg::SAMPLE_WIDTH]) > threshold) begin
+      return 1'b1;
+    end
+  end
+  return 1'b0;
+endfunction
+
 task automatic check_results(
   inout sim_util_pkg::debug debug,
   input logic [rx_pkg::CHANNELS-1:0][rx_pkg::SAMPLE_WIDTH-1:0] low_thresholds, high_thresholds,
   input logic [rx_pkg::CHANNELS-1:0][TIMER_BITS-1:0] start_delays, stop_delays, digital_delays,
   input logic [rx_pkg::CHANNELS-1:0][$clog2(rx_pkg::CHANNELS+tx_pkg::CHANNELS)-1:0] trigger_sources
 );
-  rx_pkg::sample_t sample_q [$];
-
+  rx_pkg::batch_t expected [$];
+  int expected_locations [$];
+  logic is_high;
+  for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
+    // generate expected data
+    is_high = 1'b0;
+    for (int i = adc_data_in_tx_i.data_q[channel].size() - 1; i >= 0; i--) begin
+      if (any_above_threshold(adc_data_in_tx_i.data_q[channel][i], high_thresholds[channel])) begin
+        is_high = 1'b1;
+      end
+      if (~any_above_threshold(adc_data_in_tx_i.data_q[channel][i], low_thresholds[channel])) begin
+        is_high = 1'b0;
+      end
+      if (is_high) begin
+        expected_locations.push_front(i);
+        for (int j = 1; (j <= start_delays[channel]) && (i + j < adc_data_in_tx_i.data_q[channel].size()); j++) begin
+          expected_locations.push_front(i+j);
+        end
+        for (int j = 1; (j <= stop_delays[channel]) && (i - j >= 0); j++) begin
+          expected_locations.push_front(i-j);
+        end
+      end
+    end
+    expected_locations = expected_locations.unique();
+    expected_locations.sort();
+    while (expected_locations.size() > 0) begin
+      expected.push_front(adc_data_in_tx_i.data_q[channel][expected_locations.pop_back()]);
+    end
+    // check expected matches received
+    batch_q_util.compare(debug, adc_data_out_rx_i.data_q[channel], expected);
+  end
 endtask
 
 task automatic print_data(
   inout sim_util_pkg::debug debug,
-  input logic [rx_pkg::DATA_WIDTH-1:0] data_q [$]
+  input rx_pkg::batch_t data_q [$]
 );
   rx_pkg::sample_t sample_q [$];
   rx_pkg::sample_t temp_q [$];
-  q_util.samples_from_batches(data_q, sample_q, rx_pkg::SAMPLE_WIDTH, rx_pkg::PARALLEL_SAMPLES);
+  sample_q_util.samples_from_batches(data_q, sample_q, rx_pkg::SAMPLE_WIDTH, rx_pkg::PARALLEL_SAMPLES);
   while (sample_q.size() > 0) begin
     repeat (rx_pkg::PARALLEL_SAMPLES) temp_q.push_front(sample_q.pop_back());
     debug.display($sformatf(
