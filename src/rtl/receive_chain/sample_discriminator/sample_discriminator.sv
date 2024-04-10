@@ -86,11 +86,11 @@ always_ff @(posedge adc_clk) begin
     if (adc_delays_sync.ok) begin
       for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
         // just start delay for data/valid pipeline delay
-        adc_pipe_delay[channel] <= adc_delays_sync.data[(2*channel)*TIMER_BITS+:TIMER_BITS] + DISC_LATENCY;
+        adc_pipe_delay[channel] <= adc_delays_sync.data[(3*channel)*TIMER_BITS+:TIMER_BITS] + DISC_LATENCY;
         // start + stop delay for total
-        adc_total_delay[channel] <= adc_delays_sync.data[(2*channel+1)*TIMER_BITS+:TIMER_BITS]
-                                    + adc_delays_sync.data[(2*channel)*TIMER_BITS+:TIMER_BITS];
-        adc_digital_delay[channel] <= adc_delays_sync.data[(2*channel+2)*TIMER_BITS+:TIMER_BITS] + 1;
+        adc_total_delay[channel] <= adc_delays_sync.data[(3*channel+1)*TIMER_BITS+:TIMER_BITS]
+                                    + adc_delays_sync.data[(3*channel)*TIMER_BITS+:TIMER_BITS];
+        adc_digital_delay[channel] <= adc_delays_sync.data[(3*channel+2)*TIMER_BITS+:TIMER_BITS] + 1;
       end
     end
   end

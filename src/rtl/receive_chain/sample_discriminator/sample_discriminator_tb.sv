@@ -203,6 +203,7 @@ task automatic check_results(
   int expected_locations [$];
   logic is_high;
   for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
+    debug.display($sformatf("checking received output for channel %0d", channel), sim_util_pkg::DEBUG);
     // generate expected data
     is_high = 1'b0;
     for (int i = adc_data_in_tx_i.data_q[channel].size() - 1; i >= 0; i--) begin
@@ -229,6 +230,7 @@ task automatic check_results(
     end
     // check expected matches received
     batch_q_util.compare(debug, adc_data_out_rx_i.data_q[channel], expected);
+    while (expected.size() > 0) expected.pop_back();
   end
 endtask
 
