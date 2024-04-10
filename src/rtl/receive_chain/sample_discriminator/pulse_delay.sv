@@ -17,7 +17,7 @@ logic [TIMER_BITS-1:0] counter;
 logic active;
 logic done;
 assign done = counter == 0;
-assign out_pls = done & active;
+assign out_pls = done & active & (~in_pls);
 
 always_ff @(posedge clk) begin
   if (reset) begin

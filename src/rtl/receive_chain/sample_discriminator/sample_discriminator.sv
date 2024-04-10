@@ -200,7 +200,8 @@ end
 
 // combine analog triggers and digital triggers
 // also apply delay to digital triggers
-logic [rx_pkg::CHANNELS+tx_pkg::CHANNELS-1:0] adc_triggers;
+logic [rx_pkg::CHANNELS+tx_pkg::CHANNELS-1:0] adc_start_triggers;
+logic [rx_pkg::CHANNELS+tx_pkg::CHANNELS-1:0] adc_stop_triggers;
 logic [tx_pkg::CHANNELS-1:0] adc_digital_trigger_in_d;
 logic [MAX_DELAY_CYCLES-1:0][tx_pkg::CHANNELS-1:0] adc_digital_trigger_in_pipe;
 always_ff @(posedge adc_clk) begin
@@ -220,19 +221,16 @@ always_comb begin
   end
 end
 
-assign adc_triggers = {adc_digital_trigger_in_d, adc_data_any_above_high};
+assign adc_start_triggers = {adc_digital_trigger_in_d, adc_data_any_above_high};
+assign adc_stop_triggers = {{tx_pkg::CHANNELS{1'b0}}, adc_data_all_below_low};
 logic [rx_pkg::CHANNELS-1:0] adc_fsm_start, adc_fsm_start_d, adc_fsm_stop, adc_fsm_stop_d;
 logic [MAX_DELAY_CYCLES-1:0][rx_pkg::CHANNELS-1:0] adc_fsm_start_pipe, adc_fsm_stop_pipe;
 always_ff @(posedge adc_clk) begin
   // mux triggers
   for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
-    adc_fsm_start[channel] <= adc_triggers[adc_trigger_source[channel]];
+    adc_fsm_start[channel] <= adc_start_triggers[adc_trigger_source[channel]];
+    adc_fsm_stop[channel] <= adc_stop_triggers[adc_trigger_source[channel]];
   end
-end
-
-// FSM start and stop inputs
-always_ff @(posedge adc_clk) begin
-  adc_fsm_stop <= adc_data_all_below_low;
 end
 
 // delay stop with a shiftreg/pipeline delay so we don't miss any stop signals
@@ -292,12 +290,23 @@ always_ff @(posedge adc_clk) begin
 end
 
 // output timestamps
+logic [rx_pkg::CHANNELS-1:0] adc_timestamp_valid;
 always_ff @(posedge adc_clk) begin
+  if (adc_reset) begin
+    adc_timestamp_valid <= '0;
+  end else begin
+    // only valid when we first get a start signal
+    for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
+      if ((adc_states[channel] == DISABLED) & adc_fsm_start[channel]) begin
+        adc_timestamp_valid[channel] <= 1'b1;
+      end
+    end
+  end
   for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
     adc_timestamps_out.data[channel] <= {adc_time, adc_sample_index[channel]};
-    // only valid when we first get a start signal
-    if ((adc_states[channel] == DISABLED) & adc_fsm_start[channel]) begin
+    if (adc_timestamp_valid[channel] && adc_data_out.valid[channel]) begin
       adc_timestamps_out.valid[channel] <= 1'b1;
+      adc_timestamp_valid[channel] <= 1'b0;
     end else begin
       adc_timestamps_out.valid[channel] <= 1'b0;
     end

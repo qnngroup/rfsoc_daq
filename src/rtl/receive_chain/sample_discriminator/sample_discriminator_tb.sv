@@ -24,6 +24,7 @@ localparam int TIMER_BITS = $clog2(MAX_DELAY_CYCLES);
 
 sim_util_pkg::queue #(.T(rx_pkg::sample_t), .T2(rx_pkg::batch_t)) sample_q_util = new;
 sim_util_pkg::queue #(.T(rx_pkg::batch_t)) batch_q_util = new;
+sim_util_pkg::queue #(.T(logic [buffer_pkg::TSTAMP_WIDTH-1:0])) tstamp_q_util = new;
 
 axis_driver #(
   .DWIDTH(2*rx_pkg::CHANNELS*rx_pkg::SAMPLE_WIDTH)
@@ -200,12 +201,16 @@ task automatic check_results(
   input logic [rx_pkg::CHANNELS-1:0][$clog2(rx_pkg::CHANNELS+tx_pkg::CHANNELS)-1:0] trigger_sources
 );
   rx_pkg::batch_t expected [$];
+  logic [buffer_pkg::TSTAMP_WIDTH-1:0] timestamps [$];
   int expected_locations [$];
   logic is_high;
+  logic [buffer_pkg::SAMPLE_INDEX_WIDTH-1:0] index, index_init;
+  logic [buffer_pkg::TSTAMP_WIDTH-1:0] time_init;
   for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
     debug.display($sformatf("checking received output for channel %0d", channel), sim_util_pkg::DEBUG);
     // generate expected data
     is_high = 1'b0;
+    time_init = adc_timestamps_out_rx_i.data_q[channel][$] >> buffer_pkg::SAMPLE_INDEX_WIDTH;
     for (int i = adc_data_in_tx_i.data_q[channel].size() - 1; i >= 0; i--) begin
       if (any_above_threshold(adc_data_in_tx_i.data_q[channel][i], high_thresholds[channel])) begin
         is_high = 1'b1;
@@ -225,12 +230,30 @@ task automatic check_results(
     end
     expected_locations = expected_locations.unique();
     expected_locations.sort();
+    debug.display($sformatf("expected_locations = %0p", expected_locations), sim_util_pkg::DEBUG);
+    // get timestamps
+    index_init = expected_locations[$];
+    debug.display($sformatf("index_init = %0d", index_init), sim_util_pkg::DEBUG);
+    timestamps.push_front({time_init, {buffer_pkg::SAMPLE_INDEX_WIDTH{1'b0}}});
+    for (int i = expected_locations.size() - 2; i >= 0; i--) begin
+      index = expected_locations.size() - 1 - i;
+      debug.display($sformatf("expected_locations[%0d] = %0d", i, expected_locations[i]), sim_util_pkg::DEBUG);
+      if (expected_locations[i+1] - 1 > expected_locations[i]) begin
+        debug.display($sformatf("index = %0x", index), sim_util_pkg::DEBUG);
+        timestamps.push_front({time_init + (index_init-expected_locations[i])*adc_send_samples_decimation, index});
+      end
+    end
     while (expected_locations.size() > 0) begin
       expected.push_front(adc_data_in_tx_i.data_q[channel][expected_locations.pop_back()]);
     end
     // check expected matches received
+    debug.display("checking data", sim_util_pkg::DEBUG);
     batch_q_util.compare(debug, adc_data_out_rx_i.data_q[channel], expected);
     while (expected.size() > 0) expected.pop_back();
+    // check timestamps
+    debug.display("checking timestamps", sim_util_pkg::DEBUG);
+    tstamp_q_util.compare(debug, adc_timestamps_out_rx_i.data_q[channel], timestamps);
+    while (timestamps.size() > 0) timestamps.pop_back();
   end
 endtask
 
