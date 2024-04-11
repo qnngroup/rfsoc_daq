@@ -6,7 +6,7 @@
 package rx_pkg;
 
   // main parameters
-  localparam int CHANNELS = 2;
+  localparam int CHANNELS = 4;
   localparam int SAMPLE_WIDTH = 16;
   localparam int RFDC_CLK_MHZ = 1024;
   localparam int PL_CLK_MHZ = 512;

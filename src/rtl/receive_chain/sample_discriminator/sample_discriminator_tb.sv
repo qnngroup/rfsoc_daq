@@ -200,28 +200,37 @@ task automatic check_results(
   input logic [rx_pkg::CHANNELS-1:0][TIMER_BITS-1:0] start_delays, stop_delays, digital_delays,
   input logic [rx_pkg::CHANNELS-1:0][$clog2(rx_pkg::CHANNELS+tx_pkg::CHANNELS)-1:0] trigger_sources
 );
-  rx_pkg::batch_t expected [$];
-  logic [buffer_pkg::TSTAMP_WIDTH-1:0] timestamps [$];
+  rx_pkg::batch_t sent_q [$];
+  rx_pkg::batch_t expected_q [$];
+  logic [buffer_pkg::TSTAMP_WIDTH-1:0] timestamp_q [$];
   int expected_locations [$];
   logic is_high;
-  logic [buffer_pkg::SAMPLE_INDEX_WIDTH-1:0] index, index_init;
+  logic [buffer_pkg::SAMPLE_INDEX_WIDTH-1:0] index;
   logic [buffer_pkg::TSTAMP_WIDTH-1:0] time_init;
+  logic is_digital;
   for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
+    if (trigger_sources[channel] > rx_pkg::CHANNELS) begin
+      sent_q = adc_data_in_tx_i.data_q[trigger_sources[channel]];
+      is_digital = 1'b1;
+    end else begin
+      sent_q = adc_data_in_tx_i.data_q[trigger_sources[channel]];
+      is_digital = 1'b0;
+    end
     debug.display($sformatf("checking received output for channel %0d", channel), sim_util_pkg::DEBUG);
-    // generate expected data
+    // generate expected_q data
     is_high = 1'b0;
     time_init = adc_timestamps_out_rx_i.data_q[channel][$] >> buffer_pkg::SAMPLE_INDEX_WIDTH;
-    for (int i = adc_data_in_tx_i.data_q[channel].size() - 1; i >= 0; i--) begin
-      if (any_above_threshold(adc_data_in_tx_i.data_q[channel][i], high_thresholds[channel])) begin
+    for (int i = sent_q.size() - 1; i >= 0; i--) begin
+      if (any_above_threshold(sent_q[i], high_thresholds[channel])) begin
         is_high = 1'b1;
       end
-      if (~any_above_threshold(adc_data_in_tx_i.data_q[channel][i], low_thresholds[channel])) begin
+      if (~any_above_threshold(sent_q[i], low_thresholds[channel])) begin
         is_high = 1'b0;
       end
       if (is_high) begin
         expected_locations.push_front(i);
         // delay is not in samples, it's in clock periods at maximum sample rate
-        for (int j = 1; (j*adc_send_samples_decimation <= start_delays[channel]) && (i + j < adc_data_in_tx_i.data_q[channel].size()); j++) begin
+        for (int j = 1; (j*adc_send_samples_decimation <= start_delays[channel]) && (i + j < sent_q.size()); j++) begin
           expected_locations.push_front(i+j);
         end
         for (int j = 1; (j*adc_send_samples_decimation <= stop_delays[channel]) && (i - j >= 0); j++) begin
@@ -232,28 +241,26 @@ task automatic check_results(
     expected_locations = expected_locations.unique();
     expected_locations.sort();
     debug.display($sformatf("expected_locations = %0p", expected_locations), sim_util_pkg::DEBUG);
-    // get timestamps
-    index_init = expected_locations[$];
-    debug.display($sformatf("index_init = %0d", index_init), sim_util_pkg::DEBUG);
+    // get timestamp_q
     for (int i = expected_locations.size() - 1; i >= 0; i--) begin
       index = expected_locations.size() - 1 - i;
       debug.display($sformatf("expected_locations[%0d] = %0d", i, expected_locations[i]), sim_util_pkg::DEBUG);
-      if ((expected_locations[i+1] - 1 > expected_locations[i]) || (index == 0)) begin
+      if ((expected_locations[i+1] - 1 > expected_locations[i]) || (i == expected_locations.size() - 1)) begin
         debug.display($sformatf("index = %0x", index), sim_util_pkg::DEBUG);
-        timestamps.push_front({time_init + (index_init-expected_locations[i])*adc_send_samples_decimation, index});
+        timestamp_q.push_front({time_init + (expected_locations[$]-expected_locations[i])*adc_send_samples_decimation, index});
       end
     end
     while (expected_locations.size() > 0) begin
-      expected.push_front(adc_data_in_tx_i.data_q[channel][expected_locations.pop_back()]);
+      expected_q.push_front(adc_data_in_tx_i.data_q[channel][expected_locations.pop_back()]);
     end
-    // check expected matches received
+    // check expected_q matches received
     debug.display("checking data", sim_util_pkg::DEBUG);
-    batch_q_util.compare(debug, adc_data_out_rx_i.data_q[channel], expected);
-    while (expected.size() > 0) expected.pop_back();
-    // check timestamps
-    debug.display("checking timestamps", sim_util_pkg::DEBUG);
-    tstamp_q_util.compare(debug, adc_timestamps_out_rx_i.data_q[channel], timestamps);
-    while (timestamps.size() > 0) timestamps.pop_back();
+    batch_q_util.compare(debug, adc_data_out_rx_i.data_q[channel], expected_q);
+    while (expected_q.size() > 0) expected_q.pop_back();
+    // check timestamp_q
+    debug.display("checking timestamp_q", sim_util_pkg::DEBUG);
+    tstamp_q_util.compare(debug, adc_timestamps_out_rx_i.data_q[channel], timestamp_q);
+    while (timestamp_q.size() > 0) timestamp_q.pop_back();
   end
 endtask
 
