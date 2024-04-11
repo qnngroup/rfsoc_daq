@@ -33,7 +33,7 @@ Realtime_Parallel_If #(.DWIDTH(buffer_pkg::TSTAMP_WIDTH), .CHANNELS(rx_pkg::CHAN
 logic adc_reset_state;
 logic [tx_pkg::CHANNELS-1:0] adc_digital_trigger_in;
 
-localparam int MAX_DELAY_CYCLES = 16;
+localparam int MAX_DELAY_CYCLES = 128;
 localparam int TIMER_BITS = $clog2(MAX_DELAY_CYCLES);
 typedef logic [TIMER_BITS-1:0] delay_t;
 Axis_If #(.DWIDTH(2*rx_pkg::CHANNELS*rx_pkg::SAMPLE_WIDTH)) ps_thresholds ();
@@ -86,6 +86,7 @@ initial begin
   adc_reset <= 1'b1;
   adc_reset_state <= 1'b0;
   adc_digital_trigger_in <= '0;
+  tb_i.adc_send_samples_decimation <= 37;
 
   repeat (10) @(posedge ps_clk);
   ps_reset <= 1'b0;
@@ -109,8 +110,8 @@ initial begin
   // set delays
   for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
     digital_delays[channel] = '0;
-    stop_delays[channel] = 1;
-    start_delays[channel] = 5;
+    stop_delays[channel] = 1*tb_i.adc_send_samples_decimation;
+    start_delays[channel] = 2*tb_i.adc_send_samples_decimation;
   end
   tb_i.set_delays(debug, start_delays, stop_delays, digital_delays);
   // set trigger sources
@@ -127,7 +128,7 @@ initial begin
   @(posedge adc_clk);
   adc_reset_state <= 1'b0;
 
-  repeat (200) @(posedge adc_clk); // send some data
+  repeat (10000) @(posedge adc_clk); // send some data
   tb_i.disable_send();
   repeat (4+MAX_DELAY_CYCLES) @(posedge adc_clk);
   for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
@@ -150,7 +151,6 @@ initial begin
 
   // reset sample index
   adc_reset_state <= 1'b1;
-  
 
   // test digital trigger
   // test analog trigger

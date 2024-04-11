@@ -220,10 +220,11 @@ task automatic check_results(
       end
       if (is_high) begin
         expected_locations.push_front(i);
-        for (int j = 1; (j <= start_delays[channel]) && (i + j < adc_data_in_tx_i.data_q[channel].size()); j++) begin
+        // delay is not in samples, it's in clock periods at maximum sample rate
+        for (int j = 1; (j*adc_send_samples_decimation <= start_delays[channel]) && (i + j < adc_data_in_tx_i.data_q[channel].size()); j++) begin
           expected_locations.push_front(i+j);
         end
-        for (int j = 1; (j <= stop_delays[channel]) && (i - j >= 0); j++) begin
+        for (int j = 1; (j*adc_send_samples_decimation <= stop_delays[channel]) && (i - j >= 0); j++) begin
           expected_locations.push_front(i-j);
         end
       end
@@ -234,11 +235,10 @@ task automatic check_results(
     // get timestamps
     index_init = expected_locations[$];
     debug.display($sformatf("index_init = %0d", index_init), sim_util_pkg::DEBUG);
-    timestamps.push_front({time_init, {buffer_pkg::SAMPLE_INDEX_WIDTH{1'b0}}});
-    for (int i = expected_locations.size() - 2; i >= 0; i--) begin
+    for (int i = expected_locations.size() - 1; i >= 0; i--) begin
       index = expected_locations.size() - 1 - i;
       debug.display($sformatf("expected_locations[%0d] = %0d", i, expected_locations[i]), sim_util_pkg::DEBUG);
-      if (expected_locations[i+1] - 1 > expected_locations[i]) begin
+      if ((expected_locations[i+1] - 1 > expected_locations[i]) || (index == 0)) begin
         debug.display($sformatf("index = %0x", index), sim_util_pkg::DEBUG);
         timestamps.push_front({time_init + (index_init-expected_locations[i])*adc_send_samples_decimation, index});
       end
