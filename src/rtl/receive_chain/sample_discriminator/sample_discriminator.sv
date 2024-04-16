@@ -224,7 +224,7 @@ end
 assign adc_start_triggers = {adc_digital_trigger_in_d, adc_data_any_above_high};
 assign adc_stop_triggers = {{tx_pkg::CHANNELS{1'b0}}, adc_data_all_below_low};
 logic [rx_pkg::CHANNELS-1:0] adc_fsm_start, adc_fsm_start_d, adc_fsm_stop, adc_fsm_stop_d;
-logic [MAX_DELAY_CYCLES-1:0][rx_pkg::CHANNELS-1:0] adc_fsm_start_pipe, adc_fsm_stop_pipe;
+logic [MAX_DELAY_CYCLES-1:0][rx_pkg::CHANNELS-1:0] adc_fsm_stop_pipe;
 always_ff @(posedge adc_clk) begin
   // mux triggers
   for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
@@ -250,6 +250,7 @@ end
 // every time an input pulse arrives so we don't miss any_above_high
 generate
   for (genvar channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
+    // invalid for total_delay == 0, but start_d doesn't get used if total_delay == 0
     pulse_delay #(
       .TIMER_BITS(TIMER_BITS)
     ) adc_start_pulse_delay_i (
@@ -264,6 +265,7 @@ endgenerate
 
 always_comb begin
   for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
+    // invalid for total_delay == 0, but stop_d doesn't get used if total_delay == 0
     adc_fsm_stop_d[channel] = adc_fsm_stop_pipe[adc_total_delay[channel]-1][channel];
   end
 end

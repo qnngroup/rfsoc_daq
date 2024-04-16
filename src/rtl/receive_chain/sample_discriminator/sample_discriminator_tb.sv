@@ -12,6 +12,8 @@ module sample_discriminator_tb #(
   Realtime_Parallel_If.Master adc_data_in,
   Realtime_Parallel_If.Slave adc_data_out,
   Realtime_Parallel_If.Slave adc_timestamps_out,
+  
+  output logic [tx_pkg::CHANNELS-1:0] adc_digital_trigger_in,
 
   input logic ps_clk,
   Axis_If.Master ps_thresholds,
@@ -25,6 +27,8 @@ localparam int TIMER_BITS = $clog2(MAX_DELAY_CYCLES);
 sim_util_pkg::queue #(.T(rx_pkg::sample_t), .T2(rx_pkg::batch_t)) sample_q_util = new;
 sim_util_pkg::queue #(.T(rx_pkg::batch_t)) batch_q_util = new;
 sim_util_pkg::queue #(.T(logic [buffer_pkg::TSTAMP_WIDTH-1:0])) tstamp_q_util = new;
+
+int trigger_times_q [rx_pkg::CHANNELS][$];
 
 axis_driver #(
   .DWIDTH(2*rx_pkg::CHANNELS*rx_pkg::SAMPLE_WIDTH)
@@ -102,6 +106,7 @@ task automatic init ();
   ps_trigger_select_tx_i.init();
   ps_disable_discriminator_tx_i.init();
   disable_send();
+  adc_digital_trigger_in <= '0;
   adc_send_samples_decimation <= 1;
   adc_send_samples_counter <= 0;
 endtask
@@ -160,7 +165,7 @@ task automatic set_delays (
   end
 endtask
 
-task automatic set_trigger_sources(
+task automatic set_trigger_sources (
   inout sim_util_pkg::debug debug,
   input logic [rx_pkg::CHANNELS-1:0][$clog2(rx_pkg::CHANNELS+tx_pkg::CHANNELS)-1:0] sources
 );
@@ -171,7 +176,7 @@ task automatic set_trigger_sources(
   end
 endtask
 
-task automatic set_discrimination_channels(
+task automatic set_discrimination_channels (
   inout sim_util_pkg::debug debug,
   input logic [rx_pkg::CHANNELS-1:0] disabled_mask
 );
@@ -182,7 +187,17 @@ task automatic set_discrimination_channels(
   end
 endtask
 
-function automatic bit any_above_threshold(
+task automatic send_digital_trigger (
+  input logic [tx_pkg::CHANNELS-1:0] triggers
+);
+  adc_digital_trigger_in <= triggers;
+  // get trigger times
+  @(posedge adc_clk);
+  adc_digital_trigger_in <= '0;
+endtask
+
+
+function automatic bit any_above_threshold (
   input rx_pkg::batch_t batch,
   input rx_pkg::sample_t threshold
 );
@@ -194,7 +209,7 @@ function automatic bit any_above_threshold(
   return 1'b0;
 endfunction
 
-task automatic check_results(
+task automatic check_results (
   inout sim_util_pkg::debug debug,
   input logic [rx_pkg::CHANNELS-1:0][rx_pkg::SAMPLE_WIDTH-1:0] low_thresholds, high_thresholds,
   input logic [rx_pkg::CHANNELS-1:0][TIMER_BITS-1:0] start_delays, stop_delays, digital_delays,
@@ -217,14 +232,15 @@ task automatic check_results(
       is_digital = 1'b0;
     end
     debug.display($sformatf("checking received output for channel %0d", channel), sim_util_pkg::DEBUG);
+    debug.display($sformatf("trigger source = %0d", trigger_sources[channel]), sim_util_pkg::DEBUG);
     // generate expected_q data
     is_high = 1'b0;
     time_init = adc_timestamps_out_rx_i.data_q[channel][$] >> buffer_pkg::SAMPLE_INDEX_WIDTH;
     for (int i = sent_q.size() - 1; i >= 0; i--) begin
-      if (any_above_threshold(sent_q[i], high_thresholds[channel])) begin
+      if (any_above_threshold(sent_q[i], high_thresholds[trigger_sources[channel]])) begin
         is_high = 1'b1;
       end
-      if (~any_above_threshold(sent_q[i], low_thresholds[channel])) begin
+      if (~any_above_threshold(sent_q[i], low_thresholds[trigger_sources[channel]])) begin
         is_high = 1'b0;
       end
       if (is_high) begin
@@ -264,7 +280,7 @@ task automatic check_results(
   end
 endtask
 
-task automatic print_data(
+task automatic print_data (
   inout sim_util_pkg::debug debug,
   input rx_pkg::batch_t data_q [$]
 );

@@ -11,7 +11,8 @@
 //
 //
 // TODO test maximum delay
-// todo test different values for high and low threshold, test with trigger mux active
+// todo test different values for high and low threshold, test digital
+// triggers
 
 `timescale 1ns / 1ps
 module sample_discriminator_test();
@@ -50,6 +51,7 @@ sample_discriminator_tb #(
   .adc_data_in,
   .adc_data_out,
   .adc_timestamps_out,
+  .adc_digital_trigger_in,
   .ps_clk,
   .ps_thresholds,
   .ps_delays,
@@ -86,7 +88,6 @@ initial begin
   ps_reset <= 1'b1;
   adc_reset <= 1'b1;
   adc_reset_state <= 1'b0;
-  adc_digital_trigger_in <= '0;
   tb_i.adc_send_samples_decimation <= 4;
 
   repeat (10) @(posedge ps_clk);
@@ -95,7 +96,7 @@ initial begin
   adc_reset <= 1'b0;
 
   repeat (100) @(posedge adc_clk);
-  tb_i.set_input_range(.min(rx_pkg::sample_t'(-32)), .max(rx_pkg::sample_t'(31)));
+  tb_i.set_input_range(.min(rx_pkg::MIN_SAMP), .max(rx_pkg::MAX_SAMP));
 
   repeat (100) @(posedge adc_clk);
   ///////////////////////
@@ -104,15 +105,15 @@ initial begin
   // set thresholds
   @(posedge ps_clk);
   for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
-    low_thresholds[channel] = 19;//rx_pkg::MIN_SAMP;
-    high_thresholds[channel] = 22;//rx_pkg::MIN_SAMP; // save everything
+    high_thresholds[channel] = $urandom_range(rx_pkg::MIN_SAMP, rx_pkg::MAX_SAMP);
+    low_thresholds[channel] = $urandom_range(rx_pkg::MIN_SAMP, high_thresholds[channel]);
   end
   tb_i.set_thresholds(debug, low_thresholds, high_thresholds);
   // set delays
   for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
     digital_delays[channel] = '0;
-    stop_delays[channel] = 1*tb_i.adc_send_samples_decimation;
-    start_delays[channel] = 2*tb_i.adc_send_samples_decimation;
+    stop_delays[channel] = 0*tb_i.adc_send_samples_decimation;
+    start_delays[channel] = 0*tb_i.adc_send_samples_decimation;
   end
   tb_i.set_delays(debug, start_delays, stop_delays, digital_delays);
   // set trigger sources
@@ -129,7 +130,7 @@ initial begin
   @(posedge adc_clk);
   adc_reset_state <= 1'b0;
 
-  repeat (5000) @(posedge adc_clk); // send some data
+  repeat (50) @(posedge adc_clk); // send some data
   tb_i.disable_send();
   repeat (4+MAX_DELAY_CYCLES) @(posedge adc_clk);
   for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
