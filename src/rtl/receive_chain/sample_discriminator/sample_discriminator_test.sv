@@ -9,10 +9,7 @@
 //
 // when disabled, check that all samples got through and that no timestamps were sent
 //
-//
-// TODO test maximum delay
-// todo test different values for high and low threshold, test digital
-// triggers
+// TODO test digital triggers
 
 `timescale 1ns / 1ps
 module sample_discriminator_test();
@@ -81,81 +78,98 @@ logic [rx_pkg::CHANNELS-1:0][rx_pkg::SAMPLE_WIDTH-1:0] low_thresholds, high_thre
 logic [rx_pkg::CHANNELS-1:0][TIMER_BITS-1:0] start_delays, stop_delays, digital_delays;
 logic [rx_pkg::CHANNELS-1:0][$clog2(rx_pkg::CHANNELS+tx_pkg::CHANNELS)-1:0] trigger_sources;
 
+rx_pkg::sample_t min_samp, max_samp;
+
 initial begin
   debug.display("### TESTING SAMPLE DISCRIMINATOR ###", sim_util_pkg::DEFAULT);
 
-  tb_i.init();
-  ps_reset <= 1'b1;
-  adc_reset <= 1'b1;
-  adc_reset_state <= 1'b0;
-  tb_i.adc_send_samples_decimation <= 4;
+  for (int decimation = 1; decimation < 6; decimation++) begin
+    tb_i.init();
+    ps_reset <= 1'b1;
+    adc_reset <= 1'b1;
+    adc_reset_state <= 1'b0;
+    tb_i.adc_send_samples_decimation <= decimation;
 
-  repeat (10) @(posedge ps_clk);
-  ps_reset <= 1'b0;
-  @(posedge adc_clk);
-  adc_reset <= 1'b0;
+    debug.display($sformatf("testing with decimation = %0d", decimation), sim_util_pkg::DEBUG);
 
-  repeat (100) @(posedge adc_clk);
-  tb_i.set_input_range(.min(rx_pkg::MIN_SAMP), .max(rx_pkg::MAX_SAMP));
+    repeat (10) @(posedge ps_clk);
+    ps_reset <= 1'b0;
+    @(posedge adc_clk);
+    adc_reset <= 1'b0;
 
-  repeat (100) @(posedge adc_clk);
-  ///////////////////////
-  // configure DUT
-  ///////////////////////
-  // set thresholds
-  @(posedge ps_clk);
-  for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
-    high_thresholds[channel] = $urandom_range(rx_pkg::MIN_SAMP, rx_pkg::MAX_SAMP);
-    low_thresholds[channel] = $urandom_range(rx_pkg::MIN_SAMP, high_thresholds[channel]);
+    min_samp = rx_pkg::MIN_SAMP;
+    max_samp = rx_pkg::MAX_SAMP;
+    repeat (100) @(posedge adc_clk);
+    tb_i.set_input_range(.min(min_samp), .max(max_samp));
+
+    repeat (100) @(posedge adc_clk);
+    ///////////////////////
+    // configure DUT
+    ///////////////////////
+    // set thresholds
+    @(posedge ps_clk);
+    for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
+      high_thresholds[channel] = rx_pkg::sample_t'($urandom_range(
+        int'(rx_pkg::MIN_SAMP),
+        int'(rx_pkg::MAX_SAMP))
+      );
+      low_thresholds[channel] = rx_pkg::sample_t'($urandom_range(
+        int'(rx_pkg::MIN_SAMP),
+        int'(rx_pkg::sample_t'(high_thresholds[channel])))
+      );
+    end
+    tb_i.set_thresholds(debug, low_thresholds, high_thresholds);
+    // set delays
+    for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
+      digital_delays[channel] = '0;
+      stop_delays[channel] = 0*tb_i.adc_send_samples_decimation;
+      start_delays[channel] = 0*tb_i.adc_send_samples_decimation;
+    end
+    tb_i.set_delays(debug, start_delays, stop_delays, digital_delays);
+    // set trigger sources
+    for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
+      trigger_sources[channel] = (channel + 2) % rx_pkg::CHANNELS; // use channel 0
+    end
+    tb_i.set_trigger_sources(debug, trigger_sources);
+
+    // wait for delays/thresholds to synchronize before sending data
+    repeat (10) @(posedge ps_clk);
+    @(posedge adc_clk);
+    tb_i.enable_send();
+    adc_reset_state <= 1'b1;
+    @(posedge adc_clk);
+    adc_reset_state <= 1'b0;
+
+    // send data and randomize input signal level
+    repeat (50) begin
+      repeat (100) @(posedge adc_clk); // send some data
+      max_samp = $urandom_range(int'(rx_pkg::MIN_SAMP) + 2, int'(rx_pkg::MAX_SAMP));
+      min_samp = $urandom_range(int'(rx_pkg::MIN_SAMP), int'(max_samp) - 1);
+      tb_i.set_input_range(.min(min_samp), .max(max_samp));
+    end
+    // stop acquisition and check output
+    tb_i.disable_send();
+    repeat (4+MAX_DELAY_CYCLES) @(posedge adc_clk);
+    for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
+      debug.display($sformatf("sent_data[%0d] = ", channel), sim_util_pkg::DEBUG);
+      tb_i.print_data(debug, tb_i.adc_data_in_tx_i.data_q[channel]);
+    end
+    for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
+      debug.display($sformatf("received_data[%0d] = ", channel), sim_util_pkg::DEBUG);
+      tb_i.print_data(debug, tb_i.adc_data_out_rx_i.data_q[channel]);
+    end
+    for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
+      debug.display($sformatf("received_timestamps[%0d] = %0p", channel, tb_i.adc_timestamps_out_rx_i.data_q[channel]), sim_util_pkg::DEBUG);
+    end
+    tb_i.check_results(
+      debug,
+      low_thresholds, high_thresholds,
+      start_delays, stop_delays, digital_delays,
+      trigger_sources
+    );
+
+    tb_i.clear_queues();
   end
-  tb_i.set_thresholds(debug, low_thresholds, high_thresholds);
-  // set delays
-  for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
-    digital_delays[channel] = '0;
-    stop_delays[channel] = 0*tb_i.adc_send_samples_decimation;
-    start_delays[channel] = 0*tb_i.adc_send_samples_decimation;
-  end
-  tb_i.set_delays(debug, start_delays, stop_delays, digital_delays);
-  // set trigger sources
-  for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
-    trigger_sources[channel] = (channel + 2) % rx_pkg::CHANNELS; // use channel 0
-  end
-  tb_i.set_trigger_sources(debug, trigger_sources);
-
-  // wait for delays/thresholds to synchronize before sending data
-  repeat (10) @(posedge ps_clk);
-  @(posedge adc_clk);
-  tb_i.enable_send();
-  adc_reset_state <= 1'b1;
-  @(posedge adc_clk);
-  adc_reset_state <= 1'b0;
-
-  repeat (50) @(posedge adc_clk); // send some data
-  tb_i.disable_send();
-  repeat (4+MAX_DELAY_CYCLES) @(posedge adc_clk);
-  for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
-    debug.display($sformatf("sent_data[%0d] = ", channel), sim_util_pkg::DEBUG);
-    tb_i.print_data(debug, tb_i.adc_data_in_tx_i.data_q[channel]);
-  end
-  for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
-    debug.display($sformatf("received_data[%0d] = ", channel), sim_util_pkg::DEBUG);
-    tb_i.print_data(debug, tb_i.adc_data_out_rx_i.data_q[channel]);
-  end
-  for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
-    debug.display($sformatf("received_timestamps[%0d] = %0p", channel, tb_i.adc_timestamps_out_rx_i.data_q[channel]), sim_util_pkg::DEBUG);
-  end
-  tb_i.check_results(
-    debug,
-    low_thresholds, high_thresholds,
-    start_delays, stop_delays, digital_delays,
-    trigger_sources
-  );
-
-  // reset sample index
-  adc_reset_state <= 1'b1;
-
-  // test digital trigger
-  // test analog trigger
 
   debug.finish();
 end

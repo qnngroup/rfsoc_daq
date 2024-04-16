@@ -178,12 +178,12 @@ always_ff @(posedge adc_clk) begin
   adc_data_all_below_low <= adc_data_in.valid;
   for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
     for (int sample = 0; sample < rx_pkg::PARALLEL_SAMPLES; sample++) begin
-      if ($signed(adc_data_in.data[channel][sample*rx_pkg::SAMPLE_WIDTH+:rx_pkg::SAMPLE_WIDTH])
-          > $signed(adc_thresholds_high[channel])) begin
+      if (rx_pkg::sample_t'(adc_data_in.data[channel][sample*rx_pkg::SAMPLE_WIDTH+:rx_pkg::SAMPLE_WIDTH])
+          > rx_pkg::sample_t'(adc_thresholds_high[channel])) begin
         adc_data_any_above_high[channel] <= adc_data_in.valid[channel];
       end
-      if ($signed(adc_data_in.data[channel][sample*rx_pkg::SAMPLE_WIDTH+:rx_pkg::SAMPLE_WIDTH])
-          > $signed(adc_thresholds_low[channel])) begin
+      if (rx_pkg::sample_t'(adc_data_in.data[channel][sample*rx_pkg::SAMPLE_WIDTH+:rx_pkg::SAMPLE_WIDTH])
+          > rx_pkg::sample_t'(adc_thresholds_low[channel])) begin
         adc_data_all_below_low[channel] <= 1'b0;
       end
     end

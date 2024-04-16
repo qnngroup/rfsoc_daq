@@ -111,6 +111,12 @@ task automatic init ();
   adc_send_samples_counter <= 0;
 endtask
 
+task automatic clear_queues ();
+  adc_data_in_tx_i.clear_queues();
+  adc_data_out_rx_i.clear_queues();
+  adc_timestamps_out_rx_i.clear_queues();
+endtask
+
 task automatic enable_send ();
   adc_send_samples <= 1'b1;
 endtask
@@ -202,7 +208,7 @@ function automatic bit any_above_threshold (
   input rx_pkg::sample_t threshold
 );
   for (int sample = 0; sample < rx_pkg::PARALLEL_SAMPLES; sample++) begin
-    if (rx_pkg::sample_t'(batch[sample*rx_pkg::SAMPLE_WIDTH+:rx_pkg::SAMPLE_WIDTH]) > threshold) begin
+    if (rx_pkg::sample_t'(batch[sample*rx_pkg::SAMPLE_WIDTH+:rx_pkg::SAMPLE_WIDTH]) > rx_pkg::sample_t'(threshold)) begin
       return 1'b1;
     end
   end
@@ -223,24 +229,26 @@ task automatic check_results (
   logic [buffer_pkg::SAMPLE_INDEX_WIDTH-1:0] index;
   logic [buffer_pkg::TSTAMP_WIDTH-1:0] time_init;
   logic is_digital;
+  logic [$clog2(rx_pkg::CHANNELS+tx_pkg::CHANNELS)-1:0] source;
   for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
-    if (trigger_sources[channel] > rx_pkg::CHANNELS) begin
-      sent_q = adc_data_in_tx_i.data_q[trigger_sources[channel]];
+    source = trigger_sources[channel];
+    if (source > rx_pkg::CHANNELS) begin
+      sent_q = adc_data_in_tx_i.data_q[source];
       is_digital = 1'b1;
     end else begin
-      sent_q = adc_data_in_tx_i.data_q[trigger_sources[channel]];
+      sent_q = adc_data_in_tx_i.data_q[source];
       is_digital = 1'b0;
     end
     debug.display($sformatf("checking received output for channel %0d", channel), sim_util_pkg::DEBUG);
-    debug.display($sformatf("trigger source = %0d", trigger_sources[channel]), sim_util_pkg::DEBUG);
+    debug.display($sformatf("trigger source = %0d", source), sim_util_pkg::DEBUG);
     // generate expected_q data
     is_high = 1'b0;
     time_init = adc_timestamps_out_rx_i.data_q[channel][$] >> buffer_pkg::SAMPLE_INDEX_WIDTH;
     for (int i = sent_q.size() - 1; i >= 0; i--) begin
-      if (any_above_threshold(sent_q[i], high_thresholds[trigger_sources[channel]])) begin
+      if (any_above_threshold(sent_q[i], high_thresholds[source])) begin
         is_high = 1'b1;
       end
-      if (~any_above_threshold(sent_q[i], low_thresholds[trigger_sources[channel]])) begin
+      if (~any_above_threshold(sent_q[i], low_thresholds[source])) begin
         is_high = 1'b0;
       end
       if (is_high) begin
