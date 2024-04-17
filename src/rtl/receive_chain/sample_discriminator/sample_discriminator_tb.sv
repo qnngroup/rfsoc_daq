@@ -247,7 +247,7 @@ task automatic check_results (
     // start after start_delays[channel] because the data at the beginning
     // has already passed through the sample discriminator while
     // adc_reset_state was held high
-    for (int i = sent_q.size() - 1 - (start_delays[channel]/adc_send_samples_decimation); i >= 0; i--) begin
+    for (int i = sent_q.size() - 1 - (start_delays[source]/adc_send_samples_decimation); i >= 0; i--) begin
       if (any_above_threshold(sent_q[i], high_thresholds[source])) begin
         is_high = 1'b1;
       end
@@ -257,7 +257,8 @@ task automatic check_results (
       if (is_high) begin
         expected_locations.push_front(i);
         // delay is not in samples, it's in clock periods at maximum sample rate
-        for (int j = 1; (j*adc_send_samples_decimation <= start_delays[channel]) && (i + j < sent_q.size()); j++) begin
+        for (int j = 1; (j*adc_send_samples_decimation <= start_delays[channel]) && (i + j < adc_data_in_tx_i.data_q[channel].size()); j++) begin
+        //for (int j = 1; (j*adc_send_samples_decimation <= start_delays[channel]) && (i + j < sent_q.size()); j++) begin
           expected_locations.push_front(i+j);
         end
         for (int j = 1; (j*adc_send_samples_decimation <= stop_delays[channel]) && (i - j >= 0); j++) begin
