@@ -157,7 +157,7 @@ end
 // DISABLED: don't save samples
 // PRECAPTURE: save samples, ignore
 enum {DISABLED, PRECAPTURE, CAPTURE} adc_states [rx_pkg::CHANNELS];
-logic [rx_pkg::CHANNELS-1:0] adc_active;
+logic [rx_pkg::CHANNELS-1:0] adc_active, adc_active_d;
 always_comb begin
   for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
     // if the discriminator is bypassed for the current channel, always output 1,
@@ -165,6 +165,8 @@ always_comb begin
     adc_active[channel] = (adc_states[channel] != DISABLED) | adc_active_mask[channel];
   end
 end
+
+always_ff @(posedge adc_clk) adc_active_d <= adc_active;
 
 logic [MAX_DELAY_CYCLES+DISC_LATENCY-1:0][rx_pkg::CHANNELS-1:0][rx_pkg::DATA_WIDTH-1:0] adc_data_pipe;
 logic [MAX_DELAY_CYCLES+DISC_LATENCY-1:0][rx_pkg::CHANNELS-1:0] adc_valid_pipe;
@@ -175,12 +177,12 @@ always_ff @(posedge adc_clk) begin
 
   // amplitude-based triggering
   adc_data_any_above_high <= '0;
-  adc_data_all_below_low <= adc_data_in.valid;
+  adc_data_all_below_low <= adc_data_in.valid & (~adc_reset_state);
   for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
     for (int sample = 0; sample < rx_pkg::PARALLEL_SAMPLES; sample++) begin
       if (rx_pkg::sample_t'(adc_data_in.data[channel][sample*rx_pkg::SAMPLE_WIDTH+:rx_pkg::SAMPLE_WIDTH])
           > rx_pkg::sample_t'(adc_thresholds_high[channel])) begin
-        adc_data_any_above_high[channel] <= adc_data_in.valid[channel];
+        adc_data_any_above_high[channel] <= adc_data_in.valid[channel] & (~adc_reset_state);
       end
       if (rx_pkg::sample_t'(adc_data_in.data[channel][sample*rx_pkg::SAMPLE_WIDTH+:rx_pkg::SAMPLE_WIDTH])
           > rx_pkg::sample_t'(adc_thresholds_low[channel])) begin
@@ -226,10 +228,15 @@ assign adc_stop_triggers = {{tx_pkg::CHANNELS{1'b0}}, adc_data_all_below_low};
 logic [rx_pkg::CHANNELS-1:0] adc_fsm_start, adc_fsm_start_d, adc_fsm_stop, adc_fsm_stop_d;
 logic [MAX_DELAY_CYCLES-1:0][rx_pkg::CHANNELS-1:0] adc_fsm_stop_pipe;
 always_ff @(posedge adc_clk) begin
-  // mux triggers
-  for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
-    adc_fsm_start[channel] <= adc_start_triggers[adc_trigger_source[channel]];
-    adc_fsm_stop[channel] <= adc_stop_triggers[adc_trigger_source[channel]];
+  if (adc_reset_state) begin
+    adc_fsm_start <= '0;
+    adc_fsm_stop <= '0;
+  end else begin
+    // mux triggers
+    for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
+      adc_fsm_start[channel] <= adc_start_triggers[adc_trigger_source[channel]];
+      adc_fsm_stop[channel] <= adc_stop_triggers[adc_trigger_source[channel]];
+    end
   end
 end
 
@@ -299,19 +306,16 @@ always_ff @(posedge adc_clk) begin
   end else begin
     // only valid when we first get a start signal
     for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
-      if ((adc_states[channel] == DISABLED) & adc_fsm_start[channel]) begin
+      if (adc_active[channel] & (~adc_active_d[channel])) begin
         adc_timestamp_valid[channel] <= 1'b1;
+      end else begin
+        adc_timestamp_valid[channel] <= 1'b0;
       end
     end
   end
   for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
     adc_timestamps_out.data[channel] <= {adc_time, adc_sample_index[channel]};
-    if (adc_timestamp_valid[channel] && adc_data_out.valid[channel]) begin
-      adc_timestamps_out.valid[channel] <= 1'b1;
-      adc_timestamp_valid[channel] <= 1'b0;
-    end else begin
-      adc_timestamps_out.valid[channel] <= 1'b0;
-    end
+    adc_timestamps_out.valid[channel] <= adc_timestamp_valid[channel];
   end
 end
 

@@ -244,7 +244,10 @@ task automatic check_results (
     // generate expected_q data
     is_high = 1'b0;
     time_init = adc_timestamps_out_rx_i.data_q[channel][$] >> buffer_pkg::SAMPLE_INDEX_WIDTH;
-    for (int i = sent_q.size() - 1; i >= 0; i--) begin
+    // start after start_delays[channel] because the data at the beginning
+    // has already passed through the sample discriminator while
+    // adc_reset_state was held high
+    for (int i = sent_q.size() - 1 - (start_delays[channel]/adc_send_samples_decimation); i >= 0; i--) begin
       if (any_above_threshold(sent_q[i], high_thresholds[source])) begin
         is_high = 1'b1;
       end
@@ -274,6 +277,7 @@ task automatic check_results (
         timestamp_q.push_front({time_init + (expected_locations[$]-expected_locations[i])*adc_send_samples_decimation, index});
       end
     end
+    debug.display($sformatf("expected_timestamps = %0p", timestamp_q), sim_util_pkg::DEBUG);
     while (expected_locations.size() > 0) begin
       expected_q.push_front(adc_data_in_tx_i.data_q[channel][expected_locations.pop_back()]);
     end
