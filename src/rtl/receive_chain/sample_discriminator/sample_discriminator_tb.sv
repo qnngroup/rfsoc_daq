@@ -232,8 +232,8 @@ task automatic check_results (
   logic [$clog2(rx_pkg::CHANNELS+tx_pkg::CHANNELS)-1:0] source;
   for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
     source = trigger_sources[channel];
-    if (source > rx_pkg::CHANNELS) begin
-      sent_q = adc_data_in_tx_i.data_q[source];
+    if (source >= rx_pkg::CHANNELS) begin
+      sent_q = adc_data_in_tx_i.data_q[source - rx_pkg::CHANNELS];
       is_digital = 1'b1;
     end else begin
       sent_q = adc_data_in_tx_i.data_q[source];
@@ -258,7 +258,6 @@ task automatic check_results (
         expected_locations.push_front(i);
         // delay is not in samples, it's in clock periods at maximum sample rate
         for (int j = 1; (j*adc_send_samples_decimation <= start_delays[channel]) && (i + j < adc_data_in_tx_i.data_q[channel].size()); j++) begin
-        //for (int j = 1; (j*adc_send_samples_decimation <= start_delays[channel]) && (i + j < sent_q.size()); j++) begin
           expected_locations.push_front(i+j);
         end
         for (int j = 1; (j*adc_send_samples_decimation <= stop_delays[channel]) && (i - j >= 0); j++) begin
@@ -268,13 +267,12 @@ task automatic check_results (
     end
     expected_locations = expected_locations.unique();
     expected_locations.sort();
+    debug.display($sformatf("expected_locations.size() = %0d", expected_locations.size()), sim_util_pkg::DEBUG);
     debug.display($sformatf("expected_locations = %0p", expected_locations), sim_util_pkg::DEBUG);
     // get timestamp_q
     for (int i = expected_locations.size() - 1; i >= 0; i--) begin
       index = expected_locations.size() - 1 - i;
-      debug.display($sformatf("expected_locations[%0d] = %0d", i, expected_locations[i]), sim_util_pkg::DEBUG);
       if ((expected_locations[i+1] - 1 > expected_locations[i]) || (i == expected_locations.size() - 1)) begin
-        debug.display($sformatf("index = %0x", index), sim_util_pkg::DEBUG);
         timestamp_q.push_front({time_init + (expected_locations[$]-expected_locations[i])*adc_send_samples_decimation, index});
       end
     end

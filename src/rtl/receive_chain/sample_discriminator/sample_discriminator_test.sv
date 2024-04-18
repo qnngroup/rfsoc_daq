@@ -84,7 +84,7 @@ rx_pkg::sample_t min_samp, max_samp;
 initial begin
   debug.display("### TESTING SAMPLE DISCRIMINATOR ###", sim_util_pkg::DEFAULT);
 
-  for (int decimation = 1; decimation < 8; decimation++) begin
+  for (int decimation = 1; decimation < 16; decimation++) begin
     tb_i.init();
     ps_reset <= 1'b1;
     adc_reset <= 1'b1;
@@ -122,16 +122,23 @@ initial begin
     tb_i.set_thresholds(debug, low_thresholds, high_thresholds);
     // set delays
     for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
-      start_delay_nsamp = $urandom_range(0, MAX_DELAY_CYCLES/decimation);
-      stop_delay_nsamp = $urandom_range(0, MAX_DELAY_CYCLES/decimation - start_delay_nsamp - 1);
+      start_delay_nsamp = $urandom_range(0, MAX_DELAY_CYCLES/decimation - 1);
+      stop_delay_nsamp = $urandom_range(0, MAX_DELAY_CYCLES/decimation - 1);
       digital_delays[channel] = '0;
       stop_delays[channel] = stop_delay_nsamp*decimation;
       start_delays[channel] = start_delay_nsamp*decimation;
+      debug.display($sformatf(
+        "stop_delays[%0d] = %0d, start_delays[%0d] = %0d, total_delay[%0d] = %0d",
+        channel, stop_delays[channel],
+        channel, start_delays[channel],
+        channel, stop_delays[channel] + start_delays[channel]),
+        sim_util_pkg::DEBUG
+      );
     end
     tb_i.set_delays(debug, start_delays, stop_delays, digital_delays);
     // set trigger sources
     for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
-      trigger_sources[channel] = $urandom_range(0, rx_pkg::CHANNELS);
+      trigger_sources[channel] = $urandom_range(0, rx_pkg::CHANNELS - 1);
       //trigger_sources[channel] = channel;
     end
     tb_i.set_trigger_sources(debug, trigger_sources);
@@ -142,7 +149,7 @@ initial begin
     @(posedge adc_clk);
     tb_i.enable_send();
     // wait some time so that we get good data
-    repeat (100) @(posedge ps_clk);
+    repeat (4+MAX_DELAY_CYCLES) @(posedge adc_clk);
     adc_reset_state <= 1'b1;
     repeat (10) begin
       do @(posedge adc_clk); while (~adc_data_in.valid);
@@ -154,6 +161,13 @@ initial begin
     for (int channel = 0; channel < tx_pkg::CHANNELS; channel++) begin
       while (tb_i.adc_data_in_tx_i.data_q[channel].size() > start_delays[channel]/decimation) begin
         tb_i.adc_data_in_tx_i.data_q[channel].pop_back();
+      end
+      if (tb_i.adc_data_in_tx_i.data_q[channel].size() != start_delays[channel]/decimation) begin
+        debug.error($sformatf(
+          "didn't get enough samples before start, need %0d, got %0d",
+          start_delays[channel]/decimation,
+          tb_i.adc_data_in_tx_i.data_q[channel].size())
+        );
       end
     end
     tb_i.adc_timestamps_out_rx_i.clear_queues();
@@ -178,10 +192,12 @@ initial begin
       tb_i.print_data(debug, tb_i.adc_data_out_rx_i.data_q[channel]);
     end
     for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
-      debug.display($sformatf("received_timestamps[%0d] = %0p", channel, tb_i.adc_timestamps_out_rx_i.data_q[channel]), sim_util_pkg::DEBUG);
-    end
-    for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
-      debug.display($sformatf("transmitted_q[%0d].size() = %0p, start_delays[%0d]/decimation = %0d", channel, tb_i.adc_data_in_tx_i.data_q[channel].size(), channel, start_delays[channel]/decimation), sim_util_pkg::DEBUG);
+      debug.display($sformatf(
+        "received_timestamps[%0d] = %0p",
+        channel,
+        tb_i.adc_timestamps_out_rx_i.data_q[channel]),
+        sim_util_pkg::DEBUG
+      );
     end
     tb_i.check_results(
       debug,

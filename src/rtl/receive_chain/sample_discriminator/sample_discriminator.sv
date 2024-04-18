@@ -72,9 +72,9 @@ axis_config_reg_cdc #(
 // start/stop delay
 localparam int DISC_LATENCY = 2; // extra latency for pipeline because of sample discriminator
 localparam int TIMER_BITS = $clog2(MAX_DELAY_CYCLES);
-logic [rx_pkg::CHANNELS-1:0][TIMER_BITS-1:0] adc_pipe_delay;
-logic [rx_pkg::CHANNELS-1:0][TIMER_BITS-1:0] adc_total_delay;
-logic [rx_pkg::CHANNELS-1:0][TIMER_BITS-1:0] adc_digital_delay;
+logic [rx_pkg::CHANNELS-1:0][$clog2(MAX_DELAY_CYCLES+DISC_LATENCY)-1:0] adc_pipe_delay;
+logic [rx_pkg::CHANNELS-1:0][$clog2(2*MAX_DELAY_CYCLES)-1:0] adc_total_delay;
+logic [rx_pkg::CHANNELS-1:0][$clog2(MAX_DELAY_CYCLES+1)-1:0] adc_digital_delay;
 Axis_If #(.DWIDTH(3*TIMER_BITS*rx_pkg::CHANNELS)) adc_delays_sync ();
 assign adc_delays_sync.ready = 1'b1; // always accept new config
 always_ff @(posedge adc_clk) begin
@@ -205,7 +205,7 @@ end
 logic [rx_pkg::CHANNELS+tx_pkg::CHANNELS-1:0] adc_start_triggers;
 logic [rx_pkg::CHANNELS+tx_pkg::CHANNELS-1:0] adc_stop_triggers;
 logic [tx_pkg::CHANNELS-1:0] adc_digital_trigger_in_d;
-logic [MAX_DELAY_CYCLES-1:0][tx_pkg::CHANNELS-1:0] adc_digital_trigger_in_pipe;
+logic [MAX_DELAY_CYCLES+1-1:0][tx_pkg::CHANNELS-1:0] adc_digital_trigger_in_pipe;
 always_ff @(posedge adc_clk) begin
   if (adc_reset) begin
     adc_digital_trigger_in_pipe <= '0;
@@ -213,7 +213,7 @@ always_ff @(posedge adc_clk) begin
     if (adc_reset_state) begin
       adc_digital_trigger_in_pipe <= '0;
     end else begin
-      adc_digital_trigger_in_pipe <= {adc_digital_trigger_in_pipe, adc_digital_trigger_in};
+      adc_digital_trigger_in_pipe <= {adc_digital_trigger_in_pipe[MAX_DELAY_CYCLES-2:0], adc_digital_trigger_in};
     end
   end
 end
@@ -226,7 +226,7 @@ end
 assign adc_start_triggers = {adc_digital_trigger_in_d, adc_data_any_above_high};
 assign adc_stop_triggers = {{tx_pkg::CHANNELS{1'b0}}, adc_data_all_below_low};
 logic [rx_pkg::CHANNELS-1:0] adc_fsm_start, adc_fsm_start_d, adc_fsm_stop, adc_fsm_stop_d;
-logic [MAX_DELAY_CYCLES-1:0][rx_pkg::CHANNELS-1:0] adc_fsm_stop_pipe;
+logic [2*MAX_DELAY_CYCLES-1:0][rx_pkg::CHANNELS-1:0] adc_fsm_stop_pipe;
 always_ff @(posedge adc_clk) begin
   if (adc_reset_state) begin
     adc_fsm_start <= '0;
@@ -259,7 +259,7 @@ generate
   for (genvar channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
     // invalid for total_delay == 0, but start_d doesn't get used if total_delay == 0
     pulse_delay #(
-      .TIMER_BITS(TIMER_BITS)
+      .TIMER_BITS($clog2(2*MAX_DELAY_CYCLES))
     ) adc_start_pulse_delay_i (
       .clk(adc_clk),
       .reset(adc_reset | adc_reset_state),
