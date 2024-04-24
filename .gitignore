@@ -7,3 +7,13 @@ pynq/hw/
 pynq/.ipynb_checkpoints/
 pynq/__pycache__/
 pynq/figures/*.png
+src/stephen_rtl/waves
+src/stephen_rtl/vcd_files
+src/stephen_rtl/Python_Files/.ipynb_checkpoints
+src/stephen_rtl/Python_Files/__pycache__
+src/stephen_rtl/Python_Files/dac_stats
+src/stephen_rtl/Python_Files/poster_plots_out
+src/stephen_rtl/Python_Files/poster_raw_data
+src/stephen_rtl/*.str
+src/stephen_rtl/pull_stuff.sh
+src/stephen_rtl/push_stuff.sh

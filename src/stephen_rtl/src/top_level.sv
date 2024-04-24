@@ -1,0 +1,169 @@
+`timescale 1ns / 1ps
+`default_nettype none
+import mem_layout_pkg::*;
+
+module top_level(input wire clk,sys_rst,
+                 //Inputs from DAC
+                 input wire dac0_rdy,
+                 //Outpus to DAC
+                 output logic[`BATCH_WIDTH-1:0] dac_batch, 
+                 output logic valid_dac_batch, 
+                 output logic pl_rstn, 
+                 //Inputs from PS
+                 input wire [`A_BUS_WIDTH-1:0] raddr_packet,
+                 input wire raddr_valid_packet,
+                 input wire [`A_BUS_WIDTH-1:0] waddr_packet,
+                 input wire waddr_valid_packet,
+                 input wire [`WD_BUS_WIDTH-1:0] wdata_packet,
+                 input wire wdata_valid_packet,
+                 input wire ps_wresp_rdy,ps_read_rdy,
+                 //axi_slave Outputs
+                 output logic [1:0] wresp_out,rresp_out,
+                 output logic wresp_valid_out, rresp_valid_out,
+                 output logic [`WD_BUS_WIDTH-1:0] rdata_packet,
+                 output logic rdata_valid_out,
+                 //DMA Inputs/Outputs (axi-stream)
+                 input wire[`DMA_DATA_WIDTH-1:0] pwl_tdata,
+                 input wire[3:0] pwl_tkeep,
+                 input wire pwl_tlast, pwl_tvalid,
+                 output logic pwl_tready);
+
+    Recieve_Transmit_IF #(`A_BUS_WIDTH, `A_DATA_WIDTH)   wa_if (); 
+    Recieve_Transmit_IF #(`WD_BUS_WIDTH, `WD_DATA_WIDTH) wd_if (); 
+    Recieve_Transmit_IF #(`A_BUS_WIDTH, `A_DATA_WIDTH)   ra_if (); 
+    Recieve_Transmit_IF #(`WD_BUS_WIDTH, `WD_DATA_WIDTH) rd_if (); 
+    Recieve_Transmit_IF #(2,2) wr_if (); 
+    Recieve_Transmit_IF #(2,2) rr_if ();
+
+
+
+    Axis_IF #(`BUFF_TIMESTAMP_WIDTH) bufft_if(); 
+    Axis_IF #(`BUFF_CONFIG_WIDTH) buffc_if();
+    Axis_IF #(`DMA_DATA_WIDTH) pwl_dma_if();
+    Axis_IF #(`CHANNEL_MUX_WIDTH) cmc_if();
+    Axis_IF #(`SDC_DATA_WIDTH) sdc_if();
+
+
+    assign pwl_dma_if.data = pwl_tdata;
+    assign pwl_dma_if.valid = pwl_tvalid;
+    assign pwl_dma_if.last = pwl_tlast;
+    assign pwl_tready = pwl_dma_if.ready; 
+
+    assign {bufft_if.data, bufft_if.valid, bufft_if.last} = 0; //Swap with Reed's out signals when he needs them.
+    assign bufft_if.ready = 1; 
+
+    assign sdc_if.ready = 1;   //Swap with Reed's in signals when he needs them
+    assign buffc_if.ready = 1; //Swap with Reed's in signals when he needs them
+    assign cmc_if.ready = 1;   //Swap with Reed's in signals when he needs them
+
+    assign ra_if.packet     = raddr_packet;
+    assign ra_if.valid_pack = raddr_valid_packet;
+    assign wa_if.packet     = waddr_packet;
+    assign wa_if.valid_pack = waddr_valid_packet;
+    assign wd_if.packet     = wdata_packet;
+    assign wd_if.valid_pack = wdata_valid_packet;
+    assign rd_if.dev_rdy    = ps_read_rdy; 
+    assign wr_if.dev_rdy    = ps_wresp_rdy; 
+
+    assign rdata_packet     = rd_if.packet; 
+    assign rdata_valid_out  = rd_if.valid_pack;    
+    assign wresp_out        = wr_if.packet; 
+    assign wresp_valid_out  = wr_if.valid_pack; 
+    assign rresp_out        = rr_if.packet;
+    assign rresp_valid_out  = rr_if.valid_pack; 
+
+    // Receive interfaces don't need transmit signals
+    assign {wa_if.data_to_send, wa_if.send, wa_if.trans_rdy, wa_if.dev_rdy} = 0;
+    assign {wd_if.data_to_send, wd_if.send, wd_if.trans_rdy, wd_if.dev_rdy} = 0;
+    assign {ra_if.data_to_send, ra_if.send, ra_if.trans_rdy, ra_if.dev_rdy} = 0;
+    assign {ra_if.data_to_send, ra_if.send, ra_if.trans_rdy, ra_if.dev_rdy} = 0;
+
+    // Transmit interfaces don't need receive signals 
+    assign {rd_if.data, rd_if.valid_data} = 0;
+    assign {wr_if.data, wr_if.valid_data} = 0;
+    assign {rr_if.data, rr_if.valid_data} = 0;
+    
+    // All of these signals don't apply to read response since a transmitter module doesn't handle setting the packet and valid_packet field: its set directly in the slave module. 
+    assign {rr_if.dev_rdy, rr_if.data_to_send, rr_if.send, rr_if.trans_rdy} = 0; 
+
+    sys sys (.clk(clk), .sys_rst(sys_rst),
+             .dac0_rdy(dac0_rdy),
+             .dac_batch(dac_batch),
+             .valid_dac_batch(valid_dac_batch),
+             .pl_rstn(pl_rstn),
+             .wa_if(wa_if),
+             .wd_if(wd_if),
+             .ra_if(ra_if),
+             .rd_if(rd_if),
+             .wr_if(wr_if),
+             .rr_if(rr_if),
+             .pwl_dma_if(pwl_dma_if),
+             .bufft_if(bufft_if),
+             .buffc_if(buffc_if),
+             .cmc_if(cmc_if),
+             .sdc_if(sdc_if)); 
+    
+      sys_ILA sys_ILA (.clk(clk), 
+                       .probe0(sys.rst),
+                       .probe1(valid_dac_batch),
+                       .probe2(waddr_packet),
+                       .probe3(waddr_valid_packet),
+                       .probe4(wdata_packet),
+                       .probe5(wdata_valid_packet),
+                       .probe6(pl_rstn),
+                       .probe7(raddr_packet),
+                       .probe8(raddr_valid_packet),
+                       .probe9(rdata_packet),
+                       .probe10(rdata_valid_out),
+                       .probe11(ps_wresp_rdy),
+                       .probe12(ps_read_rdy),
+                       .probe13(wresp_out),
+                       .probe14(rresp_out),
+                       .probe15(sys.dac_intf.dacState),
+                       .probe16(pwl_tdata),
+                       .probe17(pwl_tvalid),
+                       .probe18(pwl_tlast),
+                       .probe19(pwl_tready),
+                       .probe20(dac_batch),
+                       .probe21(sys.dac_intf.pwl_gen.wave_bram_addr),
+                       .probe22(sys.dac_intf.pwl_gen.wave_lines_stored),
+                       .probe23(sys.dac_intf.pwl_gen.pwlState));
+endmodule 
+
+`default_nettype wire
+
+// WEEKLY UPDATES
+
+/*
+Weekly updates:
+Monday:
+ 
+*/
+
+
+// SUPERCONDUCTING MEETING QUESTIONS
+
+/*
+2/6/24
+    Terms: 
+        1. JPL films
+        2. Device constriction? Dpair current?
+        3. What is a meander? 
+        4. Transmission line "coupled to a resonator"
+        5. Etched samples, dicing? 
+
+
+    Questions:
+    1. Alejandro: You're trying to find a way to figure out a fast method of measuring inductance 
+    2. Why is measuring constriction vs Temperature important for infared detection?
+2/13/24
+
+*/
+
+// TIMING TRICKS
+
+/*
+Variable limits for for loops and shifting == BAD
+Counters: don't use inequalities unless u need to
+If issues with high fannout rest, don't reset data signals. In general don't reset singals that depend (valids, enables etc, last )
+*/
