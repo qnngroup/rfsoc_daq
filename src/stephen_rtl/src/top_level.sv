@@ -2,7 +2,7 @@
 `default_nettype none
 import mem_layout_pkg::*;
 
-module top_level(input wire clk,sys_rst,
+module top_level(input wire ps_clk,ps_rst, dac_clk, dac_rst,
                  //Inputs from DAC
                  input wire dac0_rdy,
                  //Outpus to DAC
@@ -19,12 +19,11 @@ module top_level(input wire clk,sys_rst,
                  input wire ps_wresp_rdy,ps_read_rdy,
                  //axi_slave Outputs
                  output logic [1:0] wresp_out,rresp_out,
-                 output logic wresp_valid_out, rresp_valid_out,
+                 output logic wresp_valid_out,
                  output logic [`WD_BUS_WIDTH-1:0] rdata_packet,
                  output logic rdata_valid_out,
                  //DMA Inputs/Outputs (axi-stream)
                  input wire[`DMA_DATA_WIDTH-1:0] pwl_tdata,
-                 input wire[3:0] pwl_tkeep,
                  input wire pwl_tlast, pwl_tvalid,
                  output logic pwl_tready);
 
@@ -70,7 +69,6 @@ module top_level(input wire clk,sys_rst,
     assign wresp_out        = wr_if.packet; 
     assign wresp_valid_out  = wr_if.valid_pack; 
     assign rresp_out        = rr_if.packet;
-    assign rresp_valid_out  = rr_if.valid_pack; 
 
     // Receive interfaces don't need transmit signals
     assign {wa_if.data_to_send, wa_if.send, wa_if.trans_rdy, wa_if.dev_rdy} = 0;
@@ -86,26 +84,26 @@ module top_level(input wire clk,sys_rst,
     // All of these signals don't apply to read response since a transmitter module doesn't handle setting the packet and valid_packet field: its set directly in the slave module. 
     assign {rr_if.dev_rdy, rr_if.data_to_send, rr_if.send, rr_if.trans_rdy} = 0; 
 
-    sys sys (.clk(clk), .sys_rst(sys_rst),
-             .dac0_rdy(dac0_rdy),
-             .dac_batch(dac_batch),
-             .valid_dac_batch(valid_dac_batch),
-             .pl_rstn(pl_rstn),
-             .wa_if(wa_if),
-             .wd_if(wd_if),
-             .ra_if(ra_if),
-             .rd_if(rd_if),
-             .wr_if(wr_if),
-             .rr_if(rr_if),
-             .pwl_dma_if(pwl_dma_if),
-             .bufft_if(bufft_if),
-             .buffc_if(buffc_if),
-             .cmc_if(cmc_if),
-             .sdc_if(sdc_if)); 
+   sys sys (.ps_clk(ps_clk), .ps_rst(ps_rst), .dac_clk(dac_clk), .dac_rst(dac_rst),
+            .dac0_rdy(dac0_rdy),
+            .dac_batch(dac_batch),
+            .valid_dac_batch(valid_dac_batch),
+            .pl_rstn(pl_rstn),
+            .wa_if(wa_if),
+            .wd_if(wd_if),
+            .ra_if(ra_if),
+            .rd_if(rd_if),
+            .wr_if(wr_if),
+            .rr_if(rr_if),
+            .pwl_dma_if(pwl_dma_if),
+            .bufft_if(bufft_if),
+            .buffc_if(buffc_if),
+            .cmc_if(cmc_if),
+            .sdc_if(sdc_if)); 
     
-      sys_ILA sys_ILA (.clk(clk), 
+      sys_ILA sys_ILA (.clk(ps_clk), 
                        .probe0(sys.rst),
-                       .probe1(valid_dac_batch),
+                       .probe1(sys.hlt_counter),
                        .probe2(waddr_packet),
                        .probe3(waddr_valid_packet),
                        .probe4(wdata_packet),
@@ -119,15 +117,32 @@ module top_level(input wire clk,sys_rst,
                        .probe12(ps_read_rdy),
                        .probe13(wresp_out),
                        .probe14(rresp_out),
-                       .probe15(sys.dac_intf.dacState),
-                       .probe16(pwl_tdata),
-                       .probe17(pwl_tvalid),
-                       .probe18(pwl_tlast),
-                       .probe19(pwl_tready),
-                       .probe20(dac_batch),
-                       .probe21(sys.dac_intf.pwl_gen.wave_bram_addr),
-                       .probe22(sys.dac_intf.pwl_gen.wave_lines_stored),
-                       .probe23(sys.dac_intf.pwl_gen.pwlState));
+                       .probe15(sys.dac_intf.dacConfigState),
+                       .probe16(sys.dac_intf.ps_cmd_in),
+                       .probe17(sys.dac_intf.seed_set),
+                       .probe18(sys.dac_intf.state_rdy),
+                       .probe19(sys.dac_intf.fresh_bits),
+                       .probe20(sys.ps_rst),
+                       .probe21(sys.rst_cmd),
+                       .probe22(sys.rstState));
+                        
+       dac_ILA dac_ILA (.clk(dac_clk), 
+                       .probe0(dac_rst),
+                       .probe1(valid_dac_batch),
+                       .probe2(pwl_tdata),
+                       .probe3(pwl_tvalid),
+                       .probe4(pwl_tlast),
+                       .probe5(pwl_tready),
+                       .probe6(dac_batch),
+//                        .probe7(dac0_rdy),
+//                        .probe8(dac0_rdy),
+//                        .probe9(dac0_rdy));            
+                       .probe7(sys.dac_intf.sample_gen.run_shift_regs),
+                       .probe8(sys.dac_intf.sample_gen.run_trig_wav),
+                       .probe9(sys.dac_intf.sample_gen.run_pwl));            
+                        
+                       
+                       
 endmodule 
 
 `default_nettype wire
@@ -136,7 +151,8 @@ endmodule
 
 /*
 Weekly updates:
-Monday:
+Mon-Wedensday:
+    Working out bugs with the c algorithm. Found some pointer issues, fixed some memory leaks. Currently working to develop a testing suite for the cython module
  
 */
 

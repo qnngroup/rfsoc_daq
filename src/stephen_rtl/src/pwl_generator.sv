@@ -1,229 +1,299 @@
 `timescale 1ns / 1ps
 `default_nettype none
 
-module pwl_generator #(parameter DMA_DATA_WIDTH = 32, parameter SAMPLE_WIDTH = 16, parameter BATCH_WIDTH = 1024) 
+module pwl_generator #(parameter DMA_DATA_WIDTH, parameter SAMPLE_WIDTH, parameter BATCH_SIZE, parameter SPARSE_BRAM_DEPTH, parameter DENSE_BRAM_DEPTH) 
 			 		  (input wire clk,rst,
 			 		   input wire halt, 
 			 		   input wire run, 
 			 		   input wire dac0_rdy,
-			 		   output logic[BATCH_WIDTH-1:0] batch_out,
+			 		   output logic rdy_to_run,
+			 		   output logic[BATCH_SIZE-1:0][SAMPLE_WIDTH-1:0] batch_out,
 			 		   output logic valid_batch_out,
 			 		   Axis_IF.stream_in dma);
-	localparam WAVE_SECTS = 25; 	//Describes the number of sections a wave line with (`BATCH_SAMPLES) number of samples is cut into. 	
-    localparam SAMPLES_IN_SECT = `BATCH_SAMPLES/WAVE_SECTS;
- 
-	logic[`BATCH_SAMPLES-1:0][`SAMPLE_WIDTH-1:0] wave_line_in; 
-	logic[$clog2(`PWL_BRAM_DEPTH)-1:0] wave_bram_addr_reg, wave_bram_addr; 
-	logic[$clog2(`PWL_BRAM_DEPTH)-1:0] wave_lines_stored = 0; 
-	logic wave_bram_en, wave_bram_we; 
+	localparam BATCH_WIDTH = BATCH_SIZE*SAMPLE_WIDTH;
+	localparam INTERPOLATER_DELAY = 3; 
 
-	logic[1:0][`SAMPLE_WIDTH-1:0] curr_sample_pair, curr_time_pair; 
-	logic[1:0] valid_pipe; 
-	logic signed[`SAMPLE_WIDTH-1:0] slope_in; 
-	logic[1:0][`SAMPLE_WIDTH-1:0] curr_slope_pair;
-	logic[`SAMPLE_WIDTH-1:0] sample_in, time_in;
-	logic[`SAMPLE_WIDTH-1:0] tot_samples_to_store, samples_stored, samples_left_to_store, samples_will_store, max_samples_can_store; 
-	logic[$clog2(`BATCH_SAMPLES):0] sample_in_base_ptr;
-	logic signed[SAMPLES_IN_SECT-1:0][`SAMPLE_WIDTH-1:0] intrp_points, intrp_calcs;
-	logic[`BATCH_SAMPLES-1:0][`SAMPLE_WIDTH-1:0] nxt_samples_buffer;
-	logic hold_curr_sample, done; 
-	logic done_all_building, data_to_process; 
-	logic[BATCH_WIDTH-1:0] batch;
-	logic valid_batch;
-	logic[WAVE_SECTS-1:0][$clog2(`BATCH_SAMPLES):0] wave_linein_limits;
-	logic[$clog2(WAVE_SECTS):0] curr_limit_index; 
-	logic[$clog2(`BATCH_SAMPLES):0] curr_limit, prev_limit;
-	enum logic[2:0] {IDLE, BUILD_WAVE, SAVE_LAST, BRAM_READ_WAIT, SEND_WAVE} pwlState;
- 	
- 	always_comb begin
- 		valid_batch_out = (dac0_rdy)? valid_batch : 0; 
- 		batch_out = (valid_batch_out)? batch : 0;
- 		if (pwlState < BRAM_READ_WAIT) wave_bram_addr = wave_bram_addr_reg; 
- 		else begin
- 			if (~valid_batch_out && pwlState == SEND_WAVE) wave_bram_addr = (wave_bram_addr_reg == 0)? wave_lines_stored-1 : wave_bram_addr_reg-1;
- 			else wave_bram_addr = wave_bram_addr_reg;  
- 		end 	
- 	end 
+	logic[SAMPLE_WIDTH-1:0] curr_dma_x,curr_dma_slope,curr_dma_dt,x,x_reg,slope,slope_reg, dt,dt_reg, intrp_x,intrp_slope;  
+	logic curr_dma_sb, nxt_dma_sb, first_sb, sb;
+	logic curr_dma_valid; 
+	logic curr_bram, nxt_bram; 
+	logic[$clog2(2*SPARSE_BRAM_DEPTH)-1:0] regions_stored;
+	logic[$clog2(SPARSE_BRAM_DEPTH)-1:0] sbram_addr; 
+	logic[DMA_DATA_WIDTH:0] sparse_line_in,sparse_batch_out;
+	logic sbram_we,sbram_en;
+	logic sbram_next;
+	logic valid_sparse_batch, sbram_write_rdy;
+	logic[$clog2(DENSE_BRAM_DEPTH)-1:0] dbram_addr; 
+	logic[BATCH_SIZE-1:0][SAMPLE_WIDTH-1:0] dense_line_in;
+	logic dense_nxt_bram_bit;
+	logic[BATCH_SIZE-1:0][SAMPLE_WIDTH-1:0] intrp_batch,dense_batch_out_TEST;
+	logic[2:0][SAMPLE_WIDTH-1:0] sparse_batch_out_TEST;
+	logic[BATCH_WIDTH:0] dense_batch_out;
+	logic brams_writes_ready, brams_valid;
+	logic dbram_we,dbram_en;
+	logic dbram_next;
+	logic gen_mode, rst_gen_mode;
+	logic valid_dense_batch, dbram_write_rdy;
+	logic[$clog2(BATCH_WIDTH)-1:0] batch_ptr; 
+	logic[INTERPOLATER_DELAY-1:0][SAMPLE_WIDTH:0] intrp_pipe; 
+	logic valid_intrp_out,nxt_valid_intrp_out;
+	logic[SAMPLE_WIDTH-1:0] intrp_out_dt;
+	logic[INTERPOLATER_DELAY-1:0][BATCH_WIDTH-1:0] dbatch_pipe;
+	logic[INTERPOLATER_DELAY-1:0][1:0] which_bram_pipe; 
+	logic[BATCH_WIDTH-1:0] dbatch_out;
+	logic which_bram; 
+	logic[1:0][DMA_DATA_WIDTH:0] dma_pipe;
+	enum logic[3:0] {IDLE,DENSE_INTRP_WAIT,STORE_DENSE_WAVE,STORE_SPARSE_WAVE,SETUP_GEN_MODE,SEND_DENSE_WAVE,SEND_SPARSE_WAVE,HOLD_SPARSE_CMD,HALT} pwlState;
 
-	PWL_WAVE_BRAM WAVE_BRAM (.clka(clk),       
-			   				    .addra(wave_bram_addr),     
-			   				    .dina(wave_line_in),       
-			   				    .wea(wave_bram_we),        
-			   				    .ena(wave_bram_en),         
-			   				    .douta(batch));
-	assign slope_in = (dma.valid)? dma.data[0+:`SAMPLE_WIDTH] : 0;
-	assign sample_in = (dma.valid)? dma.data[`SAMPLE_WIDTH+:`SAMPLE_WIDTH] : 0;
-	assign time_in = (dma.valid)? dma.data[`SAMPLE_WIDTH*2+:`SAMPLE_WIDTH] : 0;
+	dense_bram_interface #(.DATA_WIDTH(BATCH_WIDTH+1), .BRAM_DEPTH(DENSE_BRAM_DEPTH))
+    DWAVE_BRAM_INT        (.clk(clk), .rst(rst),      
+                           .addr(dbram_addr),     
+                           .line_in({dense_nxt_bram_bit,dense_line_in}),       
+                           .we(dbram_we), .en(dbram_en), 
+                           .next(dbram_next),
+                           .generator_mode(gen_mode), .rst_gen_mode(rst_gen_mode),
+                           .line_out(dense_batch_out),
+                           .valid_line_out(valid_dense_batch),
+                           .write_rdy(dbram_write_rdy));
 
-    logic[`SAMPLE_WIDTH-1:0] curr_sample, curr_slope, curr_time; 
-    assign curr_sample = curr_sample_pair[1];
-    assign curr_slope = curr_slope_pair[1];
-    assign curr_time = curr_time_pair[1];
+	sparse_bram_interface #(.DATA_WIDTH(DMA_DATA_WIDTH+1), .BRAM_DEPTH(SPARSE_BRAM_DEPTH))
+    SWAVE_BRAM_INT (.clk(clk), .rst(rst),      
+                    .addr(sbram_addr),     
+                    .line_in(sparse_line_in),       
+                    .we(sbram_we), .en(sbram_en), 
+                    .next(sbram_next),
+                    .generator_mode(gen_mode), .rst_gen_mode(rst_gen_mode),
+                    .line_out(sparse_batch_out),
+                    .valid_line_out(valid_sparse_batch),
+                    .write_rdy(sbram_write_rdy));
 
-    logic[`SAMPLE_WIDTH-1:0] nxt_sample, nxt_slope, nxt_time; 
-    assign nxt_sample = curr_sample_pair[0];
-    assign nxt_slope = curr_slope_pair[0];
-    assign nxt_time = curr_time_pair[0];
-    
 
+	interpolater #(.SAMPLE_WIDTH(SAMPLE_WIDTH), .BATCH_SIZE(BATCH_SIZE)) 
+				interpolater(.clk(clk),
+                   		     .x(intrp_x),.slope(intrp_slope),
+                   		     .intrp_batch(intrp_batch));
+	logic[SAMPLE_WIDTH-1:0] test_x,test_slope,test_dt;
+	logic test_sb; 
 	always_comb begin
-		for (int i = 1; i <= WAVE_SECTS; i++) wave_linein_limits[i-1] = (i < WAVE_SECTS)? SAMPLES_IN_SECT*i : `BATCH_SAMPLES; 
-		for (int i = 0; i < `BATCH_SAMPLES; i++) nxt_samples_buffer[i] = nxt_sample; 
-		curr_limit = wave_linein_limits[curr_limit_index]; 
-		prev_limit = (curr_limit_index == 0)? 0 : wave_linein_limits[curr_limit_index-1]; 
-		tot_samples_to_store = (nxt_time-curr_time) + 1; 
-		samples_left_to_store = tot_samples_to_store - samples_stored - 1; // Subtracting one here because we don't store the very last value (it'll be stored on the next sample or filled in at the end with the current sample) 
-		if (curr_limit == (prev_limit+SAMPLES_IN_SECT)) begin
-			max_samples_can_store = curr_limit - sample_in_base_ptr;
+		sparse_batch_out_TEST = sparse_batch_out[DMA_DATA_WIDTH:1];
+		dense_batch_out_TEST = dense_batch_out[BATCH_WIDTH-1:0];
+
+		{curr_dma_valid, curr_dma_x, curr_dma_slope, curr_dma_dt[0+:SAMPLE_WIDTH-1],curr_dma_sb} = dma_pipe[1];
+		curr_dma_dt[SAMPLE_WIDTH-1] = 0; 
+		nxt_dma_sb = dma_pipe[0][0]; 
+		{x,slope,dt} = sparse_batch_out[DMA_DATA_WIDTH:1]; 
+		nxt_bram = (curr_bram)? sparse_batch_out[0] : dense_batch_out[BATCH_WIDTH]; 
+		
+		if (pwlState < SETUP_GEN_MODE) begin
+			intrp_x = curr_dma_x;
+			intrp_slope = curr_dma_slope;
 		end else begin
-			max_samples_can_store = ((sample_in_base_ptr+SAMPLES_IN_SECT) < `BATCH_SAMPLES)? SAMPLES_IN_SECT : `BATCH_SAMPLES - sample_in_base_ptr; 
-		end 
-		samples_will_store = (samples_left_to_store < max_samples_can_store)? samples_left_to_store : max_samples_can_store; 
-		hold_curr_sample = (curr_limit != `BATCH_SAMPLES)? (sample_in_base_ptr+samples_left_to_store) > curr_limit : samples_left_to_store > samples_will_store; 
-		done_all_building = done && ~hold_curr_sample; 
-		data_to_process = valid_pipe[1] || hold_curr_sample; 
-		if (pwlState == IDLE || pwlState == BUILD_WAVE) dma.ready =  ~hold_curr_sample; 
-		else dma.ready = 0; 
-		for (int i = 0; i < SAMPLES_IN_SECT; i++) begin
-			if ((i+samples_stored) < tot_samples_to_store) begin
-				intrp_calcs[i] = (i+samples_stored)*curr_slope + curr_sample;
-				if ($signed(curr_slope) >= 0) intrp_points[i] = ($signed(intrp_calcs[i]) > $signed(nxt_sample))? nxt_sample : intrp_calcs[i]; 
-				else intrp_points[i] = ($signed(intrp_calcs[i]) < $signed(nxt_sample))? nxt_sample : intrp_calcs[i]; 
-			end else begin
-				intrp_points[i] = -1;
-				intrp_calcs[i] = -1;
-			end
+			intrp_x = (pwlState == HOLD_SPARSE_CMD)? x_reg : x;
+			intrp_slope = (pwlState == HOLD_SPARSE_CMD)? slope_reg : slope;
 		end
+
+		{valid_intrp_out,intrp_out_dt} = intrp_pipe[INTERPOLATER_DELAY-1];
+		nxt_valid_intrp_out = intrp_pipe[INTERPOLATER_DELAY-2][SAMPLE_WIDTH];
+		{valid_batch_out,which_bram} = which_bram_pipe[INTERPOLATER_DELAY-1];
+		dbatch_out = dbatch_pipe[INTERPOLATER_DELAY-1];
+		if (valid_batch_out) batch_out = (which_bram)? intrp_batch : dbatch_out; 
+		else batch_out = 0;
+
+		brams_writes_ready = sbram_write_rdy && dbram_write_rdy;
+		brams_valid = valid_dense_batch && valid_sparse_batch;
 	end
 
 	always_ff @(posedge clk) begin
-		if (rst || halt) begin
-			if (rst) wave_lines_stored <= 0;  
-			{curr_sample_pair, curr_time_pair, curr_slope_pair, valid_pipe, sample_in_base_ptr, samples_stored, done} <= 0; 
-			{wave_line_in, wave_bram_addr_reg, wave_bram_we, wave_bram_en} <= 0;
-			{valid_batch,curr_limit_index} <= 0; 
+		if (dma.ready || ~dma.valid) dma_pipe <= {dma_pipe[0],{dma.valid,dma.data}};
+		intrp_pipe[INTERPOLATER_DELAY-1:1] <= intrp_pipe[INTERPOLATER_DELAY-2:0];
+		which_bram_pipe[INTERPOLATER_DELAY-1:1] <= which_bram_pipe[INTERPOLATER_DELAY-2:0];
+		dbatch_pipe[INTERPOLATER_DELAY-1:1] <= dbatch_pipe[INTERPOLATER_DELAY-2:0];
+
+		if (rst) begin
+			{sbram_addr, dbram_addr, regions_stored} <= 0; 
+			{sparse_line_in, dense_line_in, dense_nxt_bram_bit, batch_ptr} <= 0;
+			{dbram_we, dbram_en} <= 0; 
+			{sbram_we, sbram_en} <= 0;  
+			first_sb <= 0; 
+			dma.ready <= 1;
+			curr_bram <= 0;
+			{which_bram_pipe[0],dbatch_pipe[0],intrp_pipe[0]} <= 0; 
+			{gen_mode, rst_gen_mode, rdy_to_run} <= 0;
 			pwlState <= IDLE; 
 		end else begin
-			valid_pipe <= {valid_pipe[0], dma.valid}; 
-			if (dma.valid) begin
-				if (~hold_curr_sample) begin
-					curr_sample_pair <= {nxt_sample, sample_in}; 
-					curr_time_pair <= {nxt_time, time_in}; 
-					curr_slope_pair <= {nxt_slope, slope_in}; ; 
-				end 
-			end else begin 
-				if (~data_to_process) {curr_sample_pair, curr_time_pair, curr_slope_pair, sample_in_base_ptr, samples_stored} <= 0; 
-			end 
-			if (wave_bram_we && wave_bram_en) wave_lines_stored <= wave_lines_stored + 1; 
+			if (pwlState == IDLE && curr_dma_valid) regions_stored <= 0;
+			else if (dbram_we || sbram_we) regions_stored <= regions_stored + 1;
 
 			case(pwlState)
 				IDLE: begin
-					if (dma.valid) pwlState <= BUILD_WAVE; 
-					else if (run) begin 
-						wave_bram_en <= 1; 
-						pwlState <= BRAM_READ_WAIT;  
+					if (run) begin
+						dma.ready <= 0; 
+						pwlState <= SETUP_GEN_MODE;
+						rdy_to_run <= 0;
+					end else begin
+						dma.ready <= brams_writes_ready;
+						if (dma.valid) gen_mode <= 0;
+						if (brams_writes_ready) begin 
+							if (curr_dma_valid) begin
+								{sbram_addr, dbram_addr} <= 0;
+								first_sb <= curr_dma_sb; 
+								if (curr_dma_sb) begin
+									{sbram_we, sbram_en} <= 3;
+									sparse_line_in <= {curr_dma_x,curr_dma_slope,curr_dma_dt,nxt_dma_sb}; 
+									intrp_pipe[0] <= 0;
+									pwlState <= STORE_SPARSE_WAVE;
+								end else begin
+									intrp_pipe[0] <= {1'b1,curr_dma_dt}; 
+									pwlState <= DENSE_INTRP_WAIT;
+								end
+								rdy_to_run <= 0;
+							end else intrp_pipe[0] <= 0;
+						end  
+					end 
+				end
+
+				DENSE_INTRP_WAIT: begin 
+					if (nxt_dma_sb || ~dma.valid) dma.ready <= 0; 
+					intrp_pipe[0] <= (~curr_dma_sb && curr_dma_valid)? {1'b1,curr_dma_dt} : 0; 
+					if (nxt_valid_intrp_out) begin 
+						batch_ptr <= 0;
+						pwlState <= STORE_DENSE_WAVE;
 					end 
 				end 
 
-				BUILD_WAVE: begin
-					if (dma.done) done <= 1; 
-					if (data_to_process || done_all_building) begin
-						for (int i = 0; i < SAMPLES_IN_SECT; i++) begin 
-							if (done_all_building) begin
-								if ((i+sample_in_base_ptr) < `BATCH_SAMPLES) begin
-									if (i < samples_left_to_store) wave_line_in[i+sample_in_base_ptr] <= intrp_points[i];
-									else wave_line_in[i+sample_in_base_ptr] <= nxt_sample; 
-								end 
-							end else begin 
-								if ((i+sample_in_base_ptr) < curr_limit) begin
-									if (i < samples_left_to_store) wave_line_in[i+sample_in_base_ptr] <= intrp_points[i];
-								end 
-							end 
+				STORE_DENSE_WAVE: begin
+					if (nxt_dma_sb || ~dma.valid) dma.ready <= 0; 
+					intrp_pipe[0] <= (~curr_dma_sb && curr_dma_valid)? {1'b1,curr_dma_dt} : 0; 
+					if (dbram_we) dbram_addr <= (dbram_addr == DENSE_BRAM_DEPTH-1)? 0 : dbram_addr + 1; 
+
+					if (valid_intrp_out) begin
+						dense_line_in[batch_ptr+:BATCH_SIZE] <= intrp_batch;
+						if (batch_ptr + intrp_out_dt == BATCH_SIZE) begin
+							{dbram_we, dbram_en} <= 3;
+							dense_nxt_bram_bit <= ~nxt_valid_intrp_out;
+							batch_ptr <= 0; 
+						end else begin
+							{dbram_we, dbram_en} <= 0;
+							batch_ptr <=  batch_ptr + intrp_out_dt;
+						end
+					end else begin
+						{dbram_we, dbram_en} <= 0;
+						dma.ready <= 1;
+						if (curr_dma_valid) begin 
+							{sbram_we, sbram_en} <= 3;
+							sparse_line_in <= {curr_dma_x,curr_dma_slope,curr_dma_dt,nxt_dma_sb};
+							intrp_pipe[0] <= 0;
+							pwlState <= STORE_SPARSE_WAVE;
+						end else begin
+							rdy_to_run <= 1;
+							pwlState <= IDLE;
 						end 
-						if (curr_limit == `BATCH_SAMPLES) begin
-							if ((sample_in_base_ptr+samples_will_store) < `BATCH_SAMPLES) begin //There's a remainder (ie the for loop above won't cover the full line), so don't save it yet. 
-								sample_in_base_ptr <= sample_in_base_ptr + samples_will_store; 
-								samples_stored <= (samples_will_store == samples_left_to_store)? 0 : samples_stored + samples_will_store; 
-							end else begin
-								curr_limit_index <= 0;
-								sample_in_base_ptr <= 0; 
-								samples_stored <= ((sample_in_base_ptr+samples_left_to_store) == `BATCH_SAMPLES)? 0 : samples_stored + (`BATCH_SAMPLES-sample_in_base_ptr);
-								if (wave_bram_we) wave_bram_addr_reg <= (wave_bram_addr_reg < `PWL_BRAM_DEPTH-1)? wave_bram_addr_reg + 1 : 0;
-								else {wave_bram_en, wave_bram_we} <= 3;
+					end
+				end
+
+				STORE_SPARSE_WAVE: begin
+					if (~dma.valid) dma.ready <= 0;
+					if (curr_dma_valid) begin 
+						sbram_addr <= (sbram_addr == SPARSE_BRAM_DEPTH-1)? 0 : sbram_addr + 1;
+						if (curr_dma_sb) sparse_line_in <= {curr_dma_x,curr_dma_slope,curr_dma_dt,nxt_dma_sb};
+						if (~nxt_dma_sb) begin 
+							{sbram_we, sbram_en} <= 0; 
+							if (~curr_dma_sb) intrp_pipe[0] <= {1'b1,curr_dma_dt}; 
+							pwlState <= DENSE_INTRP_WAIT;
+						end  
+					end else begin
+						rdy_to_run <= 1;
+						pwlState <= IDLE; 
+					end 
+				end
+
+				SETUP_GEN_MODE: begin
+					curr_bram <= first_sb;  
+					{dbram_en,sbram_en,dbram_we,sbram_we} <= 0;
+					{dbram_addr, sbram_addr} <= 0; 
+					{dbram_next,sbram_next} <= 0;
+					gen_mode <= 1; 
+					if (brams_valid) begin
+						if (first_sb) begin 
+							sbram_next <= 1; 
+							pwlState <= SEND_SPARSE_WAVE;
+						end else begin
+							dbram_next <= 1; 
+							pwlState <= SEND_DENSE_WAVE; 
+						end
+					end
+				end 
+
+				SEND_DENSE_WAVE: begin
+					if (halt) begin
+						rst_gen_mode <= 1;
+						pwlState <= HALT;
+					end else begin
+						which_bram_pipe[0] <= {1'b1,1'b0};
+						dbatch_pipe[0] <= dense_batch_out[0+:BATCH_WIDTH];
+						if (nxt_bram) begin
+							curr_bram <= 1; 
+							sbram_next <= 1; 
+							dbram_next <= 0;
+							pwlState <= SEND_SPARSE_WAVE; 
+						end 
+					end 
+				end 
+
+				SEND_SPARSE_WAVE: begin
+					if (halt) begin
+						rst_gen_mode <= 1;
+						pwlState <= HALT;
+					end else begin 
+						which_bram_pipe[0] <= {1'b1,1'b1};
+						if (dt == BATCH_SIZE) begin
+							if (~nxt_bram) begin
+								sbram_next <= 0;
+								dbram_next <= 1;
+								curr_bram <= 0;
+								pwlState <= SEND_DENSE_WAVE; 
 							end
 						end else begin
-							if (sample_in_base_ptr+samples_left_to_store < curr_limit) begin
-								sample_in_base_ptr <= sample_in_base_ptr+samples_left_to_store;
-								samples_stored <= 0; // As in, on the next clock cycle, 0 samples of the next interpolation was stored 
-								if (wave_bram_we) wave_bram_addr_reg <= (wave_bram_addr_reg < `PWL_BRAM_DEPTH-1)? wave_bram_addr_reg + 1 : 0;
-								{wave_bram_en, wave_bram_we} <= (done_all_building)? 3 : 0;
-							end else begin 
-								if (wave_bram_we) begin
-									wave_bram_addr_reg <= (wave_bram_addr_reg < `PWL_BRAM_DEPTH-1)? wave_bram_addr_reg + 1 : 0; 
-									{wave_bram_en, wave_bram_we} <= 0;
-								end 
-								curr_limit_index <= curr_limit_index + 1; 
-								sample_in_base_ptr <= curr_limit;
-								samples_stored <= ((sample_in_base_ptr+samples_left_to_store) == curr_limit)? 0 : samples_stored + (curr_limit - sample_in_base_ptr);
-							end 
-						end							
-						if (done_all_building) begin
-							wave_line_in[(prev_limit+SAMPLES_IN_SECT)+:`BATCH_SAMPLES] <=  nxt_samples_buffer[(prev_limit+SAMPLES_IN_SECT)+:`BATCH_SAMPLES]; 
-							pwlState <= SAVE_LAST; 
-							done <= 0; 
-						end 
+							x_reg <= x + slope*BATCH_SIZE;
+							slope_reg <= slope;
+							dt_reg <= dt - BATCH_SIZE;
+							sbram_next <= 0; 
+							pwlState <= HOLD_SPARSE_CMD;
+						end
 					end 
 				end 
 
-				SAVE_LAST: begin
-					{wave_bram_we, wave_bram_en} <= 0;
-					wave_line_in <= 0; 
-					wave_bram_addr_reg <= 0;
+				HOLD_SPARSE_CMD: begin
+					if (halt) begin
+						rst_gen_mode <= 1;
+						pwlState <= HALT;
+					end else begin 
+						x_reg <= x_reg + slope_reg*BATCH_SIZE;
+						which_bram_pipe[0] <= {1'b1,1'b1};
+						if (dt_reg == BATCH_SIZE) begin
+							if (nxt_bram) begin 
+								sbram_next <= 1; 
+								pwlState <= SEND_SPARSE_WAVE;
+							end else begin
+								pwlState <= SEND_DENSE_WAVE;
+								dbram_next <= 1; 
+								curr_bram <= 0; 
+							end
+						end else dt_reg <= dt_reg - BATCH_SIZE;
+					end 
+				end 
+
+				HALT: begin
+					rst_gen_mode <= 0; 
+					rdy_to_run <= 1;
+					{sbram_next, dbram_next} <= 0;
+					{which_bram_pipe[0],dbatch_pipe[0],intrp_pipe[0]} <= 0; 
 					pwlState <= IDLE;
-				end 
-
-				BRAM_READ_WAIT: begin 
-					if (dac0_rdy) begin
-						valid_batch <= 1; 
-						wave_bram_addr_reg <= 1; 
-						pwlState <= SEND_WAVE; 
-					end 
-				end 
-
-				SEND_WAVE: begin
-					if (dac0_rdy) begin 
-						if (~run) begin
-							wave_bram_en <= 0;
-							valid_batch <= 0; 
-							pwlState <= IDLE;
-						end else wave_bram_addr_reg <= (wave_bram_addr_reg == (wave_lines_stored-1))? 0 : wave_bram_addr_reg + 1; 
-					end 
 				end 
 			endcase 
 		end
 	end
+	
 endmodule 
 
 `default_nettype wire
-
-/*
-Known problem:
-
-1. When producing the wave, if the last batch isn't filled with interpolation points on the current period, instead of filling in the remainder of that batch with samples 
-   starting immediately from the next period, the current implementation simply buffers the rest of that batch with the last value in the interpolation. It's much 
-   easier to do this and the logic is that even if an entire batch is filled with the same value at the end of a period, that won't translate to much time passing 
-   (because a full batch is present for one cyle of the sys clock which is 150Mhz => there would be junk output for 6.6 nano seconds, which is 0.03% of the maximum
-   allowed wavelet period of 20 microseconds).
-
-2. The time field needs to be 18 bits, not 16. It needs to be able to represent the maximum possible number for a wave that has a period of 20 microseconds. If the period 
-   is this long, => the largest value the time can be is 3000*64 which requires 18 bits to represent. As of now, the longest period this system can support is about 3.5 us. Dont 
-   change the time field to be 18, just work with time deltas. Expect time deltas and 
-3. 
-
-3. The way you did it is if you have 13 samples to between two points (time 0 to time 12, say), you won't store the 13th sample. This is because on the next round, you will be 
-interpolating THAT 13th sample with i=0 which means we have SAMPLE + (i=0)*slope = SAMPLE, so you end up storing that sample in the correct location. You would store 0 to 11 
-(12 samples), then on the next round save that last one. However, this doesn't work if it's the very last sample. Make a new testcase that has a perfect filling of 3 or 4 batches and 
-ensure you don't spill over or under. 
-
-0.386
-*/

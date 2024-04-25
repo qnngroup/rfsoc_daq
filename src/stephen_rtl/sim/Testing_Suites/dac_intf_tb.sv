@@ -148,7 +148,7 @@ module dac_intf_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] 
 			endcase
 
 			if (halt) halt <= 0; 
-			`define dac_sig_rdy(index) (index >= `PS_SEED_BASE_ID && index <= `PS_SEED_VALID_ID && DUT.state_rdy) || (index == `TRIG_WAVE_ID && DUT.state_rdy) || (index == `PWL_PREP_ID && DUT.state_rdy) || (index == `RUN_PWL_ID && DUT.state_rdy)
+			`define dac_sig_rdy(index) (index >= `PS_SEED_BASE_ID && index <= `PS_SEED_VALID_ID && DUT.state_rdy) || (index == `RUN_PWL_ID && DUT.state_rdy)
 			for (int i = 0; i < `MEM_SIZE; i++) begin
 				if (fresh_bits[i] && (`dac_sig_rdy(i))) begin
 					read_resps[i] <= mem_map[i]; 
