@@ -17,7 +17,7 @@ src/stephen_rtl/Python_Files/poster_raw_data
 src/stephen_rtl/*.str
 src/stephen_rtl/pull_stuff.sh
 src/stephen_rtl/push_stuff.sh
-/src/stephen_rtl/Python_Files/Plots
+src/stephen_rtl/Python_Files/Plots
 *.sublime-workspace
 src/stephen_rtl/Python_Files/cython_files/__pycache__/pwl_wrapper_python.cpython-39.pyc
 src/stephen_rtl/Python_Files/cython_files/pwl_wrapper.c
