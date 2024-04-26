@@ -153,33 +153,11 @@ endmodule
 Weekly updates:
 Mon-Wedensday:
     Working out bugs with the c algorithm. Found some pointer issues, fixed some memory leaks. Currently working to develop a testing suite for the cython module
- 
-*/
-
-
-// SUPERCONDUCTING MEETING QUESTIONS
-
-/*
-2/6/24
-    Terms: 
-        1. JPL films
-        2. Device constriction? Dpair current?
-        3. What is a meander? 
-        4. Transmission line "coupled to a resonator"
-        5. Etched samples, dicing? 
-
-
-    Questions:
-    1. Alejandro: You're trying to find a way to figure out a fast method of measuring inductance 
-    2. Why is measuring constriction vs Temperature important for infared detection?
-2/13/24
-
-*/
-
-// TIMING TRICKS
-
-/*
-Variable limits for for loops and shifting == BAD
-Counters: don't use inequalities unless u need to
-If issues with high fannout rest, don't reset data signals. In general don't reset singals that depend (valids, enables etc, last )
+ TODO: 
+    5 streams of work: 
+    1. PWL Hardware testing (basically just make the pathway from python to pwl_wave on a scope work)
+    2. PWL updating: Increase the dma width to allow for larger slopes then introduce fractional slopes
+    3. System-wide changes (parameters, testbenches, etc). Prepare the codebase for integration with reed
+    4. DAQ system user interface rehaul: Ontop of the cli, introduce a server interface. Allow for GPIB connections to arbitrary lab equipment.
+    5. Shadow more experiments to familiarize yourself with the process your tool will be applied in.
 */
