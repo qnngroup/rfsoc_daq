@@ -69,9 +69,13 @@ def flatten(li):
         else: out.append(el)
     return out 
 
+def test_fpga_cmds(coords): 
+    coords.reverse()
+    path,l,intv = c.main(coords)
+
 def test_coords(coords,do_plot=True,show_batches=False,simple_plot=False, ignore=[]):
     coords.reverse()
-    path,l,intv = p.main(coords)
+    path,l,intv = c.main(coords)
     path = path[:l]
     waves = c.decode_pwl_cmds(path)
     flat_wave = flatten(waves)
@@ -137,8 +141,9 @@ def test_coords(coords,do_plot=True,show_batches=False,simple_plot=False, ignore
     
     return path,passed,wrong
 
-test_num = int(2e6)
+test_num = int(1e5)
 nxt_perc = 10
+t0 = time()
 for i in range(test_num):
     perc = (i/test_num)*100
     if round(perc) == nxt_perc: 
@@ -156,6 +161,7 @@ for i in range(test_num):
         break
 else:
     print("Passed")
+print(time()-t0)
 
 
 

@@ -241,9 +241,19 @@ def mk_pwl_cmds(coords, path):
     pwl_cmd_buff = []
     return path_ptr 
 
-# def mk_fpga_cmds(pwl_cmds):
-#     fpga_cmds = []
-#     for x,slope,dt,sb in pwl_cmds:
+def mk_fpga_cmds(pwl_cmds):
+    fpga_cmds = []
+    shift = dma_width-1
+    for x,slope,dt,sb in pwl_cmds: 
+        if slope < 0:
+            print("lsjf")
+        x = x<<(8*4) 
+        if slope < 0: slope =(1<<16)+slope
+        slope = slope<<(4*4)
+        dt = (dt<<1)+sb
+        if dt & (1<<16): dt -= (1<<16)
+        fpga_cmds.append(x+slope+dt)
+    return fpga_cmds
         
 
 def batchify_fast(pwl_cmd):
@@ -391,8 +401,8 @@ def main(coords):
     intv = perf_counter() - t0
     coords = [] 
     path = toLi(path_wrapper,l)
-    # return intv
-    return path, l, intv
+    return mk_fpga_cmds(path)
+    # return path, l, intv
 
 
 def toLi(path,n): 
