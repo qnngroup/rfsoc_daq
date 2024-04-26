@@ -23,7 +23,7 @@ batch_samples = batch_width/sample_width
 
 class Point():
     def __init__ (self,pnt):
-        self.x = pnt[0]
+        self.x = pnt[0] 
         self.y = pnt[1]
 
     def __str__(self): return f"{(self.x,self.y)}"
@@ -268,4 +268,4 @@ def drawPath(fitterAcc,wave_period,showTruePath=True,make_periodic=True):
     print("-1")
     return
 
-#print(drawPath(0.99,3.1e-6,make_periodic=True))
+# print(drawPath(0.99,3.gd1e-6,make_periodic=True))

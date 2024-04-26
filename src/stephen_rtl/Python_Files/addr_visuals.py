@@ -22,7 +22,7 @@ def tabsize(s):
         return out
 
 def mkAddrList(rtl_addrs,name):
-        excluded_addrs = ["MAPPED_ADDR_CEILING", "MEM_TEST_BASE_ADDR", "ABS_ADDR_CEILING", "MAPPED_ID_CEILING", "MEM_TEST_BASE_ID", "MEM_TEST_END_ADDR", "ABS_ID_CEILING" ]
+        excluded_addrs = ["MAPPED_ADDR_CEILING", "MEM_TEST_BASE_ADDR", "ABS_ADDR_CEILING", "MAPPED_ID_CEILING", "MEM_TEST_BASE_ID", "MEM_TEST_END_ADDR", "MEM_TEST_END_ID", "ABS_ID_CEILING", "PS_BASE_ADDR", "PS_BASE_ID"]
         out = f"logic[`ADDR_NUM-1:0][31:0] {name} = {{"
         addr_lst = []
         rtl_addrs = rtl_addrs.split("\n")
@@ -44,6 +44,7 @@ print("RTL MMIO Indices:\n"+tabsize(index_str))
 
 
 rtl_addrs = """
+      `define PS_BASE_ADDR            32'h9000_0000 
         `define RST_ADDR                (`PS_BASE_ADDR)
         `define PS_SEED_BASE_ADDR       (`RST_ADDR + 4)
         `define PS_SEED_VALID_ADDR      (`PS_SEED_BASE_ADDR + 4 * (`BATCH_SAMPLES))
@@ -54,10 +55,9 @@ rtl_addrs = """
         `define SCALE_DAC_OUT_ADDR      (`PS_SEED_VALID_ADDR + 4*5)
         `define DAC1_ADDR               (`PS_SEED_VALID_ADDR + 4*6)
         `define DAC2_ADDR               (`PS_SEED_VALID_ADDR + 4*7)
-        `define PWL_PREP_ADDR           (`PS_SEED_VALID_ADDR + 4*8)
-        `define RUN_PWL_ADDR            (`PS_SEED_VALID_ADDR + 4*9)
-        `define BUFF_CONFIG_ADDR        (`PS_SEED_VALID_ID   + 4*10)
-        `define BUFF_TIME_BASE_ADDR     (`PS_SEED_VALID_ADDR + 4*11)
+        `define RUN_PWL_ADDR            (`PS_SEED_VALID_ADDR + 4*8)
+        `define BUFF_CONFIG_ADDR        (`PS_SEED_VALID_ADDR + 4*9)
+        `define BUFF_TIME_BASE_ADDR     (`PS_SEED_VALID_ADDR + 4*10)
         `define BUFF_TIME_VALID_ADDR    (`BUFF_TIME_BASE_ADDR + 4*(`BUFF_SAMPLES))
         `define CHAN_MUX_BASE_ADDR      (`BUFF_TIME_VALID_ADDR + 4)
         `define CHAN_MUX_VALID_ADDR     (`CHAN_MUX_BASE_ADDR + 4*(`CHAN_SAMPLES))
@@ -67,6 +67,7 @@ rtl_addrs = """
         `define MEM_SIZE_ADDR           (`SDC_VALID_ADDR + 4*2)
         `define MAPPED_ADDR_CEILING     (`MEM_SIZE_ADDR + 4)
         `define MEM_TEST_BASE_ADDR      (`PS_BASE_ADDR + 4*(`MEM_SIZE - 55))
+        `define MEM_TEST_END_ADDR       (`MEM_TEST_BASE_ADDR + 4*50)
         `define ABS_ADDR_CEILING        (`PS_BASE_ADDR + 4*(`MEM_SIZE-1))
                 """
 rtl_ids = rtl_addrs.replace("ADDR", "ID")

@@ -23,7 +23,7 @@ module pwl_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] done)
     logic[BUFF_LEN_VSHORT-1:0][`DMA_DATA_WIDTH-1:0] dma_buff_vshort;
     assign dma_buff_vshort = {48'h13f013f0000, 48'h1};
     //EXPECTED OUTPUT
-    logic[`PWL_BRAM_DEPTH-1:0][`BATCH_SAMPLES-1:0][`SAMPLE_WIDTH-1:0] expected_batches_vshort;
+    logic[`SPARSE_BRAM_DEPTH-1:0][`BATCH_SAMPLES-1:0][`SAMPLE_WIDTH-1:0] expected_batches_vshort;
     assign expected_batches_vshort = {0,{16'h013f, 16'h013e, 16'h013d, 16'h013c, 16'h013b, 16'h013a, 16'h0139, 16'h0138, 16'h0137, 16'h0136, 16'h0135, 16'h0134, 16'h0133, 16'h0132, 16'h0131, 16'h0130, 16'h012f, 16'h012e, 16'h012d, 16'h012c, 16'h012b, 16'h012a, 16'h0129, 16'h0128, 16'h0127, 16'h0126, 16'h0125, 16'h0124, 16'h0123, 16'h0122, 16'h0121, 16'h0120, 16'h011f, 16'h011e, 16'h011d, 16'h011c, 16'h011b, 16'h011a, 16'h0119, 16'h0118, 16'h0117, 16'h0116, 16'h0115, 16'h0114, 16'h0113, 16'h0112, 16'h0111, 16'h0110, 16'h010f, 16'h010e, 16'h010d, 16'h010c, 16'h010b, 16'h010a, 16'h0109, 16'h0108, 16'h0107, 16'h0106, 16'h0105, 16'h0104, 16'h0103, 16'h0102, 16'h0101, 16'h0100},
                                         {16'h00ff, 16'h00fe, 16'h00fd, 16'h00fc, 16'h00fb, 16'h00fa, 16'h00f9, 16'h00f8, 16'h00f7, 16'h00f6, 16'h00f5, 16'h00f4, 16'h00f3, 16'h00f2, 16'h00f1, 16'h00f0, 16'h00ef, 16'h00ee, 16'h00ed, 16'h00ec, 16'h00eb, 16'h00ea, 16'h00e9, 16'h00e8, 16'h00e7, 16'h00e6, 16'h00e5, 16'h00e4, 16'h00e3, 16'h00e2, 16'h00e1, 16'h00e0, 16'h00df, 16'h00de, 16'h00dd, 16'h00dc, 16'h00db, 16'h00da, 16'h00d9, 16'h00d8, 16'h00d7, 16'h00d6, 16'h00d5, 16'h00d4, 16'h00d3, 16'h00d2, 16'h00d1, 16'h00d0, 16'h00cf, 16'h00ce, 16'h00cd, 16'h00cc, 16'h00cb, 16'h00ca, 16'h00c9, 16'h00c8, 16'h00c7, 16'h00c6, 16'h00c5, 16'h00c4, 16'h00c3, 16'h00c2, 16'h00c1, 16'h00c0},
                                         {16'h00bf, 16'h00be, 16'h00bd, 16'h00bc, 16'h00bb, 16'h00ba, 16'h00b9, 16'h00b8, 16'h00b7, 16'h00b6, 16'h00b5, 16'h00b4, 16'h00b3, 16'h00b2, 16'h00b1, 16'h00b0, 16'h00af, 16'h00ae, 16'h00ad, 16'h00ac, 16'h00ab, 16'h00aa, 16'h00a9, 16'h00a8, 16'h00a7, 16'h00a6, 16'h00a5, 16'h00a4, 16'h00a3, 16'h00a2, 16'h00a1, 16'h00a0, 16'h009f, 16'h009e, 16'h009d, 16'h009c, 16'h009b, 16'h009a, 16'h0099, 16'h0098, 16'h0097, 16'h0096, 16'h0095, 16'h0094, 16'h0093, 16'h0092, 16'h0091, 16'h0090, 16'h008f, 16'h008e, 16'h008d, 16'h008c, 16'h008b, 16'h008a, 16'h0089, 16'h0088, 16'h0087, 16'h0086, 16'h0085, 16'h0084, 16'h0083, 16'h0082, 16'h0081, 16'h0080},
@@ -37,7 +37,7 @@ module pwl_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] done)
     logic[BUFF_LEN_SHORT-1:0][`DMA_DATA_WIDTH-1:0] dma_buff_short;
     assign dma_buff_short = {48'h1fe00000000, 48'h1f40014fffe, 48'hff0082ffff, 48'he600c8fffd, 48'hc1007f0002, 48'h7f00030002, 48'h400040ffff, 48'h1};
     //EXPECTED OUTPUT
-    logic[`PWL_BRAM_DEPTH-1:0][`BATCH_SAMPLES-1:0][`SAMPLE_WIDTH-1:0] expected_batches_short;
+    logic[`SPARSE_BRAM_DEPTH-1:0][`BATCH_SAMPLES-1:0][`SAMPLE_WIDTH-1:0] expected_batches_short;
     assign expected_batches_short = {0,{16'h0000, 16'h0000, 16'h0002, 16'h0004, 16'h0006, 16'h0008, 16'h000a, 16'h000c, 16'h000e, 16'h0010, 16'h0012, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014},
                                 {16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014},
                                 {16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0014, 16'h0015, 16'h0016, 16'h0017, 16'h0018, 16'h0019, 16'h001a, 16'h001b, 16'h001c, 16'h001d, 16'h001e, 16'h001f, 16'h0020, 16'h0021, 16'h0022, 16'h0023, 16'h0024, 16'h0025, 16'h0026, 16'h0027, 16'h0028, 16'h0029, 16'h002a, 16'h002b, 16'h002c, 16'h002d, 16'h002e, 16'h002f, 16'h0030, 16'h0031, 16'h0032, 16'h0033, 16'h0034, 16'h0035, 16'h0036, 16'h0037, 16'h0038, 16'h0039, 16'h003a, 16'h003b, 16'h003c, 16'h003d, 16'h003e, 16'h003f, 16'h0040, 16'h0041},
@@ -55,7 +55,7 @@ module pwl_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] done)
     logic[BUFF_LEN_LONG-1:0][`DMA_DATA_WIDTH-1:0] dma_buff_long, dma_buff;
     assign dma_buff_long = {48'h5e916b30000, 48'h57515c10002, 48'h57430c2e4ff, 48'h51b271d001c, 48'h4e0184d0040, 48'h4df2810f03d, 48'h4662faffff0, 48'h43a352bffe0, 48'h3f10da6008b, 48'h3f003040aa2, 48'h3b13dd0ff11, 48'h38e3a8a0018, 48'h35d13e000ca, 48'h34f1424fffb, 48'h31e020f005e, 48'h2970386fffd, 48'h29620b5e2d1, 48'h24d10520039, 48'h2432cf1fd23, 48'h20d1b600053, 48'h1bb35f0ffad, 48'h1b835c00010, 48'h15412a0005a, 48'h11d3afbff44, 48'h11c1cd21e29, 48'hf23c75ff3f, 48'h9c3be30002, 48'h8505a2025c, 48'h191940ffd2, 48'h103};
     //EXPECTED OUTPUT
-    logic[`PWL_BRAM_DEPTH-1:0][`BATCH_SAMPLES-1:0][`SAMPLE_WIDTH-1:0] expected_batches_long;
+    logic[`SPARSE_BRAM_DEPTH-1:0][`BATCH_SAMPLES-1:0][`SAMPLE_WIDTH-1:0] expected_batches_long;
     assign expected_batches_long = {0,{16'h16b3, 16'h16b3, 16'h16b3, 16'h16b3, 16'h16b3, 16'h16b3, 16'h16b3, 16'h16b3, 16'h16b3, 16'h16b3, 16'h16b3, 16'h16b3, 16'h16b3, 16'h16b3, 16'h16b3, 16'h16b3, 16'h16b3, 16'h16b3, 16'h16b3, 16'h16b3, 16'h16b3, 16'h16b3, 16'h16b3, 16'h16a7, 16'h16a5, 16'h16a3, 16'h16a1, 16'h169f, 16'h169d, 16'h169b, 16'h1699, 16'h1697, 16'h1695, 16'h1693, 16'h1691, 16'h168f, 16'h168d, 16'h168b, 16'h1689, 16'h1687, 16'h1685, 16'h1683, 16'h1681, 16'h167f, 16'h167d, 16'h167b, 16'h1679, 16'h1677, 16'h1675, 16'h1673, 16'h1671, 16'h166f, 16'h166d, 16'h166b, 16'h1669, 16'h1667, 16'h1665, 16'h1663, 16'h1661, 16'h165f, 16'h165d, 16'h165b, 16'h1659, 16'h1657},
                                       {16'h1655, 16'h1653, 16'h1651, 16'h164f, 16'h164d, 16'h164b, 16'h1649, 16'h1647, 16'h1645, 16'h1643, 16'h1641, 16'h163f, 16'h163d, 16'h163b, 16'h1639, 16'h1637, 16'h1635, 16'h1633, 16'h1631, 16'h162f, 16'h162d, 16'h162b, 16'h1629, 16'h1627, 16'h1625, 16'h1623, 16'h1621, 16'h161f, 16'h161d, 16'h161b, 16'h1619, 16'h1617, 16'h1615, 16'h1613, 16'h1611, 16'h160f, 16'h160d, 16'h160b, 16'h1609, 16'h1607, 16'h1605, 16'h1603, 16'h1601, 16'h15ff, 16'h15fd, 16'h15fb, 16'h15f9, 16'h15f7, 16'h15f5, 16'h15f3, 16'h15f1, 16'h15ef, 16'h15ed, 16'h15eb, 16'h15e9, 16'h15e7, 16'h15e5, 16'h15e3, 16'h15e1, 16'h15df, 16'h15dd, 16'h15db, 16'h15d9, 16'h15d7},
                                       {16'h15d5, 16'h15d3, 16'h15d1, 16'h15cf, 16'h15cd, 16'h15cb, 16'h15c9, 16'h15c7, 16'h15c5, 16'h15c3, 16'h15c1, 16'h30c2, 16'h30bd, 16'h30a1, 16'h3085, 16'h3069, 16'h304d, 16'h3031, 16'h3015, 16'h2ff9, 16'h2fdd, 16'h2fc1, 16'h2fa5, 16'h2f89, 16'h2f6d, 16'h2f51, 16'h2f35, 16'h2f19, 16'h2efd, 16'h2ee1, 16'h2ec5, 16'h2ea9, 16'h2e8d, 16'h2e71, 16'h2e55, 16'h2e39, 16'h2e1d, 16'h2e01, 16'h2de5, 16'h2dc9, 16'h2dad, 16'h2d91, 16'h2d75, 16'h2d59, 16'h2d3d, 16'h2d21, 16'h2d05, 16'h2ce9, 16'h2ccd, 16'h2cb1, 16'h2c95, 16'h2c79, 16'h2c5d, 16'h2c41, 16'h2c25, 16'h2c09, 16'h2bed, 16'h2bd1, 16'h2bb5, 16'h2b99, 16'h2b7d, 16'h2b61, 16'h2b45, 16'h2b29},
@@ -98,31 +98,13 @@ module pwl_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] done)
     logic[$clog2(BUFF_LEN_LONG):0] dma_i;
     logic send_dma_buff,run_pwl; 
     logic[`BATCH_SAMPLES-1:0][`SAMPLE_WIDTH-1:0] curr_expected_batch; 
-    logic[$clog2(`PWL_BRAM_DEPTH):0] exp_i; 
+    logic[$clog2(`SPARSE_BRAM_DEPTH):0] exp_i; 
     logic[`BATCH_SAMPLES-1:0] error_vec; 
     logic[$clog2(BUFF_LEN_LONG):0] dma_buff_len; 
     logic checked_full_wave;
     logic[1:0] wave_to_send; 
     logic[$clog2(PERIODS_TO_CHECK):0] periods; 
 
-    always_comb begin
-      checked_full_wave = (pwlTestState == VERIFY) && (valid_dac_batch) && (exp_i == (DUT.pwl_gen.wave_lines_stored-1));
-      if (wave_to_send == 0) begin
-        curr_expected_batch = expected_batches_vshort[exp_i]; 
-        dma_buff_len = BUFF_LEN_VSHORT; 
-        dma_buff = dma_buff_vshort;
-      end else 
-      if (wave_to_send == 1) begin
-        curr_expected_batch = expected_batches_short[exp_i]; 
-        dma_buff_len = BUFF_LEN_SHORT; 
-        dma_buff = dma_buff_short;
-      end else 
-      if (wave_to_send == 2) begin
-        curr_expected_batch = expected_batches_long[exp_i]; 
-        dma_buff_len = BUFF_LEN_LONG; 
-        dma_buff = dma_buff_long;
-      end 
-    end
 
     DAC_Interface DUT (.clk(clk), .rst(rst),
                        .fresh_bits(fresh_bits),
@@ -171,143 +153,13 @@ module pwl_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] done)
                 wave_to_send <= 1; 
             end
         end else begin
-
-            case(pwlTestState)
-                IDLE_PWL: begin 
-                    if (send_dma_buff) begin
-                        pwl_dma_if.valid <= 1; 
-                        pwl_dma_if.data = dma_buff[0];
-                        pwl_dma_if.last <= 0; 
-                        dma_i <= 1; 
-                        pwlTestState <= SEND_BUFF; 
-                    end
-                    if (run_pwl) begin
-                        {pwl_dma_if.last, pwl_dma_if.data, pwl_dma_if.valid,dma_i} <= 0;
-                        {exp_i, periods} <= 0;
-                        pwlTestState <= VERIFY;  
-                    end
-                end  
-                SEND_BUFF: begin
-                    if (dma_i < dma_buff_len) begin
-                        if (pwl_dma_if.ready) begin
-                            pwl_dma_if.data = dma_buff[dma_i];
-                            if (dma_i == dma_buff_len-1) pwl_dma_if.last <= 1; 
-                            dma_i <= dma_i + 1;
-                        end 
-                    end
-                    else if (dma_i == dma_buff_len && pwl_dma_if.ready) begin
-                        {pwl_dma_if.last, pwl_dma_if.data, pwl_dma_if.valid} <= 0;
-                        dma_i <= 0;
-                        pwlTestState <= VERIFY;  
-                    end
-                end 
-                VERIFY: begin
-                    if (periods == PERIODS_TO_CHECK) begin
-                        {exp_i, periods} <= 0;
-                        pwlTestState <= IDLE_PWL;
-                    end else if (checked_full_wave) begin
-                        periods <= periods + 1;
-                        exp_i <= 0; 
-                    end else if (valid_dac_batch) exp_i <= exp_i + 1; 
-                end 
-            endcase
-
             case(testState)
                 IDLE: begin 
                     if (start) testState <= TEST; 
                     if (done) done <= 0; 
                 end 
                 TEST: begin
-                    // Send short random points and ensure interpolation is correct. 
-                    if (test_num == 0) begin
-                      if (timer < 7) timer <= timer + 1;
-                      else begin
-                          if (periods == PERIODS_TO_CHECK) begin
-                            testState <= CHECK;
-                            timer <= 0; 
-                          end
-                      end
-
-                      if (timer == 0) fresh_bits[`PWL_PREP_ID] <= 1; 
-                      if (timer == 5) send_dma_buff <= 1;                        
-                    end
-                    //halt the wave
-                    if (test_num == 1) begin
-                      if (timer == 0) begin 
-                          halt <= 1;
-                          timer <= 1;  
-                      end else begin
-                          if (~valid_dac_batch && dac0_rdy) begin
-                            testState <= CHECK; 
-                            timer <= 0; 
-                          end 
-                      end
-                    end
-                    // Send trig wave. Then send interpolation. Then trig wave. Then halt.
-                    if (test_num == 2) begin
-                      if (timer <= 65) timer <= timer + 1;
-                      else begin 
-                        testState <= CHECK; 
-                        timer <= 0; 
-                      end 
-
-                      if (timer == 0) fresh_bits[`TRIG_WAVE_ID] <= 1; 
-                      if (timer == 25) fresh_bits[`RUN_PWL_ID] <= 1; 
-                      if (timer == 50) fresh_bits[`TRIG_WAVE_ID] <= 1; 
-                      if (timer == 60) halt <= 1;
-                    end
-                    // Check pwl wave again
-                    if (test_num == 3) begin
-                      if (timer == 0) begin
-                        fresh_bits[`RUN_PWL_ID] <= 1;
-                        run_pwl <= 1;
-                        timer <= 1;
-                      end
-                      if (timer == 1 && periods == PERIODS_TO_CHECK) begin
-                        timer <= 0;
-                        halt <= 1;
-                        testState <= CHECK;
-                      end
-                    end
-                    // Check all pwl waves
-                    if (test_num == 4) begin
-                      if (timer < 6) timer <= timer + 1;
-                      else if (timer == 6) begin
-                          if (periods == PERIODS_TO_CHECK) timer <= 7; 
-                      end
-                      else if (timer > 6 && timer < 12) timer <= timer + 1; 
-                      else if (timer == 12) begin
-                        if (periods == PERIODS_TO_CHECK) timer <= 13;
-                      end
-                      else if (timer > 12 && timer < 24) timer <= timer + 1;
-                      else if (timer == 24) begin
-                        if (periods == PERIODS_TO_CHECK) begin 
-                            testState <= CHECK;
-                            timer <= 0;
-                        end 
-                      end
-
-                      if (timer == 0) begin 
-                        fresh_bits[`PWL_PREP_ID] <= 1;
-                        wave_to_send <= 0; 
-                        $display("\nSending very short wave\n");
-                      end  
-                      if (timer == 5) send_dma_buff <= 1;  
-
-                      if (timer == 7) begin 
-                        fresh_bits[`PWL_PREP_ID] <= 1;
-                        wave_to_send <= 1; 
-                        $display("\nSending short wave\n");
-                      end  
-                      if (timer == 11) send_dma_buff <= 1; 
-
-                      if (timer == 13) begin 
-                        fresh_bits[`PWL_PREP_ID] <= 1;
-                        wave_to_send <= 2; 
-                        $display("\nSending long wave\n");
-                      end  
-                      if (timer == 23) send_dma_buff <= 1;                       
-                    end
+                   
                 end 
                 CHECK: begin
                     if (test_num == 3) begin
@@ -331,14 +183,6 @@ module pwl_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] done)
                 end 
             endcase
 
-            if (send_dma_buff) send_dma_buff <= 0;
-            if (run_pwl) run_pwl <= 0;
-            if (halt) halt <= 0; 
-            `define dac_sig_rdy(index) (index >= `PS_SEED_BASE_ID && index <= `PS_SEED_VALID_ID && DUT.state_rdy) || (index == `TRIG_WAVE_ID && DUT.state_rdy) || (index == `PWL_PREP_ID && DUT.state_rdy) || (index == `RUN_PWL_ID && DUT.state_rdy)
-            for (int i = 0; i < `MEM_SIZE; i++) begin
-                if (fresh_bits[i] && (`dac_sig_rdy(i))) fresh_bits[i] <= 0; 
-            end
-            
             if (test_num == 0 || test_num == 3 || test_num == 4) begin
                 if (test_check[0]) begin
                     if (test_check[1]) begin 

@@ -5,7 +5,7 @@ from math import log2,ceil
 
 clk = 400e6
 T = 1/clk
-batch_width = 1024
+batch_width = 16
 sample_width = 16
 MB_of_BRAM = 38/8
 batch_size = int(batch_width/sample_width)

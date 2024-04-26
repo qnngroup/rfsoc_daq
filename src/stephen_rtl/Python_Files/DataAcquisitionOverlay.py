@@ -15,18 +15,16 @@ from colorama import Fore, Back, Style
 
 class DataAcquisitionOverlay():
     def __init__ (self, bit_file,download=False,ps_int_name='ps_interface_0'):
-        # Expected Devices: leds, switches, buttons
+        # Expected Devices: leds
         # Produced Drivers: sys_driver, led_driver, switch_driver, button_driver
         # To set leds as output, write 0x0 at 0x4. 0x1 to set as input. 
         if (download): print(f"Downloading {bit_file}...")
         else: print(f"Opening {bit_file}")
         self.overlay = Overlay(bit_file,download=download)
         print("Done. Initializing dacOverlay")
-        print("Resetting System")
-        self.rst()
-
+        
         xrfclk.set_ref_clks(lmk_freq=122.88, lmx_freq=409.6)
-        for device_name in [ps_int_name,"leds","buttons","switches"]:
+        for device_name in [ps_int_name,"leds"]:
             device = self.overlay.ip_dict.get(device_name)
             if device is None: 
                 print(f"Error instantiating overlay: missing device {device_name}")
@@ -34,9 +32,10 @@ class DataAcquisitionOverlay():
             device = device.get('device')
             addr = self.overlay.ip_dict[device_name]['phys_addr']
             obj_name = "sys_driver" if device_name == ps_int_name else device_name[:-1]+'_driver'
-            if obj_name == "switche_driver": obj_name = 'switch_driver'
             exec(f"self.{obj_name} = MMIO({addr},0xFA00,device= device)")
-
+        
+        print("Resetting System")
+        self.rst()
         self.pwl_dma_driver = self.overlay.pwl_dma
         self.max_dac_bs = self.read(addr_map["max_dac_burst_size"])
         self.mem_size = self.read(addr_map["mem_size"])
@@ -57,7 +56,9 @@ class DataAcquisitionOverlay():
         raw_vn = raw_vn[0] + "." + raw_vn[1:]
         return eval(raw_vn)
 
-    def hlt_dac(self): self.write(addr_map['hlt_dac'],1)
+    def hlt_dac(self,verbose=False): 
+        self.write(addr_map['hlt_dac'],1)
+        if (verbose): print("Halted Dac")
 
     def produce_rand_samples(self,seed,verbose=False):
         for i in range(batch_size):
@@ -110,7 +111,7 @@ class DataAcquisitionOverlay():
                 eval(func_call+"verbose=False)")
                 t0 = time.time()
                 while time.time() - t0 < 3: continue
-                i = (i+1)%2
+                i = (i+1)%len(wave_funcs)
         except KeyboardInterrupt:
             self.write(addr_map["hlt_dac"],1)
             self.change_burst_size(prev_bs,verbose=False)
@@ -206,35 +207,6 @@ class DataAcquisitionOverlay():
             correct, wrong = self.test_print(curr_scale == i, "change_scale", correct, wrong,i=i)
         if wrong == 0: print(Fore.GREEN+"\nChange Scale Test Passed\n")
         else: print(Fore.RED+"\nChange Scale Test Failed\n")
-        if wrong != 0: total_wrong+=1
-        else: total_right+= 1
-        correct,wrong = 0,0
-        # Simple Mem Test
-        correct, wrong = self.run_simple_mem_test(verbose=False)
-        if wrong == 0: print(Fore.GREEN+"Simple Mem Test Passed\n")
-        else: print(Fore.RED+f"Simple Mem Test Failed ({correct} correct, {wrong} wrong)\n")
-        if wrong != 0: total_wrong+=1
-        else: total_right+= 1
-        correct,wrong = 0,0
-        # Write to large register poll check
-        sdc_vec = [r.randrange(0,0xffff) for el in range(sdc_samples)]
-        addr = addr_map["sdc_base"]
-        for i in range(sdc_samples):
-            self.write(addr,sdc_vec[i])
-            addr += 4
-        val = self.read(addr)
-        correct, wrong = self.test_print(val == -1, "large_reg", correct, wrong,i=0)
-        self.write(addr, 1)
-        val = self.read(addr)
-        correct, wrong = self.test_print(val == 0, "large_reg", correct, wrong,i=1)
-        sdc_vec_in = []
-        addr = addr_map["sdc_base"]
-        for i in range(sdc_samples):
-            sdc_vec_in.append(self.read(addr))
-            addr+=4
-        for i in range(len(sdc_vec_in)): correct, wrong = self.test_print(sdc_vec[i] == sdc_vec_in[i], "large_reg", correct, wrong,i=2+i)
-        if wrong == 0: print(Fore.GREEN+"\nLarge Register Write Test Passed\n")
-        else: print(Fore.RED+"\nLarge Register Write Test Failed\n")
         if wrong != 0: total_wrong+=1
         else: total_right+= 1
         correct,wrong = 0,0

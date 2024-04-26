@@ -1,8 +1,29 @@
-st = """module edetect #(parameter DEFAULT = 0, parameter DATA_WIDTH = 1)
-                (input wire clk, rst,
-                 input wire[DATA_WIDTH-1:0] val,
-                 output logic[1:0] comb_posedge_out,
-                 output logic[1:0] posedge_out);
+st = """module top_level(input wire ps_clk,ps_rst, dac_clk, dac_rst,
+                 //Inputs from DAC
+                 input wire dac0_rdy,
+                 //Outpus to DAC
+                 output logic[`BATCH_WIDTH-1:0] dac_batch, 
+                 output logic valid_dac_batch, 
+                 output logic pl_rstn, 
+                 //Inputs from PS
+                 input wire [`A_BUS_WIDTH-1:0] raddr_packet,
+                 input wire raddr_valid_packet,
+                 input wire [`A_BUS_WIDTH-1:0] waddr_packet,
+                 input wire waddr_valid_packet,
+                 input wire [`WD_BUS_WIDTH-1:0] wdata_packet,
+                 input wire wdata_valid_packet,
+                 input wire ps_wresp_rdy,ps_read_rdy,
+                 //axi_slave Outputs
+                 output logic [1:0] wresp_out,rresp_out,
+                 output logic wresp_valid_out, rresp_valid_out,
+                 output logic [`WD_BUS_WIDTH-1:0] rdata_packet,
+                 output logic rdata_valid_out,
+                 //DMA Inputs/Outputs (axi-stream)
+                 input wire[`DMA_DATA_WIDTH-1:0] pwl_tdata,
+                 input wire[3:0] pwl_tkeep,
+                 input wire pwl_tlast, pwl_tvalid,
+                 output logic pwl_tready);
+
                  """
 
 
@@ -13,40 +34,44 @@ def find(st,pat,num):
         num-=1
     return i
 
+def find_num_pats(s,pat):
+    num = 0
+    while True:
+        i = s.find(pat)
+        if i == -1: break
+        i += len(pat)
+        s = s[i:]
+        num+=1
+    return num
+
 def pullParams(s):
     out = ""
     start = s.find("#")
     end = s.find(")")
     line = s[start:end]
-    s = s[end:]
-    s = s[s.find("("):]
-    pats = ["="," ",","]
+    n = find_num_pats(line, "parameter")
     while True:
-        if line.find("parameter") == -1: break
-        start = line.find("parameter")+len("parameter")+1
-        li = []
-        i = 1
-        for el in pats:
-            while True:
-                end = find(line,el,i)
-                if end == -1: break
-                if end <= start:
-                    i+=1
-                    continue
-                else:
-                    li.append(end)
-                    break
-        end = min(li)
-        arg = line[start:end]
-        out += f".{arg}(`{arg}) "
-        line = line[end:]
-
-    return out[:-1],s
-
+        i = line.find("parameter")
+        if i == -1: break 
+        i+=len("parameter")+1
+        j = line.find(",")
+        p = line.find("=")
+        if j == -1: j = p
+        elif p != -1 and j > p: j = p
+        arg = line[i:j-1]
+        out += f".{arg}({arg}), "
+        if line[j] == "=": j = line.find(",")
+        if j == -1: break
+        line = line[j+1:]
+    s = s[s.find(")")+1:]
+    if n != find_num_pats(out,"."): print ("ERROR IN PARAMTERS")
+    return out[:-2],s
+    
 def getfName(s, params=False):
     i1 = s.find("module")+len("module")+1
     i2 = s.find("#")-1
     if i2 == -2: i2 = s.find("(")
+    while s[i2-1] == " ": i2-=1
     return s[i1:i2]
 
 def align(s):
@@ -58,23 +83,18 @@ def align(s):
         out+=alignI*" "+line+"\n"
     return out
 
-def grabNextArg(line):
-    propPats = [line.find(el) for el in ["][", "] ["]]
-    if any(propPats):
-        i = max(propPats)
-        line = line[i+3:]
-
-    keyWrds = ['Axis_IF', 'Recieve_Transmit_IF','int','logic','input','parameter','output','input','inout','output', ']', 'wire']
-    start = max([line.find(el)+len(el) if line.find(el) != -1 else -1 for el in keyWrds])
-    while(line[start] == " "): start+=1
-
-    end = line.find(',')
-    if end == -1: end = line.find(')')
-    if end == -1: return -2, ""
-    arg = line[start:end]
-    if end == len(line)-1: line = -1
-    else: line = line[:start]+line[end+1:]
-    return line,arg
+def grab_args(line):
+    args = []
+    i = line.find(");")
+    if i != -1: line = line[:i]+","
+    while True:
+        i = line.find(",")
+        if i == -1: break 
+        j = i 
+        while j >= 0 and " " not in line[j:i]: j-=1
+        args.append(line[j+1:i])
+        line = line[i+1:]
+    return args
 
 def clean(s):
     while (s.find("\t") != -1): s = s.replace("\t","")
@@ -95,25 +115,27 @@ def clean(s):
     s = s.replace("*","")
     return s
 
-def formatFuncCall(s,params=False,fName = "functionName"):
+def formatFuncCall(s,fName = "functionName"):
     s = clean(s)
     out = getfName(s)
-    if (params):
+    if (s.find("#") != -1):
         params,s = pullParams(s)
         out += f" #({params})\n"
+        params = True
+    else: params = False
     body = f" {fName}("
+    n = find_num_pats(s, ",")+1
     lines = s.split("\n")
+    n2 = len(lines)
     for line in lines:
-        while True:
-            line,arg = grabNextArg(line)
-            if line == -2: break
-            body+=f".{arg}({arg}),\n"
-            if line == -1: break
+        args = grab_args(line)
+        for arg in args: body+=f".{arg}({arg}),\n"
     body = body[:-2]
     body+=");"
+    if find_num_pats(body, ".") != n or n < n2: print("ERROR IN BODY")
     return out+align(body) if params else align(out+body)
 
-out= formatFuncCall(st,True,fName="correct_ed")
+out= formatFuncCall(st,fName="tl")
 print(out)
 # line = "input wire ps_wresp_rdy,blah,bloo,foo,whoo,oops,ps_read_rdy,   "
 # line = clean(st)

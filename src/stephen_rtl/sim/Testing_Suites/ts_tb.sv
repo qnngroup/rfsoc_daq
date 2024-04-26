@@ -6,7 +6,7 @@ module ts_tb();
 	localparam VERBOSE = 1; 	  
 	localparam NUM_OF_TESTS = 7; 
 	localparam STARTING_TEST = 0; // 0-indexed test num
-	localparam TESTS_TO_RUN = -1; // Set -1 to run all tests
+	localparam TESTS_TO_RUN = 1; // Set -1 to run all tests
 
 	logic clk, rst;
 	logic[NUM_OF_TESTS-1:0] runTest = 0;

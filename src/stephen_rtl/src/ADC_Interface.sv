@@ -1,6 +1,7 @@
 `timescale 1ns / 1ps
 `default_nettype none
-import mem_layout_pkg::*;
+`include "mem_layout.svh"
+// import mem_layout_pkg::*;
 
 module ADC_Interface (input wire clk,rst,
 					  input wire[`MEM_SIZE-1:0] fresh_bits,

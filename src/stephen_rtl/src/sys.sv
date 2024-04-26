@@ -2,24 +2,24 @@
 `default_nettype none
 import mem_layout_pkg::*;
 
-module sys(input wire clk,sys_rst,
-                 //DAC Inputs/Outputs
-                 input wire dac0_rdy,
-                 output logic[`BATCH_WIDTH-1:0] dac_batch, 
-                 output logic valid_dac_batch, 
-                 output logic pl_rstn, 
-                 //PS Inputs/Outputs 
-                 Recieve_Transmit_IF wa_if,
-                 Recieve_Transmit_IF wd_if,
-                 Recieve_Transmit_IF ra_if,
-                 Recieve_Transmit_IF rd_if,
-                 Recieve_Transmit_IF wr_if,
-                 Recieve_Transmit_IF rr_if,
-                 Axis_IF pwl_dma_if, //PWL DMA axi-stream
-                 Axis_IF bufft_if,   //Buffer Timestamp axi-stream
-                 Axis_IF buffc_if,   //Buffer Config axi-stream
-                 Axis_IF cmc_if,     //Channel Mux Config axi-stream
-                 Axis_IF sdc_if);    //Sample Discriminator Config axi-stream
+module sys(input wire ps_clk,ps_rst,dac_clk,dac_rst,
+           //DAC Inputs/Outputs
+           input wire dac0_rdy,
+           output logic[`BATCH_WIDTH-1:0] dac_batch, 
+           output logic valid_dac_batch, 
+           output logic pl_rstn, 
+           //PS Inputs/Outputs 
+           Recieve_Transmit_IF wa_if,
+           Recieve_Transmit_IF wd_if,
+           Recieve_Transmit_IF ra_if,
+           Recieve_Transmit_IF rd_if,
+           Recieve_Transmit_IF wr_if,
+           Recieve_Transmit_IF rr_if,
+           Axis_IF pwl_dma_if, //PWL DMA axi-stream
+           Axis_IF bufft_if,   //Buffer Timestamp axi-stream
+           Axis_IF buffc_if,   //Buffer Config axi-stream
+           Axis_IF cmc_if,     //Channel Mux Config axi-stream
+           Axis_IF sdc_if);    //Sample Discriminator Config axi-stream
 
     logic [`MEM_SIZE-1:0] fresh_bits,rtl_read_reqs,rtl_write_reqs, rtl_rdy;
     logic[`MEM_SIZE-1:0][`WD_DATA_WIDTH-1:0] rtl_wd_in, rtl_rd_out;
@@ -30,15 +30,17 @@ module sys(input wire clk,sys_rst,
     logic[$clog2(`SAMPLE_WIDTH):0] scale_factor; 
     logic [`BATCH_SAMPLES-1:0][`SAMPLE_WIDTH-1:0] dac_samples_scaled; 
     logic[$clog2(`MAX_DAC_BURST_SIZE)+1:0] hlt_counter; 
+    logic valid_dac_batch_ps;
 
     enum logic[1:0] {IDLE_R, RESP_WAIT, RESET} rstState; 
     enum logic {IDLE_DB, CHANGE_BURST_SIZE} dacBurstState;
     enum logic {IDLE_S, CHANGE_SCALE} scaleParamState;
     enum logic {IDLE_H, HALT_DAC} hltState;
     enum logic[1:0] {IDLE_B, BUFFT_POLL_WAIT, BUFFT_CLR_FB} bufftState;
-    assign rst = sys_rst || rst_cmd;
+    assign rst = ps_rst || rst_cmd;
     assign pl_rstn = ~rst; 
-    assign dac_batch = dac_samples_scaled;  
+    assign dac_batch = dac_samples_scaled; 
+    assign valid_dac_batch_ps = 0;  
     always_comb begin
         for (int i = 0; i < `BATCH_SAMPLES; i++) begin
             dac_samples_scaled[i] = dac_batch_unfiltered[`SAMPLE_WIDTH*i+:`SAMPLE_WIDTH] >> scale_factor;
@@ -54,7 +56,6 @@ module sys(input wire clk,sys_rst,
                 `DAC_BURST_SIZE_ID: rtl_rdy[i] = dacBurstState == IDLE_DB; 
                 `SCALE_DAC_OUT_ID:  rtl_rdy[i] = scaleParamState == IDLE_S; 
                 `TRIG_WAVE_ID:      rtl_rdy[i] = dac_intf.state_rdy;
-                `PWL_PREP_ID:       rtl_rdy[i] = dac_intf.state_rdy;
                 `RUN_PWL_ID:        rtl_rdy[i] = dac_intf.state_rdy;
                 `BUFF_CONFIG_ID:    rtl_rdy[i] = adc_intf.state_rdy; 
                 default: begin
@@ -85,7 +86,7 @@ module sys(input wire clk,sys_rst,
     end
 
     // Overall system state machine (for resets, halts, parameter changes)
-    always_ff @(posedge clk) begin
+    always_ff @(posedge ps_clk) begin
         if (rst) begin
             {rst_cmd,hlt_cmd,hlt_counter} <= 0;
             {dac_burst_size,scale_factor,bufft_valid_clear} <= 0; 
@@ -96,7 +97,7 @@ module sys(input wire clk,sys_rst,
             bufftState <= IDLE_B; 
         end 
         else begin
-            if (valid_dac_batch && dac_burst_size != 0) begin
+            if (valid_dac_batch_ps && dac_burst_size != 0) begin
                 if ( (hlt_counter+1) < dac_burst_size) hlt_counter <= hlt_counter + 1; 
                 else hlt_counter <= 0; 
             end 
@@ -116,7 +117,7 @@ module sys(input wire clk,sys_rst,
 
             case(hltState)
                 IDLE_H: begin
-                    if (fresh_bits[`DAC_HLT_ID] || ( valid_dac_batch && dac_burst_size != 0 && hlt_counter == (dac_burst_size-1) )) begin 
+                    if (fresh_bits[`DAC_HLT_ID] || ( valid_dac_batch_ps && dac_burst_size != 0 && hlt_counter == (dac_burst_size-1) )) begin 
                         hlt_cmd <= 1;
                         hltState <= HALT_DAC; 
                     end 
@@ -170,7 +171,7 @@ module sys(input wire clk,sys_rst,
     end
 
     axi_slave #(.A_BUS_WIDTH(`A_BUS_WIDTH), .A_DATA_WIDTH(`A_DATA_WIDTH), .WD_BUS_WIDTH(`WD_BUS_WIDTH), .WD_DATA_WIDTH(`WD_DATA_WIDTH))
-    slave(.clk(clk), .rst(rst),
+    slave(.clk(ps_clk), .rst(rst),
           .waddr_if(wa_if),
           .wdata_if(wd_if),
           .raddr_if(ra_if),
@@ -185,16 +186,17 @@ module sys(input wire clk,sys_rst,
           .fresh_bits(fresh_bits));
 
 
-    DAC_Interface dac_intf(.clk(clk),.rst(rst),
-                          .fresh_bits(fresh_bits),
-                          .read_resps(rtl_rd_out),
-                          .dac0_rdy(dac0_rdy), 
-                          .halt(hlt_cmd),                   //in
-                          .dac_batch(dac_batch_unfiltered), //out 
-                          .valid_dac_batch(valid_dac_batch),
-                          .pwl_dma_if(pwl_dma_if));
+    DAC_Interface dac_intf(.ps_clk(ps_clk),.ps_rst(rst),
+                           .dac_clk(dac_clk),.dac_rst(dac_rst),
+                           .fresh_bits(fresh_bits),
+                           .read_resps(rtl_rd_out),
+                           .halt(hlt_cmd),
+                           .dac0_rdy(dac0_rdy),       //in
+                           .dac_batch(dac_batch),     //out 
+                           .valid_dac_batch(valid_dac_batch),
+                           .pwl_dma_if(pwl_dma_if));
 
-    ADC_Interface adc_intf(.clk(clk), .rst(rst),
+    ADC_Interface adc_intf(.clk(ps_clk), .rst(rst),
                            .fresh_bits(fresh_bits),
                            .read_resps(rtl_rd_out),
                            .bufft(bufft_if.stream_in),
