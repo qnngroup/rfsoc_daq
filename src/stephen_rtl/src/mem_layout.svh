@@ -26,7 +26,7 @@
         `define CHAN_SAMPLES          (`CHANNEL_MUX_WIDTH/`WD_DATA_WIDTH)    // Number of mem_map entries for one channel mux register (2)
         `define BUFF_TIMESTAMP_WIDTH  32                                     // Bit width for buffer timestamp register (32) 
         `define BUFF_SAMPLES          (`BUFF_TIMESTAMP_WIDTH/`WD_DATA_WIDTH) // Number of mem_map entries for one buff_timestamp register (2)
-        `define FIRMWARE_VERSION      16'h1_0041                             // Data Acquisition System (DAS) Version Number
+        `define FIRMWARE_VERSION      16'h1_004_0                             // Data Acquisition System (DAS) Version Number: _0 => stephen_dev (main) _1 => pwl_software_dev, _2 => pwl_hardware_dev, _3 => daq_system_overhaul, _4 => ui_dev
         
         // IDs for internal mem_map usages. Note:
         // RPOLL = RTL_POLL => address is a polling address => after ps writes, freshbits are cleared once the rtl is ready to poll
