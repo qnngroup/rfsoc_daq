@@ -41,7 +41,7 @@ module DAC_Interface (input wire ps_clk,dac_clk,ps_rst, dac_rst,
 
 	edetect	scale_ed(.clk(ps_clk), .rst(ps_rst),
 	                   .val(scale_factor_in),
-	                   .comb_posedge_out(scale_ed)); 
+	                   .comb_posedge_out(scale_edge)); 
 
 	//cmd: [scale_factor(4),sample_seed(256),rst_cmd(1),halt_cmd(1),run_shift_regs(1),run_trig_wave(1),run_pwl(1)]
 	data_handshake #(.DATA_WIDTH(`BATCH_WIDTH+SCALE_WIDTH+CMD_WIDTH))
@@ -79,7 +79,7 @@ module DAC_Interface (input wire ps_clk,dac_clk,ps_rst, dac_rst,
 			dacConfigState <= (ps_rst)? RST_DAC : HALT_DAC;
 		end else begin
 			if (resp_out_valid) pwl_rdy <= resp_out[0];
-			if (scale_ed != 0 && scale_changed == 0) scale_changed <= 1; 
+			if (scale_edge != 0 && scale_changed == 0) scale_changed <= 1; 
 			case (dacConfigState) 
 				IDLE: begin
 					if (fresh_bits[`RUN_PWL_ID]) begin
