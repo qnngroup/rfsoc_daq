@@ -17,7 +17,8 @@ module sample_generator #(parameter CMD_WIDTH, parameter RESP_WIDTH, parameter S
 	localparam DAC_STAGES = 5; 	
 						 	
 	logic halt, rst; 
-	logic[BATCH_SIZE-1:0][SAMPLE_WIDTH-1:0] rand_samples,trig_out,pwl_batch_out,rand_seed;
+	logic[BATCH_SIZE-1:0][SAMPLE_WIDTH-1:0] rand_samples,trig_out,pwl_batch_out,rand_seed,dac_batch_in;
+	 logic valid_dac_batch_in; 
 	logic[DAC_STAGES-1:0][BATCH_WIDTH:0] batch_pipe; 
 	logic set_seeds,run_shift_regs,run_trig_wav,run_pwl;
 	logic pwl_rdy, valid_pwl_batch;
@@ -70,7 +71,7 @@ module sample_generator #(parameter CMD_WIDTH, parameter RESP_WIDTH, parameter S
 	always_ff @(posedge clk) begin
 		batch_pipe[DAC_STAGES-1:1] <= batch_pipe[DAC_STAGES-2:0]; 
 		batch_pipe[0] <= {valid_dac_batch_in,dac_batch_in}; 
-		
+
 		if (rst || halt) begin
 			{rand_seed,run_shift_regs,run_trig_wav,run_pwl}  <= 0; 
 		end else begin
