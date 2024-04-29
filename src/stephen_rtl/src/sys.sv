@@ -26,7 +26,6 @@ module sys(input wire ps_clk,ps_rst,dac_clk,dac_rst,
     logic[$clog2(`MAX_DAC_BURST_SIZE):0] dac_burst_size; 
     logic rst_cmd = 1;
     logic rst,hlt_cmd, bufft_valid_clear;
-    logic[`BATCH_SAMPLES-1:0][`SAMPLE_WIDTH-1:0] dac_batch_out;
     logic[$clog2(`SAMPLE_WIDTH):0] scale_factor; 
     logic [`BATCH_SAMPLES-1:0][`SAMPLE_WIDTH-1:0] dac_samples_scaled; 
     logic[$clog2(`MAX_DAC_BURST_SIZE)+1:0] hlt_counter; 
@@ -41,11 +40,6 @@ module sys(input wire ps_clk,ps_rst,dac_clk,dac_rst,
     assign rst = ps_rst || rst_cmd;
     assign pl_rstn = ~rst_cmd; 
     assign valid_dac_batch_ps = 0;  
-    always_comb begin
-        for (int i = 0; i < `BATCH_SAMPLES; i++) begin
-            dac_batch[i] = dac_batch_out[i] >> scale_factor;
-        end 
-    end
 
    // Maps which parts of the system are responssible for writing to which parts of the memory map
    always_comb begin
@@ -190,9 +184,10 @@ module sys(input wire ps_clk,ps_rst,dac_clk,dac_rst,
                            .dac_clk(dac_clk),.dac_rst(dac_rst),
                            .fresh_bits(fresh_bits),
                            .read_resps(rtl_rd_out),
+                           .scale_factor_in(scale_factor),
                            .halt(hlt_cmd),
                            .dac0_rdy(dac0_rdy),       //in
-                           .dac_batch(dac_batch_out), //out 
+                           .dac_batch(dac_batch), //out 
                            .valid_dac_batch(valid_dac_batch),
                            .pwl_dma_if(pwl_dma_if));
 
