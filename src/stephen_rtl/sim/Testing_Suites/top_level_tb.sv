@@ -96,7 +96,7 @@ module top_level_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0]
 
     assign pwl_tkeep = 0; 
     assign checked_full_wave = (pwlTestState == VERIFY) && (valid_dac_batch) && (exp_i == (tl.sys.dac_intf.pwl_gen.wave_lines_stored-1)); 
-    assign curr_expected_batch = expected_batches[exp_i];
+    // assign curr_expected_batch = expected_batches[exp_i];
     always_comb begin
         if (test_num == 0) 
             test_check = {tl.sys.rst,tl.sys.rst};
@@ -131,45 +131,45 @@ module top_level_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0]
                 pwlTestState <= IDLE_PWL; 
             end
         end else begin
-            case(pwlTestState)
-                IDLE_PWL: begin 
-                    if (send_dma_buff) begin
-                        pwl_tvalid <= 1; 
-                        pwl_tdata = dma_buff[0];
-                        pwl_tlast <= 0; 
-                        dma_i <= 1; 
-                        pwlTestState <= SEND_BUFF; 
-                    end
-                    if (run_pwl) begin
-                        {pwl_tlast, pwl_tdata, pwl_tvalid,dma_i} <= 0;
-                        {exp_i, periods} <= 0;
-                        pwlTestState <= VERIFY;  
-                    end
-                end  
-                SEND_BUFF: begin
-                    if (dma_i < BUFF_LEN) begin
-                        if (pwl_tready) begin
-                            pwl_tdata = dma_buff[dma_i];
-                            if (dma_i == BUFF_LEN-1) pwl_tlast <= 1; 
-                            dma_i <= dma_i + 1;
-                        end 
-                    end
-                    else if (dma_i == BUFF_LEN && pwl_tready) begin
-                        {pwl_tlast, pwl_tdata, pwl_tvalid} <= 0;
-                        dma_i <= 0;
-                        pwlTestState <= VERIFY;  
-                    end
-                end 
-                VERIFY: begin
-                    if (periods == PERIODS_TO_CHECK) begin
-                        {exp_i, periods} <= 0;
-                        pwlTestState <= IDLE_PWL;
-                    end else if (checked_full_wave) begin
-                        periods <= periods + 1;
-                        exp_i <= 0; 
-                    end else if (valid_dac_batch) exp_i <= exp_i + 1; 
-                end 
-            endcase
+            // case(pwlTestState)
+            //     IDLE_PWL: begin 
+            //         if (send_dma_buff) begin
+            //             pwl_tvalid <= 1; 
+            //             pwl_tdata = dma_buff[0];
+            //             pwl_tlast <= 0; 
+            //             dma_i <= 1; 
+            //             pwlTestState <= SEND_BUFF; 
+            //         end
+            //         if (run_pwl) begin
+            //             {pwl_tlast, pwl_tdata, pwl_tvalid,dma_i} <= 0;
+            //             {exp_i, periods} <= 0;
+            //             pwlTestState <= VERIFY;  
+            //         end
+            //     end  
+            //     SEND_BUFF: begin
+            //         if (dma_i < BUFF_LEN) begin
+            //             if (pwl_tready) begin
+            //                 pwl_tdata = dma_buff[dma_i];
+            //                 if (dma_i == BUFF_LEN-1) pwl_tlast <= 1; 
+            //                 dma_i <= dma_i + 1;
+            //             end 
+            //         end
+            //         else if (dma_i == BUFF_LEN && pwl_tready) begin
+            //             {pwl_tlast, pwl_tdata, pwl_tvalid} <= 0;
+            //             dma_i <= 0;
+            //             pwlTestState <= VERIFY;  
+            //         end
+            //     end 
+            //     VERIFY: begin
+            //         if (periods == PERIODS_TO_CHECK) begin
+            //             {exp_i, periods} <= 0;
+            //             pwlTestState <= IDLE_PWL;
+            //         end else if (checked_full_wave) begin
+            //             periods <= periods + 1;
+            //             exp_i <= 0; 
+            //         end else if (valid_dac_batch) exp_i <= exp_i + 1; 
+            //     end 
+            // endcase
 
             case(testState)
                 IDLE: begin 

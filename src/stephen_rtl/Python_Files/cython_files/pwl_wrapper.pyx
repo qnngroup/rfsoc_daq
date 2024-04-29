@@ -7,9 +7,13 @@ from time import perf_counter
 
 ##################################### Classes and Method Defs  ############################################
 
+ctypedef unsigned long long uint64
+ctypedef long long int64
+
 cdef struct s_pwl_tuple:
     int x,slope,dt
     int8_t sb
+    uint64 fpga_cmd
 ctypedef s_pwl_tuple pwl_tup
 
 cdef struct s_coord_tuple:
@@ -260,6 +264,27 @@ cdef int mk_pwl_cmds(Tup_List* coords, Tup_List* path):
         
     return path_ptr
 
+# Assuming a dma_width of 48 (16+16+16)
+cdef void mk_fpga_cmds(Tup_List* pwl_cmds, int n):
+    cdef pwl_tup pwl_cmd
+    cdef int64 x,slope,dt,sb 
+    for i in range(n): 
+        pwl_cmd = get_pwl_tup(pwl_cmds,i)
+        x = pwl_cmd.x
+        slope = pwl_cmd.slope
+        dt = pwl_cmd.dt
+        sb = pwl_cmd.sb
+
+        if x < 0: x = (1 << 16) + x 
+        x = x << (8*4) 
+        if slope < 0: slope = (1 << 16) + slope
+        slope = slope<<(4*4)
+        dt = (dt << 1) + sb
+        if dt & (1 << 16): dt -= (1 << 16)
+        pwl_cmd.fpga_cmd = x+slope+dt 
+        set_item(pwl_cmds,i,&pwl_cmd)
+    
+
 ##################################### Tests  ############################################
 
 def create_c_coords_py(py_coords):
@@ -288,21 +313,24 @@ def decode_pwl_cmds(pwl_cmds):
 
 def get_bs(): return batch_size
 
+def pwl_to_py(li):
+    return []
+
 def main(coords):
     t0 = perf_counter() 
     cdef Tup_List cl = create_c_coords(coords)
     cdef Tup_List path = Tup_List_Constructor(PWL_TUP, (cl.li_len-1)*6)
-    cdef int l = mk_pwl_cmds(&cl,&path)
-   
+    cdef int n = mk_pwl_cmds(&cl,&path)
+    mk_fpga_cmds(&path,n)
+    fpga_cmds = [0]*n
+    for i in range(n): fpga_cmds[i] = ((<pwl_tup*>(path.li))[i]).fpga_cmd
+    destroy_tupli(cl)
+    destroy_tupli(path)
+    intv = perf_counter() - t0
+    return intv, fpga_cmds
     # cdef TupLiWrapper path_wrapper = TupLiWrapper(PWL_TUP, (cl.li_len-1)*6)
     # cdef int l = mk_pwl_cmds(&cl,&path_wrapper.tl)
     # intv = perf_counter() - t0 
     # destroy_tupli(cl)
     # return path_wrapper,l,intv
     
-    destroy_tupli(cl)
-    destroy_tupli(path)
-    intv = perf_counter() - t0
-    return intv
-
-#303->138 lines

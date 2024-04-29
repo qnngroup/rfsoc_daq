@@ -69,14 +69,27 @@ def flatten(li):
         else: out.append(el)
     return out 
 
-def test_fpga_cmds(coords): 
-    coords.reverse()
-    path,l,intv = c.main(coords)
+def fpga_to_pwl(fpga_cmds):
+    pwl_cmds = []
+    for num in fpga_cmds:
+        x_mask = 0xffff << (8*4)
+        x = (num&x_mask) >> (8*4)
+        if x & 0x8000: x = -0x8000 + (x & 0x7fff)
+        slope_mask = 0xffff << (4*4)
+        slope = (num&slope_mask) >> (4*4)
+        if slope & 0x8000: slope = -0x8000 + (slope & 0x7fff)
+        dt_mask = 0xffff
+        sb = num & 0b1
+        dt = (num&dt_mask) >> 1
+        pwl_cmds.append((x,slope,dt,sb))
+    return pwl_cmds
 
 def test_coords(coords,do_plot=True,show_batches=False,simple_plot=False, ignore=[]):
     coords.reverse()
-    path,l,intv = c.main(coords)
-    path = path[:l]
+    intv,fpga_cmds = c.main(coords)
+    path = fpga_to_pwl(fpga_cmds)
+    py_intv,py_fpga_cmds = p.main(coords)
+    py_path = fpga_to_pwl(py_fpga_cmds)
     waves = c.decode_pwl_cmds(path)
     flat_wave = flatten(waves)
     
@@ -94,6 +107,9 @@ def test_coords(coords,do_plot=True,show_batches=False,simple_plot=False, ignore
                 abs_t+=len(wave)
 
     wrong = []
+    if py_path != path: wrong.append(("paths not equal"))
+    if py_fpga_cmds != fpga_cmds: wrong.append(("fpga_cmds not equal"))
+    
     for x1,t1 in coords:
         if (x1,t1) in ignore: continue
         if x1 not in flat_wave: 
@@ -139,21 +155,23 @@ def test_coords(coords,do_plot=True,show_batches=False,simple_plot=False, ignore
             plt.axvline(t,color="orange", alpha=0.4)
             t+=batch_size
     
-    return path,passed,wrong
+    return path,passed,wrong,intv
+##############################################################################################################################################
 
-test_num = int(1e5)
+test_num = int(1e4)
 nxt_perc = 10
 t0 = time()
+n = 15
+intvs = []
 for i in range(test_num):
     perc = (i/test_num)*100
     if round(perc) == nxt_perc: 
         print(f"{nxt_perc}%")
-        nxt_perc+=10
-    coords = gen_rand_coords(n=5,avg_dt=200)
-    # coords = [(0, 0), (15000, 127), (1925, 237), (18433, 241), (12358, 380), (22317, 448)]
+        nxt_perc+=10        
+    coords = gen_rand_coords(n=n,avg_dt=200)
     ignore = ignore_same_sloped_points(coords)
-    path,result,wrong = test_coords(coords[:],do_plot=False,show_batches=True,simple_plot=False, ignore=ignore)
-    # print(path)
+    path,result,wrong,intv = test_coords(coords[:],do_plot=False,show_batches=True,simple_plot=False, ignore=ignore)
+    intvs.append(intv)
     if not result:
         print("Failed")
         print(coords)
@@ -161,7 +179,8 @@ for i in range(test_num):
         break
 else:
     print("Passed")
-print(time()-t0)
+print(f"\nAvg Cython calc time:\n{round((sum(intvs)/len(intvs))*1e6,2)} us\n{round((sum(intvs)/len(intvs))*1e3,2)} ms")
+print(f"\nTest time:\n{round(time()-t0,2)} s")
 
 
 

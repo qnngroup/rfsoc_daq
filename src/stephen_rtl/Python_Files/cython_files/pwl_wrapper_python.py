@@ -243,15 +243,13 @@ def mk_pwl_cmds(coords, path):
 
 def mk_fpga_cmds(pwl_cmds):
     fpga_cmds = []
-    shift = dma_width-1
     for x,slope,dt,sb in pwl_cmds: 
-        if slope < 0:
-            print("lsjf")
+        x1,slope1,dt1 = x,slope,dt
         x = x<<(8*4) 
-        if slope < 0: slope =(1<<16)+slope
+        if slope < 0: slope = 0x10000+slope
         slope = slope<<(4*4)
         dt = (dt<<1)+sb
-        if dt & (1<<16): dt -= (1<<16)
+        if dt & 0x8000: dt -= 0x8000
         fpga_cmds.append(x+slope+dt)
     return fpga_cmds
         
@@ -398,11 +396,11 @@ def main(coords):
     coords = [{"x":el[0], "t":el[1]} for el in coords]
     path_wrapper = [0]*((len(coords)-1)*6)
     l = mk_pwl_cmds_fast(coords,path_wrapper)
+    path = toLi(path_wrapper,l)
+    fpga_cmds = mk_fpga_cmds(path)
     intv = perf_counter() - t0
     coords = [] 
-    path = toLi(path_wrapper,l)
-    return mk_fpga_cmds(path)
-    # return path, l, intv
+    return intv,fpga_cmds
 
 
 def toLi(path,n): 
@@ -439,11 +437,17 @@ def toDi(li):
 
 # print(slow_intv,fast_intv)
 
-# coords = [(0, 0), (30, 20), (20, 38),(64,64),(100,130),(0,400)]
+# coords = [(0,0),(96,48),(116,58),(122,64), (10,176),(0,181),(0,192)]
+# coords = gen_rand_coords(n=50)
 # coords.reverse()
-# path,l, intv = main(coords)
-# print(path[:])
-
+# intv,path,fpga_cmds = main(coords)
+# print(fpga_cmds)
+# fpga_cmds.reverse()
+# s = "assign dma_buff = {"
+# for cmd in fpga_cmds:
+#     s+="48'd"+str(cmd)+","
+# s = s[:-1]+"};"
+# print(s)
 
 
 

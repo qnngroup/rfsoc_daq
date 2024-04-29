@@ -1,5 +1,6 @@
 `timescale 1ns / 1ps
 `default_nettype none
+`include "mem_layout.svh"
 import mem_layout_pkg::*;
 
 module DAC_Interface (input wire ps_clk,dac_clk,ps_rst, dac_rst,
