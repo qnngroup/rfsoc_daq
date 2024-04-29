@@ -241,19 +241,9 @@ def mk_pwl_cmds(coords, path):
     pwl_cmd_buff = []
     return path_ptr 
 
-def mk_fpga_cmds(pwl_cmds):
-    fpga_cmds = []
-    shift = dma_width-1
-    for x,slope,dt,sb in pwl_cmds: 
-        if slope < 0:
-            print("lsjf")
-        x = x<<(8*4) 
-        if slope < 0: slope =(1<<16)+slope
-        slope = slope<<(4*4)
-        dt = (dt<<1)+sb
-        if dt & (1<<16): dt -= (1<<16)
-        fpga_cmds.append(x+slope+dt)
-    return fpga_cmds
+# def mk_fpga_cmds(pwl_cmds):
+#     fpga_cmds = []
+#     for x,slope,dt,sb in pwl_cmds:
         
 
 def batchify_fast(pwl_cmd):
@@ -319,10 +309,6 @@ def mk_pwl_cmds_fast(coords, path):
             
         # If i is -2, we've completed everything and just need to make sure the last batch gets filled in (if we're currently filling one)
         if i == -2:
-            if batch_t == 0 or batch_t == batch_size:
-                prev_pwl_cmd = path[path_ptr-1]
-                ending_x = prev_pwl_cmd["x"]+prev_pwl_cmd["slope"]*(prev_pwl_cmd["dt"]-1)
-                if ending_x == x2: break 
             left_in_batch = batch_size-batch_t
             pwl_cmd["x"] = x2
             pwl_cmd["sb"] = 1 if left_in_batch == batch_size else 0
@@ -401,8 +387,8 @@ def main(coords):
     intv = perf_counter() - t0
     coords = [] 
     path = toLi(path_wrapper,l)
-    return mk_fpga_cmds(path)
-    # return path, l, intv
+    # return intv
+    return path, l, intv
 
 
 def toLi(path,n): 

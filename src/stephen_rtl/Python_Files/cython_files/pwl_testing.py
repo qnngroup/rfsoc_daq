@@ -69,13 +69,9 @@ def flatten(li):
         else: out.append(el)
     return out 
 
-def test_fpga_cmds(coords): 
-    coords.reverse()
-    path,l,intv = c.main(coords)
-
 def test_coords(coords,do_plot=True,show_batches=False,simple_plot=False, ignore=[]):
     coords.reverse()
-    path,l,intv = c.main(coords)
+    path,l,intv = p.main(coords)
     path = path[:l]
     waves = c.decode_pwl_cmds(path)
     flat_wave = flatten(waves)
@@ -101,7 +97,6 @@ def test_coords(coords,do_plot=True,show_batches=False,simple_plot=False, ignore
                 plt.axhline(x1)
                 plt.axvline(t1)
             wrong.append((x1,t1,"Missing Coord"))
-            
     batches,j = [0],0
     for el in path:
         _,_,dt,_ = el
@@ -112,23 +107,9 @@ def test_coords(coords,do_plot=True,show_batches=False,simple_plot=False, ignore
             batches.append(dt)
     if any([el%batch_size != 0 for el in batches]): wrong.append((batches,"Batches aren't chunked correctly"))
     
-    batch_t = 0
-    for i,el in enumerate(path):
-        x,slope,dt,sb = el 
-        if batch_t != 0 and sb: 
-            wrong.append((i,"Haven't finished a batch"))
-            break 
-        if sb == 1:
-            if dt%batch_size == 0: continue
-            wrong.append((i,"Continuous batch not continuous"))
-        else:
-            nbatch_t = batch_t+dt
-            if nbatch_t == batch_size: batch_t = 0
-            else: batch_t = nbatch_t
-        
     tot_t = len(flat_wave)
     abs_time = coords[0][1]
-    if tot_t != abs_time+(p.batch_size-abs_time%p.batch_size) and tot_t != abs_time: wrong.append((tot_t,abs_time,"Absolute time not reached"))
+    if tot_t != abs_time+(p.batch_size-abs_time%p.batch_size): wrong.append((tot_t,abs_time,"Absolute time not reached"))
     
     if len(path) >(len(coords)-1)*6: wrong.append((len(path), "Path length exceeded allocated memory"))
     passed = len(wrong) == 0 
@@ -141,19 +122,11 @@ def test_coords(coords,do_plot=True,show_batches=False,simple_plot=False, ignore
     
     return path,passed,wrong
 
-test_num = int(1e5)
-nxt_perc = 10
-t0 = time()
+test_num = int(1e6)
 for i in range(test_num):
-    perc = (i/test_num)*100
-    if round(perc) == nxt_perc: 
-        print(f"{nxt_perc}%")
-        nxt_perc+=10
     coords = gen_rand_coords(n=5,avg_dt=200)
-    # coords = [(0, 0), (15000, 127), (1925, 237), (18433, 241), (12358, 380), (22317, 448)]
     ignore = ignore_same_sloped_points(coords)
     path,result,wrong = test_coords(coords[:],do_plot=False,show_batches=True,simple_plot=False, ignore=ignore)
-    # print(path)
     if not result:
         print("Failed")
         print(coords)
@@ -161,7 +134,6 @@ for i in range(test_num):
         break
 else:
     print("Passed")
-print(time()-t0)
 
 
 
