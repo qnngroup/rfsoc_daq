@@ -65,7 +65,7 @@ module sample_generator #(parameter CMD_WIDTH, parameter RESP_WIDTH, parameter S
 			else if (run_trig_wav) {dac_batch_in,valid_dac_batch_in} = {trig_out,dac0_rdy};
 			else if (run_pwl) {dac_batch_in,valid_dac_batch_in} = {pwl_batch_out,valid_pwl_batch};
 		end else {dac_batch_in,valid_dac_batch_in} = 0;
-		{valid_dac_batch,dac_batch}	= batch_pipe[DAC_STAGES-1]; 
+		{valid_dac_batch,dac_batch}	= batch_pipe[DAC_STAGES-1];      
 	end 
 
 	always_ff @(posedge clk) begin
