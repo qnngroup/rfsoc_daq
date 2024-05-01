@@ -33,12 +33,12 @@ def ignore_same_sloped_points(coords):
             if s1 == s2: ignore.append(c1)
     return ignore
 
-def gen_rand_coords(avg_dt=100,T=500,n=5,max_val=2**15-1):
+def gen_rand_coords(avg_dt=100,T=500,n=5,max_val=0x7fff):
     coords = [(0,0)]
     abs_t = 0
     for i in range(n):
         t = rr(1,avg_dt)
-        x = rr(0,max_val)
+        x = rr(-max_val,max_val)
         abs_t+=t
         coords.append((x,abs_t))
     return coords
@@ -83,16 +83,26 @@ def fpga_to_pwl(fpga_cmds):
         dt = (num&dt_mask) >> 1
         pwl_cmds.append((x,slope,dt,sb))
     return pwl_cmds
-
-def test_coords(coords,do_plot=True,show_batches=False,simple_plot=False, ignore=[]):
+def fpga_to_sv(fpga_cmds):
+    li = fpga_cmds[:]
+    li.reverse()
+    cmd = "assign dma_buff = {"
+    for el in li: cmd+=f"48'd{el}, "
+    cmd = cmd[:-2]+"};"
+    return cmd 
+def test_coords(coords,do_plot=True,show_batches=False,simple_plot=False, ignore=[],mv=0x7fff, scale_plot = False):
     coords.reverse()
-    intv,fpga_cmds = c.main(coords)
+    intvc,fpga_cmds = c.main(coords)
     path = fpga_to_pwl(fpga_cmds)
-    py_intv,py_fpga_cmds = p.main(coords)
+    intvp,py_fpga_cmds = p.main(coords)
     py_path = fpga_to_pwl(py_fpga_cmds)
     waves = c.decode_pwl_cmds(path)
+    if scale_plot:
+        for i in range(len(waves)):
+            waves[i] = [(el/mv)*100 for el in waves[i]]
+        coords = [((el[0]/mv)*100,el[1]) for el in coords]
+        
     flat_wave = flatten(waves)
-    
     if do_plot:
         split = lambda li: ([el[0] for el in li],[el[1] for el in li])
         x,t = split(coords)
@@ -155,31 +165,40 @@ def test_coords(coords,do_plot=True,show_batches=False,simple_plot=False, ignore
             plt.axvline(t,color="orange", alpha=0.4)
             t+=batch_size
     
-    return path,passed,wrong,intv
+    return path,passed,wrong,intvc,intvp
 ##############################################################################################################################################
 
-test_num = int(1e4)
+test_num = int(1)
 nxt_perc = 10
 t0 = time()
-n = 15
-intvs = []
+n = 500
+intvcs,intvps = [],[]
+mv = 0x7fff
 for i in range(test_num):
     perc = (i/test_num)*100
     if round(perc) == nxt_perc: 
-        print(f"{nxt_perc}%")
+        print(f"{nxt_perc}%",end="")
+        if nxt_perc != 90: print(",",end="")
         nxt_perc+=10        
     coords = gen_rand_coords(n=n,avg_dt=200)
     ignore = ignore_same_sloped_points(coords)
-    path,result,wrong,intv = test_coords(coords[:],do_plot=False,show_batches=True,simple_plot=False, ignore=ignore)
-    intvs.append(intv)
+    path,result,wrong,intvc,intvp = test_coords(coords[:],do_plot=False,show_batches=False,simple_plot=True, ignore=ignore,scale_plot = False)
+    intvcs.append(intvc)
+    intvps.append(intvp)
     if not result:
-        print("Failed")
+        print("\nFailed")
         print(coords)
         print(wrong)
         break
 else:
-    print("Passed")
-print(f"\nAvg Cython calc time:\n{round((sum(intvs)/len(intvs))*1e6,2)} us\n{round((sum(intvs)/len(intvs))*1e3,2)} ms")
+    print("\nPassed")
+
+avg_intvc = sum(intvcs)/len(intvcs)
+avg_intvp = sum(intvps)/len(intvps)
+print(f"\n################################\n\nInput coord list lenght: {n}")
+print(f"\nAvg Cython calc time:\n{round(avg_intvc*1e6,2)} us\n{round(avg_intvc*1e3,2)} ms")
+print(f"\nAvg Python calc time:\n{round(avg_intvp*1e6,2)} us\n{round(avg_intvp*1e3,2)} ms\n")
+print(f"Cython is {round(avg_intvp/avg_intvc)}x faster")
 print(f"\nTest time:\n{round(time()-t0,2)} s")
 
 

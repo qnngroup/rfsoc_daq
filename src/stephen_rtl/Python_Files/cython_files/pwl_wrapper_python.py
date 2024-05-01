@@ -245,6 +245,8 @@ def mk_fpga_cmds(pwl_cmds):
     fpga_cmds = []
     for x,slope,dt,sb in pwl_cmds: 
         x1,slope1,dt1 = x,slope,dt
+
+        if x < 0: x = 0x10000+x 
         x = x<<(8*4) 
         if slope < 0: slope = 0x10000+slope
         slope = slope<<(4*4)

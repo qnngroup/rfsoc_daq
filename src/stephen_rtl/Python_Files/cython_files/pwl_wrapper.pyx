@@ -275,12 +275,12 @@ cdef void mk_fpga_cmds(Tup_List* pwl_cmds, int n):
         dt = pwl_cmd.dt
         sb = pwl_cmd.sb
 
-        if x < 0: x = (1 << 16) + x 
+        if x < 0: x = 0x10000 + x 
         x = x << (8*4) 
-        if slope < 0: slope = (1 << 16) + slope
+        if slope < 0: slope = 0x10000 + slope
         slope = slope<<(4*4)
         dt = (dt << 1) + sb
-        if dt & (1 << 16): dt -= (1 << 16)
+        if dt & 0x8000: dt -= 0x8000
         pwl_cmd.fpga_cmd = x+slope+dt 
         set_item(pwl_cmds,i,&pwl_cmd)
     

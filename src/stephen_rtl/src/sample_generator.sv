@@ -8,6 +8,7 @@ module sample_generator #(parameter CMD_WIDTH, parameter RESP_WIDTH, parameter S
 					  	  input wire[BATCH_WIDTH+CMD_WIDTH-1:0] ps_cmd, 
 					  	  input wire valid_cmd,
 					  	  input wire dac0_rdy,
+					  	  input wire transfer_rdy, transfer_done,
 					  	  output logic[RESP_WIDTH-1:0] resp, 
 					  	  output logic resp_valid,
 					  	  output logic[BATCH_WIDTH-1:0] dac_batch,
@@ -20,7 +21,7 @@ module sample_generator #(parameter CMD_WIDTH, parameter RESP_WIDTH, parameter S
 	logic set_seeds,run_shift_regs,run_trig_wav,run_pwl;
 	logic pwl_rdy, valid_pwl_batch;
 	logic active_out;
-	logic[1:0] pwl_rdy_edge;
+	logic[1:0] curr_resp; 
 
 	// For the random DAC Sampler
 	generate
@@ -46,15 +47,11 @@ module sample_generator #(parameter CMD_WIDTH, parameter RESP_WIDTH, parameter S
 	        .batch_out(pwl_batch_out),
 	        .valid_batch_out(valid_pwl_batch),
 	        .dma(pwl_dma_if.stream_in));
-	edetect	pwl_rdy_ed(.clk(clk), .rst(rst),
-	                   .val(pwl_rdy),
-	                   .comb_posedge_out(pwl_rdy_edge)); 
 
 	always_comb begin
 		//cmd: [sample_seed(16),rst_cmd(1),halt_cmd(1),run_shift_regs(1),run_trig_wave(1),run_pwl(1)]
 		rst = rst_in || (valid_cmd && ps_cmd[4]);
-		resp = {0,pwl_rdy};
-		resp_valid = pwl_rdy_edge != 0; 
+		curr_resp = {0,pwl_rdy};
 		halt = (valid_cmd && ps_cmd[3]);
 		active_out = (run_shift_regs || run_trig_wav || run_pwl);
 		if (active_out) begin
@@ -66,8 +63,13 @@ module sample_generator #(parameter CMD_WIDTH, parameter RESP_WIDTH, parameter S
 
 	always_ff @(posedge clk) begin
 		if (rst || halt) begin
-			{rand_seed,run_shift_regs,run_trig_wav,run_pwl}  <= 0; 
+			{rand_seed,run_shift_regs,run_trig_wav,run_pwl,resp,resp_valid}  <= 0; 
 		end else begin
+			if (transfer_rdy && resp != curr_resp) begin
+				resp <= curr_resp;
+				resp_valid <= 1; 
+			end
+			if (resp_valid && transfer_rdy) resp_valid <= 0; 
 			if (set_seeds) set_seeds <= 0; 
 			if (valid_cmd) begin
 				{run_shift_regs,run_trig_wav,run_pwl} <= ps_cmd[0+:CMD_WIDTH]; 
