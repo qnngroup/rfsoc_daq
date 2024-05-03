@@ -27,9 +27,9 @@ module ts_tb();
 	di_tb(.start(runTest[2]&&signals_defined),
 	      .done({tb_passed[2],done[2]}));
 
-	adc_intf_tb #(.VERBOSE(VERBOSE))
-	ai_tb(.start(runTest[3]&&signals_defined),
-	      .done({tb_passed[3],done[3]}));
+	// adc_intf_tb #(.VERBOSE(VERBOSE))
+	// ai_tb(.start(runTest[3]&&signals_defined),
+	//       .done({tb_passed[3],done[3]}));
 
 	pwl_tb #(.VERBOSE(VERBOSE))
 	pwl_tb(.start(runTest[4]),

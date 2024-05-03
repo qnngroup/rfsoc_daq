@@ -27,7 +27,6 @@ module sys(input wire ps_clk,ps_rst,dac_clk,dac_rst,
     logic rst_cmd = 1;
     logic rst,hlt_cmd, bufft_valid_clear;
     logic[$clog2(`SAMPLE_WIDTH):0] scale_factor; 
-    logic [`BATCH_SAMPLES-1:0][`SAMPLE_WIDTH-1:0] dac_samples_scaled; 
     logic[$clog2(`MAX_DAC_BURST_SIZE)+1:0] hlt_counter; 
     logic valid_dac_batch_ps;
 
