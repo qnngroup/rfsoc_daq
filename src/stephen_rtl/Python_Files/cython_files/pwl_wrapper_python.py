@@ -319,10 +319,6 @@ def mk_pwl_cmds_fast(coords, path):
             
         # If i is -2, we've completed everything and just need to make sure the last batch gets filled in (if we're currently filling one)
         if i == -2:
-            if batch_t == 0 or batch_t == batch_size:
-                prev_pwl_cmd = path[path_ptr-1]
-                ending_x = prev_pwl_cmd["x"]+prev_pwl_cmd["slope"]*(prev_pwl_cmd["dt"]-1)
-                if ending_x == x2: break 
             left_in_batch = batch_size-batch_t
             pwl_cmd["x"] = x2
             pwl_cmd["sb"] = 1 if left_in_batch == batch_size else 0

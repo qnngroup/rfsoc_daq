@@ -50,11 +50,11 @@ def formatFuncCall(s,fName = "functionName"):
     if "#" in s: 
         params,s = pullParams(s)
         out += f" #({params})\n"
-        params=True 
+        # params=True 
         n+=1
-    else: params = False
+    else: out += "\n"
     s = s[i:]
-    body = f" {fName}("
+    body = f"{fName}("
     while True:
         i1 = s.find(",")
         if i1 == -1: i1 = s.find(");")
@@ -69,91 +69,22 @@ def formatFuncCall(s,fName = "functionName"):
     body = body[:-2]
     body+=");"
     if find_num_pats(out+body, ".") != n: print("ERROR IN BODY")
-    return out+align(body) if params else align(out+body)
+    return out+align(body)
 
 
-st = """module ps_interface(
-                    (* X_INTERFACE_INFO = "xilinx.com:signal:clock:1.0 ps_clk CLK" *)
-                    (* X_INTERFACE_PARAMETER = "FREQ_HZ 149998505 ASSOCIATED_BUSIF \
-                      ps_axi" *)
-                    input wire ps_clk,
-                    (* X_INTERFACE_INFO = "xilinx.com:signal:reset:1.0 ps_rstn RST" *)
-                    (* X_INTERFACE_PARAMETER = "POLARITY ACTIVE_LOW" *)
-                    input wire ps_rstn, 
-                    (* X_INTERFACE_INFO = "xilinx.com:signal:clock:1.0 dac_clk CLK" *)
-                    (* X_INTERFACE_PARAMETER = "FREQ_HZ 384000000 ASSOCIATED_BUSIF \
-                      dac:\
-                      pwl" *)
-                    input wire dac_clk, 
-                    (* X_INTERFACE_INFO = "xilinx.com:signal:reset:1.0 dac_rstn RST" *)
-                    (* X_INTERFACE_PARAMETER = "POLARITY ACTIVE_LOW" *)
-                    input wire dac_rstn, 
-                    (* X_INTERFACE_INFO = "xilinx.com:signal:reset:1.0 pl_rstn RST" *)
-                    (* X_INTERFACE_PARAMETER = "POLARITY ACTIVE_LOW" *)
-                    output wire pl_rstn,
-
-                    //DAC OUTPUT INTERFACE
-                    (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 dac TDATA" *)
-                    output wire[255:0] dac_tdata,
-                    (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 dac TVALID" *)
-                    output wire        dac_tvalid, 
-                    (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 dac TREADY" *)
-                    input  wire        dac_tready, 
-                    output wire        rtl_dac_valid,
-
-                    //PS AXI-LITE INTERFACE
-                    (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 ps_axi ARADDR" *)
-                    input  wire[31:0] ps_axi_araddr, 
-                    (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 ps_axi ARPROT" *)
-                    input  wire[2:0]  ps_axi_arprot,
-                    (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 ps_axi ARVALID" *)
-                    input  wire       ps_axi_arvalid,
-                    (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 ps_axi ARREADY" *)
-                    output wire       ps_axi_arready,
-                    (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 ps_axi RDATA" *)
-                    input  wire[31:0] ps_axi_rdata,
-                    (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 ps_axi RRESP" *)
-                    input  wire       ps_axi_rresp,
-                    (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 ps_axi RVALID" *)
-                    output wire       ps_axi_rvalid,  
-                    (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 ps_axi RREADY" *)
-                    output wire[1:0]  ps_axi_rready,
-                    (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 ps_axi AWADDR" *)
-                    input  wire[31:0] ps_axi_awaddr,
-                    (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 ps_axi AWPROT" *)
-                    input  wire[2:0]  ps_axi_awprot,
-                    (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 ps_axi AWVALID" *)
-                    input  wire       ps_axi_awvalid,
-                    (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 ps_axi AWREADY" *)
-                    output wire       ps_axi_awready,
-                    (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 ps_axi WDATA" *)
-                    input  wire[31:0] ps_axi_wdata,
-                    (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 ps_axi WSTRB" *)
-                    input  wire[3:0]  ps_axi_wstrb,
-                    (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 ps_axi WVALID" *)
-                    input  wire       ps_axi_wvalid,
-                    (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 ps_axi WREADY" *)
-                    output wire       ps_axi_wready,
-                    (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 ps_axi BRESP" *)
-                    output wire[1:0] ps_axi_bresp,
-                    (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 ps_axi BVALID" *)
-                    output wire      ps_axi_bvalid,
-                    (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 ps_axi BREADY" *)
-                    input  wire      ps_axi_bready,
-
-                    // ps_axiPWL DMA INTERFACE
-                    (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 pwl TDATA" *)
-                    input wire[63:0] pwl_tdata,
-                    (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 pwl TKEEP" *)
-                    input wire[7:0] pwl_tkeep,
-                    (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 pwl TLAST" *)
-                    input wire pwl_tlast, 
-                    (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 pwl TVALID" *)
-                    input wire pwl_tvalid,
-                    (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 pwl TREADY" *)
-                    output wire pwl_tready);
+st = """module bram_interface #(parameter DATA_WIDTH, parameter BRAM_DEPTH, parameter BRAM_DELAY)
+			 		  		  (input wire clk, rst,
+			 		  		   input wire [$clog2(BRAM_DEPTH)-1:0] addr,
+			 		  		   input wire[DATA_WIDTH-1:0] line_in,
+			 		  		   input wire we, en, 
+			 		  		   input wire generator_mode, rst_gen_mode, 
+			 		  		   input wire next, 
+			 		  		   output logic[DATA_WIDTH-1:0] line_out,
+			 		  		   output logic valid_line_out,
+			 		  		   output logic[$clog2(BRAM_DEPTH)-1:0] generator_addr,
+			 		  		   output logic write_rdy);
                  """
-fName = "ps_interface"
+fName = "sparse_bramint"
 out= formatFuncCall(st,fName=fName)
 print(out)
 

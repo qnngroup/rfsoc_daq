@@ -19,12 +19,12 @@ module pwl_generator #(parameter DMA_DATA_WIDTH, parameter SAMPLE_WIDTH, paramet
 	logic curr_dma_valid; 
 	logic curr_bram, nxt_bram; 
 	logic[$clog2(2*SPARSE_BRAM_DEPTH)-1:0] regions_stored;
-	logic[$clog2(SPARSE_BRAM_DEPTH)-1:0] sbram_addr; 
+	logic[$clog2(SPARSE_BRAM_DEPTH)-1:0] sbram_addr,sbram_gen_addr; 
 	logic[DMA_DATA_WIDTH:0] sparse_line_in,sparse_batch_out;
 	logic sbram_we,sbram_en;
 	logic sbram_next;
 	logic valid_sparse_batch, sbram_write_rdy;
-	logic[$clog2(DENSE_BRAM_DEPTH)-1:0] dbram_addr; 
+	logic[$clog2(DENSE_BRAM_DEPTH)-1:0] dbram_addr, dbram_gen_addr; 
 	logic[BATCH_SIZE-1:0][SAMPLE_WIDTH-1:0] dense_line_in;
 	logic dense_nxt_bram_bit;
 	logic[BATCH_SIZE-1:0][SAMPLE_WIDTH-1:0] intrp_batch,dense_batch_out_TEST;
@@ -47,35 +47,33 @@ module pwl_generator #(parameter DMA_DATA_WIDTH, parameter SAMPLE_WIDTH, paramet
 	logic saw_last;
 	enum logic[3:0] {IDLE,DENSE_INTRP_WAIT,STORE_DENSE_WAVE,STORE_SPARSE_WAVE,SETUP_GEN_MODE,SEND_DENSE_WAVE,SEND_SPARSE_WAVE,HOLD_SPARSE_CMD,HALT} pwlState;
 
-	dense_bram_interface #(.DATA_WIDTH(BATCH_WIDTH+1), .BRAM_DEPTH(DENSE_BRAM_DEPTH))
-    DWAVE_BRAM_INT        (.clk(clk), .rst(rst),      
-                           .addr(dbram_addr),     
-                           .line_in({dense_nxt_bram_bit,dense_line_in}),       
-                           .we(dbram_we), .en(dbram_en), 
-                           .next(dbram_next),
-                           .generator_mode(gen_mode), .rst_gen_mode(rst_gen_mode),
-                           .line_out(dense_batch_out),
-                           .valid_line_out(valid_dense_batch),
-                           .write_rdy(dbram_write_rdy));
 
-	sparse_bram_interface #(.DATA_WIDTH(DMA_DATA_WIDTH+1), .BRAM_DEPTH(SPARSE_BRAM_DEPTH))
-    SWAVE_BRAM_INT (.clk(clk), .rst(rst),      
-                    .addr(sbram_addr),     
-                    .line_in(sparse_line_in),       
-                    .we(sbram_we), .en(sbram_en), 
-                    .next(sbram_next),
-                    .generator_mode(gen_mode), .rst_gen_mode(rst_gen_mode),
-                    .line_out(sparse_batch_out),
-                    .valid_line_out(valid_sparse_batch),
-                    .write_rdy(sbram_write_rdy));
+	bram_interface #(.DATA_WIDTH(DMA_DATA_WIDTH+1), .BRAM_DEPTH(SPARSE_BRAM_DEPTH), .BRAM_DELAY(3))
+	sparse_bramint(.clk(clk),.rst(rst),
+	               .addr(sbram_addr), .line_in(sparse_line_in),
+	               .we(sbram_we), .en(sbram_en),
+	               .generator_mode(gen_mode), .rst_gen_mode(rst_gen_mode),
+	               .next(sbram_next),
+	               .line_out(sparse_batch_out), .valid_line_out(valid_sparse_batch),
+	               .generator_addr(sbram_gen_addr),
+	               .write_rdy(sbram_write_rdy));
 
+
+	bram_interface #(.DATA_WIDTH(BATCH_WIDTH+1), .BRAM_DEPTH(DENSE_BRAM_DEPTH), .BRAM_DELAY(3))
+	dense_bramint(.clk(clk), .rst(rst),
+	               .addr(dbram_addr), .line_in({dense_nxt_bram_bit,dense_line_in}),
+	               .we(dbram_we), .en(dbram_en),
+	               .generator_mode(gen_mode), .rst_gen_mode(rst_gen_mode),
+	               .next(dbram_next),
+	               .line_out(dense_batch_out), .valid_line_out(valid_dense_batch),
+	               .generator_addr(dbram_gen_addr),
+	               .write_rdy(dbram_write_rdy));
 
 	interpolater #(.SAMPLE_WIDTH(SAMPLE_WIDTH), .BATCH_SIZE(BATCH_SIZE)) 
 				interpolater(.clk(clk),
                    		     .x(intrp_x),.slope(intrp_slope),
                    		     .intrp_batch(intrp_batch));
-	logic[SAMPLE_WIDTH-1:0] test_x,test_slope,test_dt;
-	logic test_sb; 
+
 	always_comb begin
 		sparse_batch_out_TEST = sparse_batch_out[DMA_DATA_WIDTH:1];
 		dense_batch_out_TEST = dense_batch_out[BATCH_WIDTH-1:0];

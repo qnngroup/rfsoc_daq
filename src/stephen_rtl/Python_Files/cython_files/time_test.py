@@ -27,7 +27,15 @@ sizes = [10, 30, 50, 100, 300, 500, 1000, 1300, 1500, 5000, 10000, 15000]
 for s in sizes:
     avg_intv = test_avg(s)
     times.append(avg_intv)
+times = []
+sizes = [10, 30, 50, 100, 300, 500, 1000, 1300, 1500, 5000, 10000, 15000]
+for s in sizes:
+    avg_intv = test_avg(s)
+    times.append(avg_intv)
 
+font = FontProperties()
+font.set_family('serif')
+font.set_name('Times New Roman')
 font = FontProperties()
 font.set_family('serif')
 font.set_name('Times New Roman')

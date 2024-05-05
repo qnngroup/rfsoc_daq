@@ -19,11 +19,12 @@ module top_level(input wire ps_clk,ps_rst, dac_clk, dac_rst,
                  input wire ps_wresp_rdy,ps_read_rdy,
                  //axi_slave Outputs
                  output logic [1:0] wresp_out,rresp_out,
-                 output logic wresp_valid_out,
+                 output logic wresp_valid_out, rresp_valid_out,
                  output logic [`WD_BUS_WIDTH-1:0] rdata_packet,
                  output logic rdata_valid_out,
                  //DMA Inputs/Outputs (axi-stream)
                  input wire[`DMA_DATA_WIDTH-1:0] pwl_tdata,
+                 input wire[3:0] pwl_tkeep,
                  input wire pwl_tlast, pwl_tvalid,
                  output logic pwl_tready);
 
@@ -69,6 +70,7 @@ module top_level(input wire ps_clk,ps_rst, dac_clk, dac_rst,
     assign wresp_out        = wr_if.packet; 
     assign wresp_valid_out  = wr_if.valid_pack; 
     assign rresp_out        = rr_if.packet;
+    assign rresp_valid_out  = rr_if.valid_pack; 
 
     // Receive interfaces don't need transmit signals
     assign {wa_if.data_to_send, wa_if.send, wa_if.trans_rdy, wa_if.dev_rdy} = 0;
@@ -84,22 +86,22 @@ module top_level(input wire ps_clk,ps_rst, dac_clk, dac_rst,
     // All of these signals don't apply to read response since a transmitter module doesn't handle setting the packet and valid_packet field: its set directly in the slave module. 
     assign {rr_if.dev_rdy, rr_if.data_to_send, rr_if.send, rr_if.trans_rdy} = 0; 
 
-   sys sys (.ps_clk(ps_clk), .ps_rst(ps_rst), .dac_clk(dac_clk), .dac_rst(dac_rst),
-            .dac0_rdy(dac0_rdy),
-            .dac_batch(dac_batch),
-            .valid_dac_batch(valid_dac_batch),
-            .pl_rstn(pl_rstn),
-            .wa_if(wa_if),
-            .wd_if(wd_if),
-            .ra_if(ra_if),
-            .rd_if(rd_if),
-            .wr_if(wr_if),
-            .rr_if(rr_if),
-            .pwl_dma_if(pwl_dma_if),
-            .bufft_if(bufft_if),
-            .buffc_if(buffc_if),
-            .cmc_if(cmc_if),
-            .sdc_if(sdc_if)); 
+    sys sys (.ps_clk(ps_clk), .ps_rst(ps_rst), .dac_clk(dac_clk), .dac_rst(dac_rst),
+             .dac0_rdy(dac0_rdy),
+             .dac_batch(dac_batch),
+             .valid_dac_batch(valid_dac_batch),
+             .pl_rstn(pl_rstn),
+             .wa_if(wa_if),
+             .wd_if(wd_if),
+             .ra_if(ra_if),
+             .rd_if(rd_if),
+             .wr_if(wr_if),
+             .rr_if(rr_if),
+             .pwl_dma_if(pwl_dma_if),
+             .bufft_if(bufft_if),
+             .buffc_if(buffc_if),
+             .cmc_if(cmc_if),
+             .sdc_if(sdc_if)); 
     
 //       sys_ILA sys_ILA (.clk(ps_clk), 
 //                        .probe0(sys.rst),
@@ -124,7 +126,11 @@ module top_level(input wire ps_clk,ps_rst, dac_clk, dac_rst,
 //                        .probe19(sys.dac_intf.fresh_bits),
 //                        .probe20(sys.ps_rst),
 //                        .probe21(sys.rst_cmd),
-//                        .probe22(sys.rstState));
+//                        .probe22(sys.rstState),
+//                        .probe23(sys.dac_intf.resp_out),
+//                        .probe24(sys.dac_intf.resp_out_valid),
+//                        .probe25(sys.dac_intf.resp_transfer.dstState),
+//                        .probe26(sys.dac_intf.pwl_rdy));
                         
 //        dac_ILA dac_ILA (.clk(dac_clk), 
 //                        .probe0(dac_rst),
@@ -133,13 +139,23 @@ module top_level(input wire ps_clk,ps_rst, dac_clk, dac_rst,
 //                        .probe3(pwl_tvalid),
 //                        .probe4(pwl_tlast),
 //                        .probe5(pwl_tready),
-//                        .probe6(dac_batch),
-// //                        .probe7(dac0_rdy),
-// //                        .probe8(dac0_rdy),
-// //                        .probe9(dac0_rdy));            
+//                        .probe6(dac_batch),          
 //                        .probe7(sys.dac_intf.sample_gen.run_shift_regs),
 //                        .probe8(sys.dac_intf.sample_gen.run_trig_wav),
-//                        .probe9(sys.dac_intf.sample_gen.run_pwl));            
+//                        .probe9(sys.dac_intf.sample_gen.run_pwl),
+//                        .probe10(sys.dac_intf.sample_gen.pwl_gen.pwlState),
+//                        .probe11(sys.dac_intf.sample_gen.pwl_gen.curr_dma_valid),
+//                        .probe12(sys.dac_intf.sample_gen.pwl_gen.curr_dma_x),
+//                        .probe13(sys.dac_intf.sample_gen.pwl_gen.curr_dma_slope),
+//                        .probe14(sys.dac_intf.sample_gen.pwl_gen.curr_dma_dt),
+//                        .probe15(sys.dac_intf.sample_gen.pwl_gen.curr_dma_sb),
+//                        .probe16(sys.dac_intf.sample_gen.pwl_gen.batch_out),
+//                        .probe17(sys.dac_intf.sample_gen.pwl_gen.valid_batch_out),
+//                        .probe18(sys.dac_intf.resp_in),
+//                        .probe19(sys.dac_intf.resp_transfer.srcState),
+//                        .probe20(sys.dac_intf.resp_transfer_rdy),
+//                        .probe21(sys.dac_intf.resp_transfer_done),
+//                        .probe22(sys.dac_intf.resp_in_valid));
                         
                        
                        
@@ -153,11 +169,33 @@ endmodule
 Weekly updates:
 Mon-Wedensday:
     Working out bugs with the c algorithm. Found some pointer issues, fixed some memory leaks. Currently working to develop a testing suite for the cython module
- TODO: 
-    5 streams of work: 
-    1. PWL Hardware testing (basically just make the pathway from python to pwl_wave on a scope work)
-    2. PWL updating: Increase the dma width to allow for larger slopes then introduce fractional slopes
-    3. System-wide changes (parameters, testbenches, etc). Prepare the codebase for integration with reed
-    4. DAQ system user interface rehaul: Ontop of the cli, introduce a server interface. Allow for GPIB connections to arbitrary lab equipment.
-    5. Shadow more experiments to familiarize yourself with the process your tool will be applied in.
+ 
+*/
+
+
+// SUPERCONDUCTING MEETING QUESTIONS
+
+/*
+2/6/24
+    Terms: 
+        1. JPL films
+        2. Device constriction? Dpair current?
+        3. What is a meander? 
+        4. Transmission line "coupled to a resonator"
+        5. Etched samples, dicing? 
+
+
+    Questions:
+    1. Alejandro: You're trying to find a way to figure out a fast method of measuring inductance 
+    2. Why is measuring constriction vs Temperature important for infared detection?
+2/13/24
+
+*/
+
+// TIMING TRICKS
+
+/*
+Variable limits for for loops and shifting == BAD
+Counters: don't use inequalities unless u need to
+If issues with high fannout rest, don't reset data signals. In general don't reset singals that depend (valids, enables etc, last )
 */
