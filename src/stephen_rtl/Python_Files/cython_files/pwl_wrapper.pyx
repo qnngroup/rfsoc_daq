@@ -204,6 +204,11 @@ cdef int mk_pwl_cmds(Tup_List* coords, Tup_List* path):
                 if pwl_cmd.dt == batch_t:
                     pwl_cmd.dt = batch_size
                     pwl_cmd.sb = 1
+                    prev_pwl_cmd = get_pwl_tup(path,path_ptr-2)
+                    if prev_pwl_cmd.slope == 0 and prev_pwl_cmd.sb:
+                        prev_pwl_cmd.dt+=batch_size
+                        path_ptr-=1
+                        pwl_cmd = prev_pwl_cmd 
                 else: pwl_cmd.dt+=left_in_batch
                 set_item(path,path_ptr-1,&pwl_cmd)
                 break

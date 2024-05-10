@@ -329,9 +329,13 @@ def mk_pwl_cmds_fast(coords, path):
             if pwl_cmd["slope"] == 0:
                 # If the only thing in the batch we have to finish is a cmd with 0 slope, fill it all with this. 
                 if pwl_cmd["dt"] == batch_t:
-
                     pwl_cmd["dt"] = batch_size
                     pwl_cmd["sb"] = 1
+                    prev_pwl_cmd = path[path_ptr-2]
+                    if prev_pwl_cmd["slope"] == 0 and prev_pwl_cmd["sb"]: 
+                        prev_pwl_cmd["dt"]+=batch_size
+                        path_ptr-=1
+                        pwl_cmd = prev_pwl_cmd.copy()
                 else: pwl_cmd["dt"]+=left_in_batch
                 path[path_ptr-1] = pwl_cmd.copy()
                 break
@@ -426,9 +430,9 @@ def toDi(li):
 
 #############################################################
 
-# coords = [(0,0), (300,300), (300,1000),(0,5800), (0, 6500)]
-# # coords = gen_rand_coords(n=50)
-# coords.reverse()
-# intv,fpga_cmds = main(coords)
+coords = [(0,0), (300,300), (300,1000),(0,5800), (0, 6500)]
+# coords = gen_rand_coords(n=50)
+coords.reverse()
+intv,fpga_cmds = main(coords)
 
 

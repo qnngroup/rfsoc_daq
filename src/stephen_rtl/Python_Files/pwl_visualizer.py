@@ -1,7 +1,10 @@
 import matplotlib.pyplot as plt
 from matplotlib.font_manager import FontProperties
 from fpga_constants import *
-from cython_files import pwl_wrapper as c 
+from sys import path
+path.insert(0, r'C:\Users\skand\OneDrive\Documents\GitHub\rfsoc_daq\src\stephen_rtl\Python_Files/cython_files')
+import pwl_wrapper_python as p
+import pwl_wrapper as c 
 
 def flatten(li):
     out = []
@@ -62,7 +65,9 @@ def plot_path(coords,simple_plot=True,desired_period=None):
 
 
 mv = max_voltage
-coords = [(0,0),(200, 200), (200,400), (0,900)]
+coords = [(0,0), (300,300), (300,1000),(0,5800), (0, 6500)]
+# coords = [(0,0), (5,5), (10,10), (15,16)]
+
 
 simple_plot = False
 desired_period = None

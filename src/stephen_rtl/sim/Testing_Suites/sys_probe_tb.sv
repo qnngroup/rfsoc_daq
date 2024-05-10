@@ -3,7 +3,7 @@
 import mem_layout_pkg::*;
 
 module sys_probe_tb();
-    localparam BUFF_LEN = 9;
+    localparam BUFF_LEN = 7;
     
     logic ps_clk,ps_rst,ps_rstn;
     logic dac_clk,dac_rst,dac_rstn;
@@ -28,7 +28,7 @@ module sys_probe_tb();
     enum logic[1:0] {IDLE_D, SEND_DMA_DATA,HOLD_CMD,DMA_WAIT} dmaState;
     enum logic[1:0] {IDLE_T, SET_SEEDS,WRESP,ERROR} dacTestState;
 
-    assign dma_buff = {48'd33, 48'd577, 48'd16, 48'd38654640144, 48'd863288361345, 48'd858993459585, 48'd858993459216, 48'd824633786384, 48'd65921};
+    assign dma_buff = {48'd24, 48'd2267738472456, 48'd140737484096481, 48'd140733193388417, 48'd140733193388048, 48'd134415307178000, 48'd10682753};
     assign {ps_wresp_rdy,ps_read_rdy,dac0_rdy,pwl_tkeep} = -1;
     assign ps_rstn = ~ps_rst;
     assign dac_rstn = ~dac_rst;
@@ -114,22 +114,22 @@ module sys_probe_tb();
                 end 
                 SEND_DMA_DATA: begin
                     if (pwl_ready) begin                         
-                        pwl_data <= dma_buff[dma_i+1];                                                
+                        // pwl_data <= dma_buff[dma_i+1];                                                
                         if (dma_i == BUFF_LEN-1) begin 
                             dmaState <= (send_dma_data)? DMA_WAIT : IDLE_D;
                             dma_i <= 0; 
                             {pwl_data,pwl_valid} <= 0;
                         end 
-                        else dma_i <= dma_i + 1;
-                        // else begin
-                        //     dmaState <= HOLD_CMD;
-                        //     pwl_valid <= 0; 
-                        // end 
+                        // else dma_i <= dma_i + 1;
+                        else begin
+                            dmaState <= HOLD_CMD;
+                            pwl_valid <= 0; 
+                        end 
 
                     end 
                 end 
                 HOLD_CMD: begin
-                    if (dma_timer == 69) begin
+                    if (dma_timer == 100) begin
                         dma_i <= dma_i + 1;
                         dma_timer <= 0;
                         pwl_valid <= 1; 
@@ -167,31 +167,29 @@ module sys_probe_tb();
         `flash_sig(ps_rst);
         #1000;
         `flash_sig(send_dma_data);
-        // #100;
-        // `flash_sig(set_seeds);
-        // while (~valid_dac_batch) #10;
-        // #500;
-        // `flash_sig(halt_dac);
-        // while (valid_dac_batch) #10;
-        // #500;
-        // `flash_sig(set_seeds);
-        // while (~valid_dac_batch) #10;
-        #10
-        `flash_sig(run_pwl);
         #100;
-        // while (~ps_interface.tl.sys.dac_intf.state_rdy) #10;
-        // #5000
-        // `flash_sig(halt_dac);
-        // #5000;
-        // `flash_sig(run_trig);
-        // #5000;
-        // `flash_sig(set_seeds);
-        // #5000;
-        // `flash_sig(run_pwl);
-        // #5000;
-        // `flash_sig(run_trig);
-        // #5000;
-        // `flash_sig(halt_dac);
+        `flash_sig(set_seeds);
+        while (~rtl_dac_valid) #10;
+        #500;
+        `flash_sig(halt_dac);
+        while (rtl_dac_valid) #10;
+        #500;
+        `flash_sig(set_seeds);
+        while (~rtl_dac_valid) #10;
+        #100
+        `flash_sig(run_pwl);
+        #5000
+        `flash_sig(halt_dac);
+        #5000;
+        `flash_sig(run_trig);
+        #5000;
+        `flash_sig(set_seeds);
+        #5000;
+        `flash_sig(run_pwl);
+        #5000;
+        `flash_sig(run_trig);
+        #5000;
+        `flash_sig(halt_dac);
         #5000;
         $finish;
     end 
