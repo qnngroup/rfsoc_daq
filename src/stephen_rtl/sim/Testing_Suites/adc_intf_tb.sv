@@ -1,5 +1,6 @@
 `default_nettype none
 `timescale 1ns / 1ps
+`include "mem_layout.svh"
 import mem_layout_pkg::*;
 
 module adc_intf_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] done);

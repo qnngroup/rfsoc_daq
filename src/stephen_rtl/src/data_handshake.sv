@@ -65,7 +65,7 @@ module data_handshake #(parameter DATA_WIDTH = 32)
 
     always_ff @(posedge clk_dst) begin
     	if (rst_dst) begin
-    		{ack_src.data,ack_src.valid,ack_src.last} <= 0;
+    		{ack_src.data,ack_src.valid,ack_src.last,data_out} <= 0;
     		dstState <= GET_DATA; 
     	end else begin
     		case(dstState) 

@@ -5,8 +5,10 @@ from matplotlib.font_manager import FontProperties
 from math import ceil,floor
 from random import randrange as rr
 from time import time,sleep, perf_counter
+from sys import path
+path.insert(0, r'C:\Users\skand\OneDrive\Documents\GitHub\rfsoc_daq\src\stephen_rtl\Python_Files')
+from fpga_constants import *
 
-batch_size = c.get_bs()
 
 def round_slope(slope): 
     if ((slope < -1) or (slope > 0 and slope < 1)): return ceil(slope)
@@ -33,12 +35,12 @@ def ignore_same_sloped_points(coords):
             if s1 == s2: ignore.append(c1)
     return ignore
 
-def gen_rand_coords(avg_dt=100,T=500,n=5,max_val=2**15-1):
+def gen_rand_coords(avg_dt=100,T=500,n=5,max_val=0x7fff):
     coords = [(0,0)]
     abs_t = 0
     for i in range(n):
         t = rr(1,avg_dt)
-        x = rr(0,max_val)
+        x = rr(-max_val,max_val)
         abs_t+=t
         coords.append((x,abs_t))
     return coords
@@ -69,17 +71,26 @@ def flatten(li):
         else: out.append(el)
     return out 
 
-def test_fpga_cmds(coords): 
+def fpga_to_sv(fpga_cmds):
+    li = fpga_cmds[:]
+    li.reverse()
+    cmd = "assign dma_buff = {"
+    for el in li: cmd+=f"48'd{el}, "
+    cmd = cmd[:-2]+"};"
+    return cmd 
+def test_coords(coords,do_plot=True,show_batches=False,simple_plot=False, ignore=[],mv=0x7fff, scale_plot = False):
     coords.reverse()
-    path,l,intv = c.main(coords)
-
-def test_coords(coords,do_plot=True,show_batches=False,simple_plot=False, ignore=[]):
-    coords.reverse()
-    path,l,intv = c.main(coords)
-    path = path[:l]
+    intvc,fpga_cmds = c.main(coords)
+    path = c.fpga_to_pwl(fpga_cmds)
+    intvp,py_fpga_cmds = p.main(coords)
+    py_path = c.fpga_to_pwl(py_fpga_cmds)
     waves = c.decode_pwl_cmds(path)
+    if scale_plot:
+        for i in range(len(waves)):
+            waves[i] = [(el/mv)*100 for el in waves[i]]
+        coords = [((el[0]/mv)*100,el[1]) for el in coords]
+        
     flat_wave = flatten(waves)
-    
     if do_plot:
         split = lambda li: ([el[0] for el in li],[el[1] for el in li])
         x,t = split(coords)
@@ -94,6 +105,9 @@ def test_coords(coords,do_plot=True,show_batches=False,simple_plot=False, ignore
                 abs_t+=len(wave)
 
     wrong = []
+    if py_path != path: wrong.append(("paths not equal"))
+    if py_fpga_cmds != fpga_cmds: wrong.append(("fpga_cmds not equal"))
+    
     for x1,t1 in coords:
         if (x1,t1) in ignore: continue
         if x1 not in flat_wave: 
@@ -139,41 +153,46 @@ def test_coords(coords,do_plot=True,show_batches=False,simple_plot=False, ignore
             plt.axvline(t,color="orange", alpha=0.4)
             t+=batch_size
     
-    return path,passed,wrong
+    return path,passed,wrong,intvc,intvp
+##############################################################################################################################################
 
-test_num = int(1e5)
-nxt_perc = 10
-t0 = time()
-for i in range(test_num):
-    perc = (i/test_num)*100
-    if round(perc) == nxt_perc: 
-        print(f"{nxt_perc}%")
-        nxt_perc+=10
-    coords = gen_rand_coords(n=5,avg_dt=200)
-    # coords = [(0, 0), (15000, 127), (1925, 237), (18433, 241), (12358, 380), (22317, 448)]
-    ignore = ignore_same_sloped_points(coords)
-    path,result,wrong = test_coords(coords[:],do_plot=False,show_batches=True,simple_plot=False, ignore=ignore)
-    # print(path)
-    if not result:
-        print("Failed")
-        print(coords)
-        print(wrong)
-        break
-else:
-    print("Passed")
-print(time()-t0)
+# test_num = int(1e2)
+# nxt_perc = 10
+# t0 = time()
+# n = 200
+# intvcs,intvps = [],[]
+# for i in range(test_num):
+#     perc = (i/test_num)*100
+#     if round(perc) == nxt_perc: 
+#         print(f"{nxt_perc}%",end="")
+#         if nxt_perc != 90: print(",",end="")
+#         nxt_perc+=10        
+#     coords = gen_rand_coords(n=n,avg_dt=200,max_val=max_voltage)
+#     ignore = ignore_same_sloped_points(coords)
+#     path,result,wrong,intvc,intvp = test_coords(coords[:],do_plot=False,show_batches=False,simple_plot=True, ignore=ignore,scale_plot = False)
+#     intvcs.append(intvc)
+#     intvps.append(intvp)
+#     if not result:
+#         print("\nFailed")
+#         print(coords)
+#         print(wrong)
+#         break
+# else:
+#     print("\nPassed")
+
+# avg_intvc = sum(intvcs)/len(intvcs)
+# avg_intvp = sum(intvps)/len(intvps)
+# print(f"\n################################\n\nInput coord list lenght: {n}")
+# print(f"\nAvg Cython calc time:\n{round(avg_intvc*1e6,2)} us\n{round(avg_intvc*1e3,2)} ms")
+# print(f"\nAvg Python calc time:\n{round(avg_intvp*1e6,2)} us\n{round(avg_intvp*1e3,2)} ms\n")
+# print(f"Cython is {round(avg_intvp/avg_intvc)}x faster")
+# print(f"\nTest time:\n{round(time()-t0,2)} s")
 
 
-
-
-
-
-
-
-
-
-
-
-
+coords = [(0,0), (300,300), (300,1000),(0,5800), (0, 6500)]
+coords.reverse()
+intvp,py_fpga_cmds = p.main(coords)
+path = c.fpga_to_pwl(py_fpga_cmds)
+print(path)
 
 

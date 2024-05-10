@@ -1,38 +1,66 @@
 `timescale 1ns / 1ps
 `default_nettype none
 
-module bram_interface #(parameter DATA_WIDTH = 48, parameter BRAM_DEPTH = 600, parameter BRAM_DELAY = 4)
+module bram_interface #(parameter DATA_WIDTH, parameter BRAM_DEPTH, parameter BRAM_DELAY)
 			 		  		  (input wire clk, rst,
-			 		  		   input wire[DATA_WIDTH-1:0] line_out_raw,
-			 		  		   input wire we,
+			 		  		   input wire [$clog2(BRAM_DEPTH)-1:0] addr,
+			 		  		   input wire[DATA_WIDTH-1:0] line_in,
+			 		  		   input wire we, en, 
 			 		  		   input wire generator_mode, rst_gen_mode, 
 			 		  		   input wire next, 
-			 		  		   output logic[$clog2(BRAM_DEPTH)-1:0] buff_addr,
 			 		  		   output logic[DATA_WIDTH-1:0] line_out,
 			 		  		   output logic valid_line_out,
+			 		  		   output logic[$clog2(BRAM_DEPTH)-1:0] generator_addr,
 			 		  		   output logic write_rdy);
 	localparam BUFF_LEN = BRAM_DELAY+1;
 
-	logic[BRAM_DELAY-1:0] valid_line_pipe; 
-	logic valid_line;
+	logic[DATA_WIDTH-1:0] bram_line_out;
+	logic[BUFF_LEN-1:0] valid_line_pipe; 
+	logic valid_line,nxt_valid_line, en_in, we_in;
+	logic[$clog2(BRAM_DEPTH)-1:0] addr_in,buff_addr;
 	logic[BUFF_LEN-1:0][DATA_WIDTH-1:0] line_out_buffer; 
 	logic[$clog2(BRAM_DEPTH)-1:0] lines_stored;
-	logic[$clog2(BUFF_LEN)-1:0] buff_place_ptr, buff_access_ptr, els_in_buff;
+	logic[$clog2(BUFF_LEN)-1:0] buff_place_ptr, buff_access_ptr;
+	logic[$clog2(BUFF_LEN):0] els_in_buff;
 	enum logic[2:0] {WRITE_MODE, PREP_GEN_MODE, FILL_BUFF, GENERATOR_MODE, SIMPLE_MODE} bramState;
 
+    BRAM #(.DATA_WIDTH(DATA_WIDTH),.BRAM_DEPTH(BRAM_DEPTH),.RAM_PERFORMANCE("HIGH_PERFORMANCE")) 
+    bram (.addra(addr_in),  
+		  .dina(line_in),    
+		  .clka(clk),    
+		  .wea(we_in),      
+		  .ena(en_in),      
+		  .rsta(rst),    
+		  .regcea(1'b1),
+		  .douta(bram_line_out));
+
 	always_comb begin
-		valid_line = valid_line_pipe[BRAM_DELAY-1];
+		if (generator_mode) begin
+			en_in = 1;
+			we_in = 0;
+			addr_in = buff_addr; 
+			if (bramState == GENERATOR_MODE) generator_addr = (buff_addr >= BUFF_LEN)? buff_addr-BUFF_LEN : lines_stored - (BUFF_LEN-buff_addr); 
+			else if (bramState == SIMPLE_MODE) generator_addr = buff_access_ptr; 
+			else generator_addr = 0; 
+		end else begin
+			en_in = en;
+			we_in = we; 
+			addr_in = addr; 
+			generator_addr = 0;
+		end
+		valid_line = valid_line_pipe[BUFF_LEN-1];
+		nxt_valid_line = valid_line_pipe[BUFF_LEN-2];
 		line_out = 	line_out_buffer[buff_access_ptr];
 		write_rdy = bramState == WRITE_MODE;
 	end
 
 	always_ff @(posedge clk) begin
-		valid_line_pipe[BRAM_DELAY-1:1] <= valid_line_pipe[BRAM_DELAY-2:0]; 
+		valid_line_pipe[BUFF_LEN-1:1] <= valid_line_pipe[BUFF_LEN-2:0]; 
 
 		if (rst) begin
 			valid_line_pipe[0] <= 0; 
 			{buff_addr,buff_place_ptr,buff_access_ptr,els_in_buff} <= 0;
-			{lines_stored,valid_line_out} <= 0;
+			{lines_stored,valid_line_out,line_out_buffer} <= 0;
 			bramState <= WRITE_MODE;
 		end
 		else begin
@@ -57,7 +85,7 @@ module bram_interface #(parameter DATA_WIDTH = 48, parameter BRAM_DEPTH = 600, p
 						if (valid_line) begin 
 							els_in_buff <= els_in_buff + 1;
 							buff_place_ptr <= (buff_place_ptr == BUFF_LEN-1)? 0 : buff_place_ptr + 1;
-							line_out_buffer[buff_place_ptr] <= line_out_raw;
+							line_out_buffer[buff_place_ptr] <= bram_line_out;
 						end 
 					end else begin
 						valid_line_out <= 1;
@@ -84,9 +112,9 @@ module bram_interface #(parameter DATA_WIDTH = 48, parameter BRAM_DEPTH = 600, p
 						if (valid_line && ~next) els_in_buff <= els_in_buff + 1; 
 						if (next && ~valid_line) els_in_buff <= els_in_buff - 1;
 
-						if (valid_line) begin
+						if (nxt_valid_line) begin
 							buff_place_ptr <= (buff_place_ptr == BUFF_LEN-1)? 0 : buff_place_ptr + 1;
-							line_out_buffer[buff_place_ptr] <= line_out_raw;
+							line_out_buffer[buff_place_ptr] <= bram_line_out;
 						end 
 					end 
 				end 

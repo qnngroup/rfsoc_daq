@@ -2,7 +2,6 @@ from math import ceil,floor
 from time import perf_counter
 from random import randrange as rr
 from pwl_wrapper import get_bs
-
 batch_size = get_bs()
 
 def round_slope(slope): 
@@ -243,15 +242,15 @@ def mk_pwl_cmds(coords, path):
 
 def mk_fpga_cmds(pwl_cmds):
     fpga_cmds = []
-    shift = dma_width-1
     for x,slope,dt,sb in pwl_cmds: 
-        if slope < 0:
-            print("lsjf")
+        x1,slope1,dt1 = x,slope,dt
+
+        if x < 0: x = 0x10000+x 
         x = x<<(8*4) 
-        if slope < 0: slope =(1<<16)+slope
+        if slope < 0: slope = 0x10000+slope
         slope = slope<<(4*4)
         dt = (dt<<1)+sb
-        if dt & (1<<16): dt -= (1<<16)
+        if dt & 0x8000: dt -= 0x8000
         fpga_cmds.append(x+slope+dt)
     return fpga_cmds
         
@@ -332,6 +331,11 @@ def mk_pwl_cmds_fast(coords, path):
                 if pwl_cmd["dt"] == batch_t:
                     pwl_cmd["dt"] = batch_size
                     pwl_cmd["sb"] = 1
+                    prev_pwl_cmd = path[path_ptr-2]
+                    if prev_pwl_cmd["slope"] == 0 and prev_pwl_cmd["sb"]: 
+                        prev_pwl_cmd["dt"]+=batch_size
+                        path_ptr-=1
+                        pwl_cmd = prev_pwl_cmd.copy()
                 else: pwl_cmd["dt"]+=left_in_batch
                 path[path_ptr-1] = pwl_cmd.copy()
                 break
@@ -398,11 +402,11 @@ def main(coords):
     coords = [{"x":el[0], "t":el[1]} for el in coords]
     path_wrapper = [0]*((len(coords)-1)*6)
     l = mk_pwl_cmds_fast(coords,path_wrapper)
+    path = toLi(path_wrapper,l)
+    fpga_cmds = mk_fpga_cmds(path)
     intv = perf_counter() - t0
     coords = [] 
-    path = toLi(path_wrapper,l)
-    return mk_fpga_cmds(path)
-    # return path, l, intv
+    return intv,fpga_cmds
 
 
 def toLi(path,n): 
@@ -425,35 +429,10 @@ def toDi(li):
     return out
 
 #############################################################
-# slow_intv,fast_intv = 0,0
-# trials = 100
-# for i in range(trials):
-#     coords = gen_rand_coords(n=50)
-#     coords.reverse()
-#     path,l, intv = main_slow(coords)
-#     slow_intv+=intv*1e3
-#     path,l, intv = main(coords)
-#     fast_intv+=intv*1e3
-# slow_intv/=trials
-# fast_intv/=trials
 
-# print(slow_intv,fast_intv)
-
-# coords = [(0, 0), (30, 20), (20, 38),(64,64),(100,130),(0,400)]
-# coords.reverse()
-# path,l, intv = main(coords)
-# print(path[:])
-
-
-
-
-
-
-
-
-
-
-
-
+coords = [(0,0), (300,300), (300,1000),(0,5800), (0, 6500)]
+# coords = gen_rand_coords(n=50)
+coords.reverse()
+intv,fpga_cmds = main(coords)
 
 
