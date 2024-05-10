@@ -62,7 +62,7 @@ def plot_path(coords,simple_plot=True,desired_period=None):
 
 
 mv = max_voltage
-coords = [(0,0),(200, 200), (200,400), (0,7000)]
+coords = [(0,0),(200, 200), (200,400), (0,900)]
 
 simple_plot = False
 desired_period = None

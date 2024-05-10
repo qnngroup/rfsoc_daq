@@ -12,7 +12,8 @@ module sys_probe_tb();
     logic[2:0] ps_axi_arprot,ps_axi_awprot;
     logic[3:0] ps_axi_wstrb;
     logic[63:0] pwl_data;
-    logic[7:0] pwl_tkeep,dma_timer;
+    logic[7:0] pwl_tkeep;
+    logic[15:0] dma_timer;
     logic pwl_last, pwl_valid, pwl_ready; 
     logic raddr_valid_packet, waddr_valid_packet, wdata_valid_packet, rdata_valid_out, wresp_valid_out;
     logic ps_wresp_rdy,ps_read_rdy, ps_write_rdy,ps_awrite_rdy,ps_aread_rdy; 
@@ -27,8 +28,7 @@ module sys_probe_tb();
     enum logic[1:0] {IDLE_D, SEND_DMA_DATA,HOLD_CMD,DMA_WAIT} dmaState;
     enum logic[1:0] {IDLE_T, SET_SEEDS,WRESP,ERROR} dacTestState;
 
-    // Doesn't seem to recognize extra zeros added at the end. Some problem with what its saving. 
-    assign dma_buff = {48'd33, 48'd12769, 48'd16, 48'd38654640144, 48'd863288361345, 48'd858993459585, 48'd858993459216, 48'd824633786384, 48'd65921}; 
+    assign dma_buff = {48'd33, 48'd577, 48'd16, 48'd38654640144, 48'd863288361345, 48'd858993459585, 48'd858993459216, 48'd824633786384, 48'd65921};
     assign {ps_wresp_rdy,ps_read_rdy,dac0_rdy,pwl_tkeep} = -1;
     assign ps_rstn = ~ps_rst;
     assign dac_rstn = ~dac_rst;
@@ -129,7 +129,7 @@ module sys_probe_tb();
                     end 
                 end 
                 HOLD_CMD: begin
-                    if (dma_timer == 50) begin
+                    if (dma_timer == 69) begin
                         dma_i <= dma_i + 1;
                         dma_timer <= 0;
                         pwl_valid <= 1; 
@@ -176,7 +176,7 @@ module sys_probe_tb();
         // #500;
         // `flash_sig(set_seeds);
         // while (~valid_dac_batch) #10;
-        #5000
+        #10
         `flash_sig(run_pwl);
         #100;
         // while (~ps_interface.tl.sys.dac_intf.state_rdy) #10;
