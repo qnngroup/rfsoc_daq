@@ -1,0 +1,24 @@
+from math import log2
+firmware_version = 1.004
+raw_fv = 0x1004
+mem_size = 256
+max_dac_burst_size = 32767
+base_addr = 0x9000_0000
+sample_width = 16
+wd_data_width = sample_width
+batch_width = 256
+batch_size = batch_width//sample_width
+rfdc_channels = 8
+sdc_data_width = 2*rfdc_channels*sample_width
+sdc_samples = sdc_data_width//wd_data_width
+buff_config_width = int(2*log2(log2(rfdc_channels)+1))
+func_per_chan = 1
+chan_mux_width = int(log2((1+func_per_chan)*rfdc_channels))*rfdc_channels
+chan_samples = chan_mux_width//wd_data_width
+buff_time_width = 32
+buff_samples = buff_time_width//wd_data_width
+dac_clk = 384e6
+dac_T = 1/dac_clk
+MB_of_BRAM = 38/8
+max_voltage = 0x7fff
+dma_data_width = 48

@@ -5,8 +5,10 @@ from matplotlib.font_manager import FontProperties
 from math import ceil,floor
 from random import randrange as rr
 from time import time,sleep, perf_counter
+from sys import path
+path.insert(0, r'C:\Users\skand\OneDrive\Documents\GitHub\rfsoc_daq\src\stephen_rtl\Python_Files')
+from fpga_constants import *
 
-batch_size = c.get_bs()
 
 def round_slope(slope): 
     if ((slope < -1) or (slope > 0 and slope < 1)): return ceil(slope)
@@ -69,20 +71,6 @@ def flatten(li):
         else: out.append(el)
     return out 
 
-def fpga_to_pwl(fpga_cmds):
-    pwl_cmds = []
-    for num in fpga_cmds:
-        x_mask = 0xffff << (8*4)
-        x = (num&x_mask) >> (8*4)
-        if x & 0x8000: x = -0x8000 + (x & 0x7fff)
-        slope_mask = 0xffff << (4*4)
-        slope = (num&slope_mask) >> (4*4)
-        if slope & 0x8000: slope = -0x8000 + (slope & 0x7fff)
-        dt_mask = 0xffff
-        sb = num & 0b1
-        dt = (num&dt_mask) >> 1
-        pwl_cmds.append((x,slope,dt,sb))
-    return pwl_cmds
 def fpga_to_sv(fpga_cmds):
     li = fpga_cmds[:]
     li.reverse()
@@ -93,9 +81,9 @@ def fpga_to_sv(fpga_cmds):
 def test_coords(coords,do_plot=True,show_batches=False,simple_plot=False, ignore=[],mv=0x7fff, scale_plot = False):
     coords.reverse()
     intvc,fpga_cmds = c.main(coords)
-    path = fpga_to_pwl(fpga_cmds)
+    path = c.fpga_to_pwl(fpga_cmds)
     intvp,py_fpga_cmds = p.main(coords)
-    py_path = fpga_to_pwl(py_fpga_cmds)
+    py_path = c.fpga_to_pwl(py_fpga_cmds)
     waves = c.decode_pwl_cmds(path)
     if scale_plot:
         for i in range(len(waves)):
@@ -168,50 +156,43 @@ def test_coords(coords,do_plot=True,show_batches=False,simple_plot=False, ignore
     return path,passed,wrong,intvc,intvp
 ##############################################################################################################################################
 
-test_num = int(1)
-nxt_perc = 10
-t0 = time()
-n = 500
-intvcs,intvps = [],[]
-mv = 0x7fff
-for i in range(test_num):
-    perc = (i/test_num)*100
-    if round(perc) == nxt_perc: 
-        print(f"{nxt_perc}%",end="")
-        if nxt_perc != 90: print(",",end="")
-        nxt_perc+=10        
-    coords = gen_rand_coords(n=n,avg_dt=200)
-    ignore = ignore_same_sloped_points(coords)
-    path,result,wrong,intvc,intvp = test_coords(coords[:],do_plot=False,show_batches=False,simple_plot=True, ignore=ignore,scale_plot = False)
-    intvcs.append(intvc)
-    intvps.append(intvp)
-    if not result:
-        print("\nFailed")
-        print(coords)
-        print(wrong)
-        break
-else:
-    print("\nPassed")
+# test_num = int(1e2)
+# nxt_perc = 10
+# t0 = time()
+# n = 200
+# intvcs,intvps = [],[]
+# for i in range(test_num):
+#     perc = (i/test_num)*100
+#     if round(perc) == nxt_perc: 
+#         print(f"{nxt_perc}%",end="")
+#         if nxt_perc != 90: print(",",end="")
+#         nxt_perc+=10        
+#     coords = gen_rand_coords(n=n,avg_dt=200,max_val=max_voltage)
+#     ignore = ignore_same_sloped_points(coords)
+#     path,result,wrong,intvc,intvp = test_coords(coords[:],do_plot=False,show_batches=False,simple_plot=True, ignore=ignore,scale_plot = False)
+#     intvcs.append(intvc)
+#     intvps.append(intvp)
+#     if not result:
+#         print("\nFailed")
+#         print(coords)
+#         print(wrong)
+#         break
+# else:
+#     print("\nPassed")
 
-avg_intvc = sum(intvcs)/len(intvcs)
-avg_intvp = sum(intvps)/len(intvps)
-print(f"\n################################\n\nInput coord list lenght: {n}")
-print(f"\nAvg Cython calc time:\n{round(avg_intvc*1e6,2)} us\n{round(avg_intvc*1e3,2)} ms")
-print(f"\nAvg Python calc time:\n{round(avg_intvp*1e6,2)} us\n{round(avg_intvp*1e3,2)} ms\n")
-print(f"Cython is {round(avg_intvp/avg_intvc)}x faster")
-print(f"\nTest time:\n{round(time()-t0,2)} s")
-
+# avg_intvc = sum(intvcs)/len(intvcs)
+# avg_intvp = sum(intvps)/len(intvps)
+# print(f"\n################################\n\nInput coord list lenght: {n}")
+# print(f"\nAvg Cython calc time:\n{round(avg_intvc*1e6,2)} us\n{round(avg_intvc*1e3,2)} ms")
+# print(f"\nAvg Python calc time:\n{round(avg_intvp*1e6,2)} us\n{round(avg_intvp*1e3,2)} ms\n")
+# print(f"Cython is {round(avg_intvp/avg_intvc)}x faster")
+# print(f"\nTest time:\n{round(time()-t0,2)} s")
 
 
-
-
-
-
-
-
-
-
-
-
+coords = [(0,0), (300,300), (300,1000),(0,5800), (0, 6500)]
+coords.reverse()
+intvp,py_fpga_cmds = p.main(coords)
+path = c.fpga_to_pwl(py_fpga_cmds)
+print(path)
 
 

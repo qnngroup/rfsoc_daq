@@ -39,7 +39,9 @@ module bram_interface #(parameter DATA_WIDTH, parameter BRAM_DEPTH, parameter BR
 			en_in = 1;
 			we_in = 0;
 			addr_in = buff_addr; 
-			generator_addr = (buff_addr >= BUFF_LEN)? buff_addr-BUFF_LEN : lines_stored - (BUFF_LEN-buff_addr); 
+			if (bramState == GENERATOR_MODE) generator_addr = (buff_addr >= BUFF_LEN)? buff_addr-BUFF_LEN : lines_stored - (BUFF_LEN-buff_addr); 
+			else if (bramState == SIMPLE_MODE) generator_addr = buff_access_ptr; 
+			else generator_addr = 0; 
 		end else begin
 			en_in = en;
 			we_in = we; 
@@ -58,7 +60,7 @@ module bram_interface #(parameter DATA_WIDTH, parameter BRAM_DEPTH, parameter BR
 		if (rst) begin
 			valid_line_pipe[0] <= 0; 
 			{buff_addr,buff_place_ptr,buff_access_ptr,els_in_buff} <= 0;
-			{lines_stored,valid_line_out} <= 0;
+			{lines_stored,valid_line_out,line_out_buffer} <= 0;
 			bramState <= WRITE_MODE;
 		end
 		else begin

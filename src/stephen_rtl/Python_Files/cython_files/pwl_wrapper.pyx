@@ -4,6 +4,9 @@ from libc.stdint cimport int8_t
 from math import isfinite
 from cython.operator import dereference as dref
 from time import perf_counter 
+from sys import path
+path.insert(0, r'C:\Users\skand\OneDrive\Documents\GitHub\rfsoc_daq\src\stephen_rtl\Python_Files')
+from fpga_constants import dma_data_width, batch_size as bs 
 
 ##################################### Classes and Method Defs  ############################################
 
@@ -20,9 +23,7 @@ cdef struct s_coord_tuple:
     int x,t
 ctypedef s_coord_tuple coord_tup
 
-cdef int batch_width = 256
-cdef int sample_width = 16
-cdef int batch_size = <int> batch_width/sample_width
+cdef int batch_size = <int> bs
 
 cdef enum Tup_Type:
     COORD_TUP,
@@ -140,10 +141,10 @@ cdef int mk_pwl_cmds(Tup_List* coords, Tup_List* path):
     cdef int batch_t = 0 
     cdef int path_ptr = 0 
     cdef bint skip_calc = 0
-    cdef pwl_tup pwl_cmd 
+    cdef pwl_tup pwl_cmd,prev_pwl_cmd
     pwl_cmd.dt = -1 
     cdef coord_tup coord 
-    cdef int x1,t1,x2,t2,dx,dt,slope,t,left_in_batch,newx,leftover_dt
+    cdef int x1,t1,x2,t2,dx,dt,slope,t,left_in_batch,newx,leftover_dt,ending_x
     
     coord = get_coord_tup(coords,i)
     x1 = coord.x 
@@ -189,6 +190,10 @@ cdef int mk_pwl_cmds(Tup_List* coords, Tup_List* path):
 
         # If i is -2, we've completed everything and just need to make sure the last batch gets filled in (if we're currently filling one)
         if i == -2:
+            if batch_t == 0 or batch_t == batch_size: 
+                prev_pwl_cmd = get_pwl_tup(path,path_ptr-1)
+                ending_x = prev_pwl_cmd.x + (prev_pwl_cmd.slope)*((prev_pwl_cmd.dt) - 1)
+                if ending_x == x2: break
             left_in_batch = batch_size-batch_t
             pwl_cmd.x = x2
             if left_in_batch == batch_size: pwl_cmd.sb = 1 
@@ -307,6 +312,27 @@ def decode_pwl_cmds(pwl_cmds):
         wave.append(w)
     return wave 
 
+def fpga_to_pwl(fpga_cmds):
+    pwl_cmds = []
+    for num in fpga_cmds:
+        x_mask = 0xffff << (8*4)
+        x = (num&x_mask) >> (8*4)
+        if x & 0x8000: x = -0x8000 + (x & 0x7fff)
+        slope_mask = 0xffff << (4*4)
+        slope = (num&slope_mask) >> (4*4)
+        if slope & 0x8000: slope = -0x8000 + (slope & 0x7fff)
+        dt_mask = 0xffff
+        sb = num & 0b1
+        dt = (num&dt_mask) >> 1
+        pwl_cmds.append((x,slope,dt,sb))
+    return pwl_cmds
+
+def rtl_cmd_formatter(fpga_cmds):
+    out = "assign dma_buff = {"
+    for el in fpga_cmds: out+=f"{dma_data_width}'d{el}, "
+    out = out[:-2]+"};"
+    return out 
+    
 def get_bs(): return batch_size
 
 def pwl_to_py(li):

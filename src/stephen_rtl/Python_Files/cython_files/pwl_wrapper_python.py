@@ -2,7 +2,6 @@ from math import ceil,floor
 from time import perf_counter
 from random import randrange as rr
 from pwl_wrapper import get_bs
-
 batch_size = get_bs()
 
 def round_slope(slope): 
@@ -319,6 +318,10 @@ def mk_pwl_cmds_fast(coords, path):
             
         # If i is -2, we've completed everything and just need to make sure the last batch gets filled in (if we're currently filling one)
         if i == -2:
+            if batch_t == 0 or batch_t == batch_size:
+                prev_pwl_cmd = path[path_ptr-1]
+                ending_x = prev_pwl_cmd["x"]+prev_pwl_cmd["slope"]*(prev_pwl_cmd["dt"]-1)
+                if ending_x == x2: break 
             left_in_batch = batch_size-batch_t
             pwl_cmd["x"] = x2
             pwl_cmd["sb"] = 1 if left_in_batch == batch_size else 0
@@ -326,6 +329,7 @@ def mk_pwl_cmds_fast(coords, path):
             if pwl_cmd["slope"] == 0:
                 # If the only thing in the batch we have to finish is a cmd with 0 slope, fill it all with this. 
                 if pwl_cmd["dt"] == batch_t:
+
                     pwl_cmd["dt"] = batch_size
                     pwl_cmd["sb"] = 1
                 else: pwl_cmd["dt"]+=left_in_batch
@@ -421,41 +425,10 @@ def toDi(li):
     return out
 
 #############################################################
-# slow_intv,fast_intv = 0,0
-# trials = 100
-# for i in range(trials):
-#     coords = gen_rand_coords(n=50)
-#     coords.reverse()
-#     path,l, intv = main_slow(coords)
-#     slow_intv+=intv*1e3
-#     path,l, intv = main(coords)
-#     fast_intv+=intv*1e3
-# slow_intv/=trials
-# fast_intv/=trials
 
-# print(slow_intv,fast_intv)
-
-# coords = [(0,0),(96,48),(116,58),(122,64), (10,176),(0,181),(0,192)]
-# coords = gen_rand_coords(n=50)
+# coords = [(0,0), (300,300), (300,1000),(0,5800), (0, 6500)]
+# # coords = gen_rand_coords(n=50)
 # coords.reverse()
-# intv,path,fpga_cmds = main(coords)
-# print(fpga_cmds)
-# fpga_cmds.reverse()
-# s = "assign dma_buff = {"
-# for cmd in fpga_cmds:
-#     s+="48'd"+str(cmd)+","
-# s = s[:-1]+"};"
-# print(s)
-
-
-
-
-
-
-
-
-
-
-
+# intv,fpga_cmds = main(coords)
 
 

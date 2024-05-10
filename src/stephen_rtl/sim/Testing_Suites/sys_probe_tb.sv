@@ -3,7 +3,7 @@
 import mem_layout_pkg::*;
 
 module sys_probe_tb();
-    localparam BUFF_LEN = 10;
+    localparam BUFF_LEN = 9;
     
     logic ps_clk,ps_rst,ps_rstn;
     logic dac_clk,dac_rst,dac_rstn;
@@ -27,14 +27,15 @@ module sys_probe_tb();
     enum logic[1:0] {IDLE_D, SEND_DMA_DATA,HOLD_CMD,DMA_WAIT} dmaState;
     enum logic[1:0] {IDLE_T, SET_SEEDS,WRESP,ERROR} dacTestState;
 
-    assign dma_buff = {48'd8, 48'd8761722601496, 48'd64768096141473, 48'd70368733495312, 48'd70364449210384, 48'd70364449210753, 48'd137954344239489, 48'd140737483046928, 48'd137301518057488, 48'd3540129};
+    // Doesn't seem to recognize extra zeros added at the end. Some problem with what its saving. 
+    assign dma_buff = {48'd33, 48'd12769, 48'd16, 48'd38654640144, 48'd863288361345, 48'd858993459585, 48'd858993459216, 48'd824633786384, 48'd65921}; 
     assign {ps_wresp_rdy,ps_read_rdy,dac0_rdy,pwl_tkeep} = -1;
     assign ps_rstn = ~ps_rst;
     assign dac_rstn = ~dac_rst;
+    assign pwl_last = dma_i == BUFF_LEN-1;
 
-    ps_interface ps_interface(.ps_clk(ps_clk),.ps_rstn(ps_rstn),
+    ps_interface ps_interface(.ps_clk(ps_clk),.ps_rstn(ps_rstn), .pl_rstn(pl_rstn),
                               .dac_clk(dac_clk),.dac_rstn(dac_rstn),
-                              .pl_rstn(pl_rstn),
                               .dac_tdata(dac_batch),.dac_tvalid(valid_dac_batch),.dac_tready(dac0_rdy),.rtl_dac_valid(rtl_dac_valid),
                               .ps_axi_araddr(raddr_packet),.ps_axi_arprot(ps_axi_arprot),.ps_axi_arvalid(raddr_valid_packet),.ps_axi_arready(ps_aread_rdy),
                               .ps_axi_rdata(rdata_packet),.ps_axi_rresp(rresp_out),.ps_axi_rvalid(rdata_valid_out),.ps_axi_rready(ps_read_rdy),
@@ -100,7 +101,7 @@ module sys_probe_tb();
 
     always_ff @(posedge dac_clk) begin
         if (dac_rst) begin
-            {pwl_data,pwl_valid,pwl_last,dma_i,dma_timer} <= 0; 
+            {pwl_data,pwl_valid,dma_i,dma_timer} <= 0; 
             dmaState <= IDLE_D;
         end else begin
             case(dmaState)
@@ -112,25 +113,27 @@ module sys_probe_tb();
                     end
                 end 
                 SEND_DMA_DATA: begin
-                    if (pwl_ready) begin
-                        dma_i <= dma_i + 1; 
-                        pwl_data <= dma_buff[dma_i+1];
-                        if (dma_i == BUFF_LEN-2) pwl_last <= 1; 
+                    if (pwl_ready) begin                         
+                        pwl_data <= dma_buff[dma_i+1];                                                
                         if (dma_i == BUFF_LEN-1) begin 
                             dmaState <= (send_dma_data)? DMA_WAIT : IDLE_D;
                             dma_i <= 0; 
-                            {pwl_data,pwl_valid,pwl_last} <= 0;
-                        end else begin
-                            dmaState <= HOLD_CMD;
-                            pwl_valid <= 0; 
+                            {pwl_data,pwl_valid} <= 0;
                         end 
+                        else dma_i <= dma_i + 1;
+                        // else begin
+                        //     dmaState <= HOLD_CMD;
+                        //     pwl_valid <= 0; 
+                        // end 
 
                     end 
                 end 
                 HOLD_CMD: begin
-                    if (dma_timer == 18) begin
+                    if (dma_timer == 50) begin
+                        dma_i <= dma_i + 1;
                         dma_timer <= 0;
                         pwl_valid <= 1; 
+                        pwl_data <= dma_buff[dma_i+1];
                         dmaState <= SEND_DMA_DATA;
                     end else dma_timer <= dma_timer+1; 
                 end 
