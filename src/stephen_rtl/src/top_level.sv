@@ -172,7 +172,8 @@ module top_level(input wire ps_clk,ps_rst, dac_clk, dac_rst,
                        .probe36(sys.dac_intf.sample_gen.pwl_gen.dbram_next),
                        .probe37(sys.dac_intf.sample_gen.pwl_gen.dbram_gen_addr),
                        .probe38(sys.dac_intf.sample_gen.pwl_gen.nxt_dma_sb),
-                       .probe39(sys.dac_intf.sample_gen.pwl_gen.sbram_gen_addr));
+                       .probe39(sys.dac_intf.sample_gen.pwl_gen.sbram_gen_addr),
+                       .probe40(sys.dac_intf.sample_gen.pwl_gen.dense_batch_out));
                         
                        
                        
