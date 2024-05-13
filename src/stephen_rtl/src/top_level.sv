@@ -155,7 +155,23 @@ module top_level(input wire ps_clk,ps_rst, dac_clk, dac_rst,
                        .probe19(sys.dac_intf.resp_transfer.srcState),
                        .probe20(sys.dac_intf.resp_transfer_rdy),
                        .probe21(sys.dac_intf.resp_transfer_done),
-                       .probe22(sys.dac_intf.resp_in_valid));
+                       .probe22(sys.dac_intf.resp_in_valid),
+                       .probe23(sys.dac_intf.sample_gen.pwl_gen.sbram_we),
+                       .probe24(sys.dac_intf.sample_gen.pwl_gen.dbram_we),
+                       .probe25(sys.dac_intf.sample_gen.pwl_gen.nxt_dma_valid),
+                       .probe26(sys.dac_intf.sample_gen.pwl_gen.intrp_count),
+                       .probe27(sys.dac_intf.sample_gen.pwl_gen.intrp_out_dt),
+                       .probe28(sys.dac_intf.sample_gen.pwl_gen.valid_intrp_out),
+                       .probe29(sys.dac_intf.sample_gen.pwl_gen.save_sarse_cmd_now),
+                       .probe30(sys.dac_intf.sample_gen.pwl_gen.push_dense_cmd_now),
+                       .probe31(sys.dac_intf.sample_gen.pwl_gen.batch_ptr),
+                       .probe32(sys.dac_intf.sample_gen.pwl_gen.dense_line_in),
+                       .probe33(sys.dac_intf.sample_gen.pwl_gen.dense_line_out),
+                       .probe34(sys.dac_intf.sample_gen.pwl_gen.gen_mode),
+                       .probe35(sys.dac_intf.sample_gen.pwl_gen.sbram_next),
+                       .probe36(sys.dac_intf.sample_gen.pwl_gen.dbram_next),
+                       .probe37(sys.dac_intf.sample_gen.pwl_gen.dbram_gen_addr),
+                       .probe38(sys.dac_intf.sample_gen.pwl_gen.sbram_gen_addr));
                         
                        
                        

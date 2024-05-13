@@ -65,13 +65,14 @@ def plot_path(coords,simple_plot=True,desired_period=None):
 
 
 mv = max_voltage
-coords = [(0,0), (300,300), (300,1000),(0,5800), (0, 6500)]
-# coords = [(0,0), (5,5), (10,10), (15,16)]
+# coords = [(0,0), (mv,64), (mv,10500),(mv/4,11500), (mv/4,20000), (mv/2,24000),(mv/2,40000), (0,50000), (0,65000)]
+coords = [(0,0), (100,100), (0, 200), (200,300),(0,400),(0,500)]
 
 
-simple_plot = False
+simple_plot = True
 desired_period = None
 fpga_cmds = plot_path(coords,simple_plot=simple_plot,desired_period=desired_period)
+print(fpga_cmds)
 fpga_cmds.reverse()
 print()
 print(c.rtl_cmd_formatter(fpga_cmds),len(fpga_cmds))
