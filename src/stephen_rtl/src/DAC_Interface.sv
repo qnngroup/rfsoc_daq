@@ -70,7 +70,7 @@ module DAC_Interface (input wire ps_clk,dac_clk,ps_rst, dac_rst,
 	           .dac0_rdy(dac0_rdy),
 	           .resp(resp_in),.resp_valid(resp_in_valid),
 	           .transfer_rdy(resp_transfer_rdy), .transfer_done(resp_transfer_done),
-	           .dac_batch(dac_batch),.valid_dac_batch(valid_dac_batch),
+	           .dac_batch(dac_batch_out),.valid_dac_batch(valid_dac_batch),
 	           .pwl_dma_if(pwl_dma_if));
 
 	always_ff @(posedge ps_clk) begin
