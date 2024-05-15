@@ -84,7 +84,7 @@ mv = max_voltage
 coords = [(0,0), (100,100), (0, 200), (0,500)]
 
 
-simple_plot = False
+simple_plot = True
 desired_period = None
 fpga_cmds = plot_path(coords,simple_plot=simple_plot,desired_period=desired_period)
 print(fpga_cmds)

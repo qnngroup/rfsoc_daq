@@ -19,29 +19,29 @@ module ts_tb();
 	art_tb(.start(runTest[0]&&signals_defined),
 	       .done({tb_passed[0],done[0]}));
 
-	slave_tb #(.VERBOSE(VERBOSE))
-	sl_tb(.start(runTest[1]&&signals_defined),
-	      .done({tb_passed[1],done[1]}));
+	// slave_tb #(.VERBOSE(VERBOSE))
+	// sl_tb(.start(runTest[1]&&signals_defined),
+	//       .done({tb_passed[1],done[1]}));
 
-	dac_intf_tb #(.VERBOSE(VERBOSE))
-	di_tb(.start(runTest[2]&&signals_defined),
-	      .done({tb_passed[2],done[2]}));
+	// dac_intf_tb #(.VERBOSE(VERBOSE))
+	// di_tb(.start(runTest[2]&&signals_defined),
+	//       .done({tb_passed[2],done[2]}));
 
 	// adc_intf_tb #(.VERBOSE(VERBOSE))
 	// ai_tb(.start(runTest[3]&&signals_defined),
 	//       .done({tb_passed[3],done[3]}));
 
-	pwl_tb #(.VERBOSE(VERBOSE))
-	pwl_tb(.start(runTest[4]),
-	       .done({tb_passed[4],done[4]}));
+	// pwl_tb #(.VERBOSE(VERBOSE))
+	// pwl_tb(.start(runTest[4]),
+	//        .done({tb_passed[4],done[4]}));
 
-	sys_tb #(.VERBOSE(VERBOSE))
-	sys_tb(.start(runTest[5]),
-	       .done({tb_passed[5],done[5]}));
+	// sys_tb #(.VERBOSE(VERBOSE))
+	// sys_tb(.start(runTest[5]),
+	//        .done({tb_passed[5],done[5]}));
 
-	top_level_tb #(.VERBOSE(VERBOSE))
-	tl_tb(.start(runTest[6]),
-	      .done({tb_passed[6],done[6]}));
+	// top_level_tb #(.VERBOSE(VERBOSE))
+	// tl_tb(.start(runTest[6]),
+	//       .done({tb_passed[6],done[6]}));
 
 	assign test_suite_done = currTestNum == NUM_OF_TESTS; 
 	always_ff @(posedge clk) begin

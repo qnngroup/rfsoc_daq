@@ -237,6 +237,7 @@ module axi_recieve_transmit_tb #(parameter VERBOSE = 1)(input wire start, output
         rst = 0; 
         `flash_sig(rst); 
         while (~start) #1; 
+        #100;
         if (VERBOSE) $display("\n############ Starting Axi-Recieve/Transmit Tests ############");
         #100;
         while (testState != DONE && timeout_cntr < TIMEOUT) #10;

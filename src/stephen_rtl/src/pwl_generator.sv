@@ -26,7 +26,8 @@ module pwl_generator #(parameter DMA_DATA_WIDTH, parameter SAMPLE_WIDTH, paramet
 	logic sbram_next;
 	logic valid_sparse_line, sbram_write_rdy;
 	logic[$clog2(DENSE_BRAM_DEPTH)-1:0] dbram_addr, dbram_gen_addr; 
-	logic[BATCH_SIZE-1:0][SAMPLE_WIDTH-1:0] dense_line_in;
+	logic[BATCH_SIZE-1:0][SAMPLE_WIDTH-1:0] dense_batch_in;
+	logic[BATCH_SIZE:0][SAMPLE_WIDTH-1:0] dense_line_in;
 	logic dense_nxt_bram_bit;
 	logic[BATCH_SIZE-1:0][SAMPLE_WIDTH-1:0] intrp_batch;
 	logic push_dense_cmd_now, save_sparse_cmd_now;
@@ -63,7 +64,7 @@ module pwl_generator #(parameter DMA_DATA_WIDTH, parameter SAMPLE_WIDTH, paramet
 
 	bram_interface #(.DATA_WIDTH(BATCH_WIDTH+1), .BRAM_DEPTH(DENSE_BRAM_DEPTH), .BRAM_DELAY(BRAM_DELAY))
 	dense_bramint(.clk(clk), .rst(rst),
-	               .addr(dbram_addr), .line_in({dense_nxt_bram_bit,dense_line_in}),
+	               .addr(dbram_addr), .line_in(dense_line_in),
 	               .we(dbram_we), .en(dbram_en),
 	               .generator_mode(gen_mode), .rst_gen_mode(rst_gen_mode),
 	               .next(dbram_next),
@@ -86,6 +87,7 @@ module pwl_generator #(parameter DMA_DATA_WIDTH, parameter SAMPLE_WIDTH, paramet
 		else nxt_bram = (curr_bram)? sparse_line_out[0] : dense_batch_out[BATCH_WIDTH]; 
 		push_dense_cmd_now = curr_dma_valid && (nxt_dma_valid || curr_is_last) && ~curr_dma_sb;
 		save_sparse_cmd_now = curr_dma_valid && (nxt_dma_valid || curr_is_last) && curr_dma_sb; 
+		dense_line_in = {dense_nxt_bram_bit,dense_batch_in};
 		
 		if (pwlState < SETUP_GEN_MODE) begin
 			intrp_x = curr_dma_x;
@@ -114,7 +116,7 @@ module pwl_generator #(parameter DMA_DATA_WIDTH, parameter SAMPLE_WIDTH, paramet
 		if (rst) begin
 			{sbram_addr, dbram_addr, regions_stored, regions_sent} <= 0; 
 			{sbram_next, dbram_next} <= 0;
-			{sparse_line_in, dense_line_in, dense_nxt_bram_bit, batch_ptr} <= 0;
+			{sparse_line_in, dense_batch_in, dense_nxt_bram_bit, batch_ptr} <= 0;
 			{dbram_we, dbram_en} <= 0; 
 			{sbram_we, sbram_en} <= 0;  
 			{first_sb,curr_bram} <= 0; 
@@ -196,7 +198,7 @@ module pwl_generator #(parameter DMA_DATA_WIDTH, parameter SAMPLE_WIDTH, paramet
 				STORE_DENSE_WAVE: begin
 					if (dbram_we) dbram_addr <= (dbram_addr == DENSE_BRAM_DEPTH-1)? 0 : dbram_addr + 1; 
 					if (valid_intrp_out) begin
-						dense_line_in[batch_ptr+:BATCH_SIZE] <= intrp_batch;
+						dense_batch_in[batch_ptr+:BATCH_SIZE] <= intrp_batch;
 						if (batch_ptr + intrp_out_dt == BATCH_SIZE) begin
 							{dbram_we, dbram_en} <= 3;
 							dense_nxt_bram_bit <= intrp_out_nxt_sb;
@@ -367,7 +369,9 @@ module pwl_generator #(parameter DMA_DATA_WIDTH, parameter SAMPLE_WIDTH, paramet
 	assign test13 = batch_out[13];
 	assign test14 = batch_out[14];
 	assign test15 = batch_out[15];
-	
+	assign testBit1 = batch_out[0] == 88;
+	assign testBit2 = batch_out[4] == 100;
+	assign testBit3 = testBit1 && testBit2;
 endmodule 
 
 `default_nettype wire

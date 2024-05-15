@@ -3,7 +3,7 @@
 import mem_layout_pkg::*;
 
 module sys_probe_tb();
-    localparam BUFF_LEN = 7;
+    localparam BUFF_LEN = 11;
     
     logic ps_clk,ps_rst,ps_rstn;
     logic dac_clk,dac_rst,dac_rstn;
