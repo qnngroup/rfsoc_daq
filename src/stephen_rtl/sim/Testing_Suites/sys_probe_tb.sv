@@ -13,7 +13,7 @@ module sys_probe_tb();
     logic[3:0] ps_axi_wstrb;
     logic[63:0] pwl_data;
     logic[7:0] pwl_tkeep;
-    logic[15:0] dma_timer;
+    logic[15:0] dma_timer, timer_limit;
     logic pwl_last, pwl_valid, pwl_ready; 
     logic raddr_valid_packet, waddr_valid_packet, wdata_valid_packet, rdata_valid_out, wresp_valid_out;
     logic ps_wresp_rdy,ps_read_rdy, ps_write_rdy,ps_awrite_rdy,ps_aread_rdy; 
@@ -23,16 +23,18 @@ module sys_probe_tb();
     logic pl_rstn;
     logic[12:0] testReg; 
     logic[BUFF_LEN-1:0][`DMA_DATA_WIDTH-1:0] dma_buff;
+    // logic[6:0][3:0] delays = {2'd11, 2'd12, 2'd12, 2'd1, 2'd1, 2'd1, 2'd12};
+    logic[6:0][1:0] delays = {2'd1, 2'd2, 2'd2, 2'd1, 2'd1, 2'd1, 2'd2};
     logic[$clog2(BUFF_LEN)-1:0] dma_i; 
     logic send_dma_data,set_seeds,run_pwl,halt_dac,run_trig; 
     enum logic[1:0] {IDLE_D, SEND_DMA_DATA,HOLD_CMD,DMA_WAIT} dmaState;
     enum logic[1:0] {IDLE_T, SET_SEEDS,WRESP,ERROR} dacTestState;
 
-    assign dma_buff = {48'd24, 48'd2267738472456, 48'd140737484096481, 48'd140733193388417, 48'd140733193388048, 48'd134415307178000, 48'd10682753};
+    assign dma_buff = {48'd609, 48'd16, 48'd38654640144, 48'd382252023969, 48'd433791631384, 48'd412316925960, 48'd65729}; 
     assign {ps_wresp_rdy,ps_read_rdy,dac0_rdy,pwl_tkeep} = -1;
     assign ps_rstn = ~ps_rst;
     assign dac_rstn = ~dac_rst;
-    assign pwl_last = dma_i == BUFF_LEN-1;
+    assign pwl_last = dma_i == BUFF_LEN && pwl_valid;
 
     ps_interface ps_interface(.ps_clk(ps_clk),.ps_rstn(ps_rstn), .pl_rstn(pl_rstn),
                               .dac_clk(dac_clk),.dac_rstn(dac_rstn),
@@ -106,36 +108,27 @@ module sys_probe_tb();
         end else begin
             case(dmaState)
                 IDLE_D: begin 
-                    if (send_dma_data) begin
-                        pwl_valid <= 1;
-                        pwl_data <= dma_buff[dma_i];
-                        dmaState <= SEND_DMA_DATA;
-                    end
+                    if (send_dma_data) dmaState <= SEND_DMA_DATA;                        
                 end 
                 SEND_DMA_DATA: begin
-                    if (pwl_ready) begin                         
-                        // pwl_data <= dma_buff[dma_i+1];                                                
-                        if (dma_i == BUFF_LEN-1) begin 
-                            dmaState <= (send_dma_data)? DMA_WAIT : IDLE_D;
-                            dma_i <= 0; 
-                            {pwl_data,pwl_valid} <= 0;
-                        end 
-                        // else dma_i <= dma_i + 1;
-                        else begin
-                            dmaState <= HOLD_CMD;
-                            pwl_valid <= 0; 
-                        end 
-
+                    if (dma_i == BUFF_LEN) begin 
+                        dmaState <= (send_dma_data)? DMA_WAIT : IDLE_D;
+                        dma_i <= 0; 
+                        {pwl_data,pwl_valid} <= 0;
+                    end else begin
+                        pwl_valid <= 1;
+                        pwl_data <= dma_buff[dma_i];
+                        timer_limit <= delays[dma_i];
+                        dma_i <= dma_i + 1; 
+                        dmaState <= HOLD_CMD;
                     end 
                 end 
                 HOLD_CMD: begin
-                    if (dma_timer == 100) begin
-                        dma_i <= dma_i + 1;
+                    if (dma_timer >= timer_limit && ~pwl_valid) begin
                         dma_timer <= 0;
-                        pwl_valid <= 1; 
-                        pwl_data <= dma_buff[dma_i+1];
                         dmaState <= SEND_DMA_DATA;
                     end else dma_timer <= dma_timer+1; 
+                    if (pwl_ready) pwl_valid <= 0;
                 end 
                 DMA_WAIT: begin
                     if (~send_dma_data) dmaState <= IDLE_D; 
@@ -168,28 +161,28 @@ module sys_probe_tb();
         #1000;
         `flash_sig(send_dma_data);
         #100;
-        `flash_sig(set_seeds);
-        while (~rtl_dac_valid) #10;
-        #500;
-        `flash_sig(halt_dac);
-        while (rtl_dac_valid) #10;
-        #500;
-        `flash_sig(set_seeds);
-        while (~rtl_dac_valid) #10;
-        #100
+        // `flash_sig(set_seeds);
+        // while (~rtl_dac_valid) #10;
+        // #500;
+        // `flash_sig(halt_dac);
+        // while (rtl_dac_valid) #10;
+        // #500;
+        // `flash_sig(set_seeds);
+        // while (~rtl_dac_valid) #10;
+        // #100
         `flash_sig(run_pwl);
         #5000
-        `flash_sig(halt_dac);
-        #5000;
-        `flash_sig(run_trig);
-        #5000;
-        `flash_sig(set_seeds);
-        #5000;
-        `flash_sig(run_pwl);
-        #5000;
-        `flash_sig(run_trig);
-        #5000;
-        `flash_sig(halt_dac);
+        // `flash_sig(halt_dac);
+        // #5000;
+        // `flash_sig(run_trig);
+        // #5000;
+        // `flash_sig(set_seeds);
+        // #5000;
+        // `flash_sig(run_pwl);
+        // #5000;
+        // `flash_sig(run_trig);
+        // #5000;
+        // `flash_sig(halt_dac);
         #5000;
         $finish;
     end 

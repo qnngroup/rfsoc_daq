@@ -135,7 +135,7 @@ module pwl_generator #(parameter DMA_DATA_WIDTH, parameter SAMPLE_WIDTH, paramet
 					if (curr_dma_valid && ~nxt_dma_valid) dma_pipe[0] <= {dma.last,dma.valid,dma.data};
 					if (curr_dma_valid && nxt_dma_valid) dma_pipe <= {dma_pipe[0], {dma.last,dma.valid,dma.data}};
 				end else begin
-					if (curr_dma_valid && ~nxt_dma_valid && curr_is_last) dma_pipe[1] <= 0;
+					if (curr_dma_valid && ~nxt_dma_valid && curr_is_last && intrp_count == 0) dma_pipe[1] <= 0;
 					if (curr_dma_valid && nxt_dma_valid) dma_pipe <= {dma_pipe[0], {(DMA_DATA_WIDTH+2){1'b0}}};
 				end
 			end
@@ -154,7 +154,7 @@ module pwl_generator #(parameter DMA_DATA_WIDTH, parameter SAMPLE_WIDTH, paramet
 					if (~dma.ready) begin
 						if (intrp_count == 0) dma.ready <= 1; 						
 					end else 
-					if ((curr_dma_valid && nxt_dma_valid && curr_dma_sb)) dma.ready <= 0; 
+					if ((curr_dma_valid && dma.valid && curr_dma_sb)) dma.ready <= 0; 
 				end
 				if (curr_dma_valid && nxt_dma_valid && ~curr_dma_sb && nxt_dma_sb == 1) dma.ready <= 0;
 				else if (pwlState == STORE_DENSE_WAVE && ~valid_intrp_out) dma.ready <= 1;
@@ -349,7 +349,8 @@ module pwl_generator #(parameter DMA_DATA_WIDTH, parameter SAMPLE_WIDTH, paramet
 		end
 	end
 
-	logic[15:0] test0, test1, test2, test3, test4, test5, test6, test7, test8, test9, test10, test11, test12, test13, test14, test15;
+	logic[15:0] test0,test1,test2,test3,test4,test5,test6,test7,test8,test9,test10,test11,test12,test13,test14,test15;
+
 	assign test0 = batch_out[0];
 	assign test1 = batch_out[1];
 	assign test2 = batch_out[2];
