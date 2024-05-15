@@ -95,7 +95,7 @@ print(c.rtl_cmd_formatter(fpga_cmds),len(fpga_cmds))
 
 dli = [1,2,1,2,2,1]
 print(mk_delays(dli),"\n")
-print(assign_packed_probe(16,["batch_out","dense_line_in"],"gen_mode"))
+print(assign_packed_probe(16,["batch_out","intrp_batch"],"gen_mode"))
 
 
 

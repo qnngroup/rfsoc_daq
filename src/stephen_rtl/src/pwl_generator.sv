@@ -37,7 +37,7 @@ module pwl_generator #(parameter DMA_DATA_WIDTH, parameter SAMPLE_WIDTH, paramet
 	logic dbram_next;
 	logic gen_mode, rst_gen_mode;
 	logic valid_dense_batch, dbram_write_rdy;
-	logic[$clog2(BATCH_WIDTH)-1:0] batch_ptr; 
+	logic[$clog2(BATCH_SIZE)-1:0] batch_ptr; 
 	logic[INTERPOLATER_DELAY-1:0][SAMPLE_WIDTH+1:0] intrp_pipe; 
 	logic valid_intrp_out,nxt_valid_intrp_out;
 	logic[SAMPLE_WIDTH-1:0] intrp_out_dt;
@@ -195,7 +195,9 @@ module pwl_generator #(parameter DMA_DATA_WIDTH, parameter SAMPLE_WIDTH, paramet
 				STORE_DENSE_WAVE: begin
 					if (dbram_we) dbram_addr <= (dbram_addr == DENSE_BRAM_DEPTH-1)? 0 : dbram_addr + 1; 
 					if (valid_intrp_out) begin
-						dense_batch_in[batch_ptr+:BATCH_SIZE] <= intrp_batch;
+						for (int i = 0; i < BATCH_SIZE; i++) begin
+							if ((batch_ptr+i) < BATCH_SIZE) dense_batch_in[batch_ptr+i] <= intrp_batch[i];
+						end
 						if (batch_ptr + intrp_out_dt == BATCH_SIZE) begin
 							{dbram_we, dbram_en} <= 3;
 							dense_nxt_bram_bit <= intrp_out_nxt_sb;
