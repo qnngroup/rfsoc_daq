@@ -86,7 +86,7 @@ module pwl_generator #(parameter DMA_DATA_WIDTH, parameter SAMPLE_WIDTH, paramet
 		if (pwlState == HOLD_SPARSE_CMD) nxt_bram = nxt_bram_reg;
 		else nxt_bram = (curr_bram)? sparse_line_out[0] : dense_batch_out[BATCH_WIDTH]; 
 		push_dense_cmd_now = curr_dma_valid && (nxt_dma_valid || curr_is_last) && ~curr_dma_sb;
-		save_sparse_cmd_now = curr_dma_valid && (nxt_dma_valid || curr_is_last) && curr_dma_sb; 
+		save_sparse_cmd_now = curr_dma_valid && (nxt_dma_valid || curr_is_last) && curr_dma_sb && intrp_count == 0 && dma.ready; 
 		dense_line_in = {dense_nxt_bram_bit,dense_batch_in};
 		
 		if (pwlState < SETUP_GEN_MODE) begin
@@ -151,16 +151,13 @@ module pwl_generator #(parameter DMA_DATA_WIDTH, parameter SAMPLE_WIDTH, paramet
 			if (pwlState == IDLE) begin
 				if (run) dma.ready <= 0;
 				else dma.ready <= brams_writes_ready;
-			end else begin 
-				if (pwlState == DENSE_INTRP_WAIT || pwlState == STORE_DENSE_WAVE) begin
-					if (~dma.ready) begin
-						if (intrp_count == 0) dma.ready <= 1; 						
-					end else 
-					if ((curr_dma_valid && dma.valid && curr_dma_sb)) dma.ready <= 0; 
-				end
-				if (curr_dma_valid && nxt_dma_valid && ~curr_dma_sb && nxt_dma_sb == 1) dma.ready <= 0;
-				else if (pwlState == STORE_DENSE_WAVE && ~valid_intrp_out) dma.ready <= 1;
-			end 
+			end else  
+			if (pwlState == DENSE_INTRP_WAIT || pwlState == STORE_DENSE_WAVE) begin
+				if (~dma.ready) begin
+					if (intrp_count == 0) dma.ready <= 1; 						
+				end else
+				if ((curr_dma_valid && dma.valid && curr_dma_sb)) dma.ready <= 0; 
+			end
 
 			if (pwlState == HALT) done <= 0; 
 			else if (curr_is_last) done <= 1;
@@ -211,7 +208,7 @@ module pwl_generator #(parameter DMA_DATA_WIDTH, parameter SAMPLE_WIDTH, paramet
 						{dbram_we, dbram_en} <= 0;
 						if (intrp_count == 0) begin 
 							if (done && ~curr_dma_valid) pwlState <= HALT;
-							if (dma.ready && save_sparse_cmd_now) begin 
+							else if (dma.ready && save_sparse_cmd_now) begin 
 								{sbram_we, sbram_en} <= 3;
 								sparse_line_in <= {curr_dma_x,curr_dma_slope,curr_dma_dt,nxt_dma_sb[0]};
 								pwlState <= STORE_SPARSE_WAVE;
@@ -223,7 +220,7 @@ module pwl_generator #(parameter DMA_DATA_WIDTH, parameter SAMPLE_WIDTH, paramet
 				STORE_SPARSE_WAVE: begin
 					if (sbram_we) sbram_addr <= (sbram_addr == SPARSE_BRAM_DEPTH-1)? 0 : sbram_addr + 1;
 					if (done && ~curr_dma_valid) pwlState <= HALT;
-					if (push_dense_cmd_now) pwlState <= DENSE_INTRP_WAIT;
+					else if (push_dense_cmd_now) pwlState <= DENSE_INTRP_WAIT;
 					if (save_sparse_cmd_now) begin						
 						sparse_line_in <= {curr_dma_x,curr_dma_slope,curr_dma_dt,nxt_dma_sb[0]};
 						{sbram_we, sbram_en} <= 3;
@@ -353,25 +350,22 @@ module pwl_generator #(parameter DMA_DATA_WIDTH, parameter SAMPLE_WIDTH, paramet
 
 	logic[15:0] test0,test1,test2,test3,test4,test5,test6,test7,test8,test9,test10,test11,test12,test13,test14,test15;
 
-	assign test0 = batch_out[0];
-	assign test1 = batch_out[1];
-	assign test2 = batch_out[2];
-	assign test3 = batch_out[3];
-	assign test4 = batch_out[4];
-	assign test5 = batch_out[5];
-	assign test6 = batch_out[6];
-	assign test7 = batch_out[7];
-	assign test8 = batch_out[8];
-	assign test9 = batch_out[9];
-	assign test10 = batch_out[10];
-	assign test11 = batch_out[11];
-	assign test12 = batch_out[12];
-	assign test13 = batch_out[13];
-	assign test14 = batch_out[14];
-	assign test15 = batch_out[15];
-	assign testBit1 = batch_out[0] == 88;
-	assign testBit2 = batch_out[4] == 100;
-	assign testBit3 = testBit1 && testBit2;
+	assign test0 = (gen_mode)? batch_out[0] : dense_line_in[0];
+	assign test1 = (gen_mode)? batch_out[1] : dense_line_in[1];
+	assign test2 = (gen_mode)? batch_out[2] : dense_line_in[2];
+	assign test3 = (gen_mode)? batch_out[3] : dense_line_in[3];
+	assign test4 = (gen_mode)? batch_out[4] : dense_line_in[4];
+	assign test5 = (gen_mode)? batch_out[5] : dense_line_in[5];
+	assign test6 = (gen_mode)? batch_out[6] : dense_line_in[6];
+	assign test7 = (gen_mode)? batch_out[7] : dense_line_in[7];
+	assign test8 = (gen_mode)? batch_out[8] : dense_line_in[8];
+	assign test9 = (gen_mode)? batch_out[9] : dense_line_in[9];
+	assign test10 = (gen_mode)? batch_out[10] : dense_line_in[10];
+	assign test11 = (gen_mode)? batch_out[11] : dense_line_in[11];
+	assign test12 = (gen_mode)? batch_out[12] : dense_line_in[12];
+	assign test13 = (gen_mode)? batch_out[13] : dense_line_in[13];
+	assign test14 = (gen_mode)? batch_out[14] : dense_line_in[14];
+	assign test15 = (gen_mode)? batch_out[15] : dense_line_in[15];
 endmodule 
 
 `default_nettype wire

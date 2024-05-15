@@ -15,6 +15,7 @@ def flatten(li):
     return out 
 
 def mk_delays(dli):
+    dli.reverse()
     out = f"logic[{len(dli)-1}:0][{int(log2(max(dli)))}:0] delays = {{"
     for el in dli: out+= f"2'd{el}, "
     return out[:-2] + "};"
@@ -92,9 +93,9 @@ fpga_cmds.reverse()
 print()
 print(c.rtl_cmd_formatter(fpga_cmds),len(fpga_cmds))
 
-dli = [11,12,12,1,1,1,12]
+dli = [1,2,1,2,2,1]
 print(mk_delays(dli),"\n")
-print(assign_packed_probe(16,["batch_out"]))
+print(assign_packed_probe(16,["batch_out","dense_line_in"],"gen_mode"))
 
 
 

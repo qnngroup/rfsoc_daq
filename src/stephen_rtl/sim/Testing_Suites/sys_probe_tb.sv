@@ -3,7 +3,7 @@
 import mem_layout_pkg::*;
 
 module sys_probe_tb();
-    localparam BUFF_LEN = 11;
+    localparam BUFF_LEN = 7;
     
     logic ps_clk,ps_rst,ps_rstn;
     logic dac_clk,dac_rst,dac_rstn;
@@ -23,8 +23,7 @@ module sys_probe_tb();
     logic pl_rstn;
     logic[12:0] testReg; 
     logic[BUFF_LEN-1:0][`DMA_DATA_WIDTH-1:0] dma_buff;
-    // logic[6:0][3:0] delays = {2'd11, 2'd12, 2'd12, 2'd1, 2'd1, 2'd1, 2'd12};
-    logic[6:0][1:0] delays = {2'd1, 2'd2, 2'd2, 2'd1, 2'd1, 2'd1, 2'd2};
+    logic[5:0][1:0] delays = {2'd1, 2'd2, 2'd2, 2'd1, 2'd2, 2'd1};  
     logic[$clog2(BUFF_LEN)-1:0] dma_i; 
     logic send_dma_data,set_seeds,run_pwl,halt_dac,run_trig; 
     enum logic[1:0] {IDLE_D, SEND_DMA_DATA,HOLD_CMD,DMA_WAIT} dmaState;
