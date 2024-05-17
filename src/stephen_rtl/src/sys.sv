@@ -69,6 +69,10 @@ module sys(input wire ps_clk,ps_rst,dac_clk,dac_rst,
                    if (i == `BUFF_TIME_VALID_ID) rtl_wd_in[i] = 1; 
                    else rtl_wd_in[i] = adc_intf.buff_timestamp_reg[(i-`BUFF_TIME_BASE_ID)]; 
                end 
+           end else if (i == `PWL_PERIOD0_ID || i == `PWL_PERIOD1_ID) begin
+                rtl_write_reqs[i] = dac_intf.save_pwl_wave_period;
+                rtl_wd_in[i] = (i == `PWL_PERIOD1_ID)? dac_intf.pwl_wave_period[1] : dac_intf.pwl_wave_period[0]; 
+                rtl_read_reqs[i] = 0;
            end
            else {rtl_read_reqs[i], rtl_write_reqs[i], rtl_wd_in[i]} = 0;
        end

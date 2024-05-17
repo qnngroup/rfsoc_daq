@@ -4,7 +4,7 @@ def addAddr(el): addr_map[el[0]] = el[1]
 
 addr_map = {"rst":0x0, "seed_base": 0x4}
 addAddr(("seed_valid",addr_map['seed_base']+ 4*batch_size))
-addrs = ["triangle_wave", "hlt_dac", "dac_burst_size", "max_dac_burst_size", "scale_dac_out","dac1","dac2", "run_pwl", "buff_config", "buff_time_base"]
+addrs = ["triangle_wave", "hlt_dac", "dac_burst_size", "max_dac_burst_size", "scale_dac_out","dac1","dac2", "run_pwl", "pwl_period0", "pwl_period1","buff_config", "buff_time_base"]
 [addAddr((addrs[i],addr_map['seed_valid'] + 4*(i+1))) for i in range(len(addrs))]
 addAddr(("buff_time_valid",addr_map["buff_time_base"]+4*buff_samples))
 addAddr(("chan_mux_base",addr_map["buff_time_valid"]+4))

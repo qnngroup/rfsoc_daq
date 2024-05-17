@@ -6,6 +6,7 @@ from sys import path
 path.insert(0, r'C:\Users\skand\OneDrive\Documents\GitHub\rfsoc_daq\src\stephen_rtl\Python_Files/cython_files')
 import pwl_wrapper_python as p
 import pwl_wrapper as c 
+from random import randrange as rr 
 
 def flatten(li):
     out = []
@@ -14,10 +15,15 @@ def flatten(li):
         else: out.append(el)
     return out 
 
-def mk_delays(dli):
-    dli.reverse()
-    out = f"logic[{len(dli)-1}:0][{int(log2(max(dli)))}:0] delays = {{"
-    for el in dli: out+= f"2'd{el}, "
+def mk_delays(dli = None,n = 10, delay_range=(0,5)):
+    if dli:
+        dli.reverse()
+    else:       
+        dli = []
+        for i in range(n): dli.append(rr(delay_range[0], delay_range[1]))
+    bit_width = int(log2(max(dli)))
+    out = f"logic[{len(dli)-1}:0][{bit_width-1}:0] delays = {{"
+    for el in dli: out+= f"{bit_width}'d{el}, "
     return out[:-2] + "};"
 
 def assign_packed_probe(probe_len, names, cond=None):
@@ -81,21 +87,21 @@ def plot_path(coords,simple_plot=True,desired_period=None):
 
 
 mv = max_voltage
-# coords = [(0,0), (mv,64), (mv,10500),(mv/4,11500), (mv/4,20000), (mv/2,24000),(mv/2,40000), (0,50000), (0,65000)]
-coords = [(0,0), (100,100), (0, 200), (0,500)]
+# coords = [(0,0), (mv,64), (mv,1050),(mv/4,1150), (mv/4,2000), (mv/2,2400),(mv/2,3000), (0,4000), (0,4500)]
+coords = [(0,0), (800,100), (0,500), (1500, 800), (1500,900),(0, 1000), (0,1500)]
 
 
 simple_plot = True
 desired_period = None
 fpga_cmds = plot_path(coords,simple_plot=simple_plot,desired_period=desired_period)
-print(fpga_cmds)
+print("\n",fpga_cmds)
 fpga_cmds.reverse()
 print()
 print(c.rtl_cmd_formatter(fpga_cmds),len(fpga_cmds))
 
 dli = [1,2,1,2,2,1]
-print(mk_delays(dli),"\n")
-print(assign_packed_probe(16,["batch_out","intrp_batch"],"gen_mode"))
+print(mk_delays(n=len(fpga_cmds),delay_range=(0,150)),"\n")
+# print(assign_packed_probe(16,["batch_out","intrp_batch"],"gen_mode"))
 
 
 
