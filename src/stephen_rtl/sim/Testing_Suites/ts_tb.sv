@@ -41,7 +41,7 @@ module ts_tb();
 
 	// top_level_tb #(.VERBOSE(VERBOSE))
 	// tl_tb(.start(runTest[6]),
-	//       .done({tb_passed[6],done[6]}));
+	      // .done({tb_passed[6],done[6]}));
 
 	assign test_suite_done = currTestNum == NUM_OF_TESTS; 
 	always_ff @(posedge clk) begin

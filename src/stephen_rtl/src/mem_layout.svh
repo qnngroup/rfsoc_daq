@@ -122,6 +122,8 @@
         `define is_RTL_BIGREG(index) ((index >= `BUFF_TIME_BASE_ID && index <= `BUFF_TIME_VALID_ID) || index == `PWL_PERIOD1_ID || index == `PWL_PERIOD0_ID) 
         `define is_PS_VALID(index)   (index == `PS_SEED_VALID_ID || index == `CHAN_MUX_VALID_ID  || index == `SDC_VALID_ID)
         `define is_RTL_VALID(index)  (index == `BUFF_TIME_VALID_ID)
+
+        //Tasks
     endpackage 
 
 `endif

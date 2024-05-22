@@ -11,6 +11,6 @@ interface Recieve_Transmit_IF #(parameter BUS_WIDTH = 32, parameter DATA_WIDTH =
     assign sent_data = send && trans_rdy; 
 
     modport transmit_bus(input dev_rdy, data_to_send, send, output packet, valid_pack, trans_rdy);
-    modport receive_bus (input valid_pack, packet, output data, valid_data); 
+    modport receive_bus (input valid_pack, packet, got_pack, output data, valid_data); 
 endinterface
 
