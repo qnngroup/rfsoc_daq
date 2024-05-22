@@ -3,7 +3,8 @@
 import mem_layout_pkg::*;
 
 module axi_recieve_transmit_tb #(parameter VERBOSE = 1)(input wire start, output logic[1:0] done);
-	localparam TOTAL_TESTS = `ADDR_NUM + 19; 
+	// localparam NUM_OF_TESTS = `ADDR_NUM + 19; 
+	localparam NUM_OF_TESTS = 4; 
 	localparam TIMEOUT = 10_000;
 
 	logic clk, rst;
@@ -142,11 +143,11 @@ module axi_recieve_transmit_tb #(parameter VERBOSE = 1)(input wire start, output
 					if (test_num < `ADDR_NUM + 18) begin 
 						if (wa_if.valid_data || wd_if.valid_data) begin
 							test_num <= test_num + 1;
-							testState <= (test_num == TOTAL_TESTS-1)? DONE : TEST; 
+							testState <= (test_num == NUM_OF_TESTS-1)? DONE : TEST; 
 						end
 					end else begin
 						test_num <= test_num + 1;
-						testState <= (test_num == TOTAL_TESTS-1)? DONE : TEST; 
+						testState <= (test_num == NUM_OF_TESTS-1)? DONE : TEST; 
 					end
 				end 
 				DONE: begin 
@@ -232,34 +233,66 @@ module axi_recieve_transmit_tb #(parameter VERBOSE = 1)(input wire start, output
 	    #5;  
 	    clk = !clk;
 	end
+
+	task run_tb(input string tb_name, 
+                  input string test_names [NUM_OF_TESTS-1:0],
+                  input logic[NUM_OF_TESTS-1:0][1:0] test_conditions);     
+		curr_test_num = 0;                                 
+        if (VERBOSE) $display("\n############ Starting %s Tests ############", tb_name);
+        repeat (10) @(posedge clk);
+        while (curr_test_num != NUM_OF_TESTS) begin 
+            $write("%c[1;31m",27); 
+            $display("\n%s Tests Timed out on test %d!", test_names[curr_test_num], curr_test_num);
+            $write("%c[0m",27);
+            @(posedge clk); 
+            curr_test_num = curr_test_num + 1; 
+        end 
+        #100; 
+        $display("Done");
+	endtask
+
+    string test_names [NUM_OF_TESTS-1:0] = {"Test 1", "Test 2", "Test 3", "etc"};
+    logic[NUM_OF_TESTS-1:0][1:0] test_conditions;
+    logic[$clog2(NUM_OF_TESTS):0] curr_test_num;
     initial begin
         clk = 0;
         rst = 0; 
-        `flash_sig(rst); 
         while (~start) #1; 
-        if (VERBOSE) $display("\n############ Starting Axi-Recieve/Transmit Tests ############");
-        #100;
-        while (testState != DONE && timeout_cntr < TIMEOUT) #10;
-        if (timeout_cntr < TIMEOUT) begin
-	        if (testsFailed != 0) begin 
-	        	if (VERBOSE) $write("%c[1;31m",27); 
-	        	if (VERBOSE) $display("\nAxi-Recieve/Transmit Tests Failed :((\n");
-	        	if (VERBOSE) $write("%c[0m",27);
-	        end else begin 
-	        	if (VERBOSE) $write("%c[1;32m",27); 
-	        	if (VERBOSE) $display("\nAxi-Recieve/Transmit Tests Passed :))\n");
-	        	if (VERBOSE) $write("%c[0m",27); 
-	        end
-	        #100; 
-		end else begin
-	    	$write("%c[1;31m",27); 
-	        $display("\nAxi-Recieve/Transmi Tests Timed out on test %d!\n", test_num);
-	        $write("%c[0m",27);
-	    end
+        run_tb("Axi-Recieve/Transmit", test_names, test_conditions);
+        // `flash_sig(rst); 
+        // while (~start) #1; 
+        // if (VERBOSE) $display("\n############ Starting  Tests ############");
+        // #100;
+        // while (testState != DONE && timeout_cntr < TIMEOUT) #10;
+        // if (timeout_cntr < TIMEOUT) begin
+	    //     if (testsFailed != 0) begin 
+	    //     	if (VERBOSE) $write("%c[1;31m",27); 
+	    //     	if (VERBOSE) $display("\nAxi-Recieve/Transmit Tests Failed :((\n");
+	    //     	if (VERBOSE) $write("%c[0m",27);
+	    //     end else begin 
+	    //     	if (VERBOSE) $write("%c[1;32m",27); 
+	    //     	if (VERBOSE) $display("\nAxi-Recieve/Transmit Tests Passed :))\n");
+	    //     	if (VERBOSE) $write("%c[0m",27); 
+	    //     end
+	    //     #100; 
+		// end else begin
+	    // 	$write("%c[1;31m",27); 
+	    //     $display("\nAxi-Recieve/Transmi Tests Timed out on test %d!\n", test_num);
+	    //     $write("%c[0m",27);
+	    // end
 	    #100; 
+	    $display("Done again");
+	    done = 3;
     end 
 
 endmodule 
 
 `default_nettype wire
 
+/*
+Test bench expectations: I'd like a class or set of tasks that do the following:
+
+1. One object gets called in one initial begin loop; it takes in a tb name and a vector of test names, as well as a timeout limit. 
+It cycles through each test and waits for any condition to enter. It prints statements based on that and exits. 
+2. This is just my usual testing strucuture because it makes sense to me and it very flexible but idk how to standardize it. 
+*/

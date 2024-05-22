@@ -156,10 +156,10 @@ def test_coords(coords,do_plot=True,show_batches=False,simple_plot=False, ignore
     return path,passed,wrong,intvc,intvp
 ##############################################################################################################################################
 
-# test_num = int(1e2)
+# test_num = int(5e3)
 # nxt_perc = 10
 # t0 = time()
-# n = 200
+# n = 50
 # intvcs,intvps = [],[]
 # for i in range(test_num):
 #     perc = (i/test_num)*100
@@ -189,10 +189,14 @@ def test_coords(coords,do_plot=True,show_batches=False,simple_plot=False, ignore
 # print(f"\nTest time:\n{round(time()-t0,2)} s")
 
 
-coords = [(0,0), (300,300), (300,1000),(0,5800), (0, 6500)]
+# coords = [(0,0), (300,300), (350,1000),(0,1800), (500, 2000), (0, 2010)]
+coords = [(0,0), (300,300), (350,1000),(0,1800)]
 coords.reverse()
 intvp,py_fpga_cmds = p.main(coords)
 path = c.fpga_to_pwl(py_fpga_cmds)
-print(path)
-
-
+waves = c.decode_pwl_cmds(path)
+flat_wave = flatten(waves)
+split = lambda li: ([el[0] for el in li],[el[1] for el in li])
+x,t = split(coords)
+plt.scatter(t,x)
+plt.plot(flat_wave)
