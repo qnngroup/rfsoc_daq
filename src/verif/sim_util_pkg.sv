@@ -21,31 +21,121 @@ package sim_util_pkg;
   endclass
 
   typedef enum {DEFAULT=0, VERBOSE=1, DEBUG=2} verbosity_t;
+  typedef enum {GREEN=32, RED=31, DEFAULT_COLOR=33} color_t; 
 
   class debug;
 
     verbosity_t verbosity;
     int error_count;
+    int test_num, total_tests;
+    bit test_complete;  
 
-    function new (verbosity_t v);
+    function new (verbosity_t v, int total_tests_in = 0);
       verbosity = v;
+      {error_count,test_num,test_complete} = 0;
+      total_tests = total_tests_in;
+      fork 
+
+      join_none       
+    endfunction
+
+    task automatic timeout_watcher(ref logic clk, input int TIMEOUT);
+      fork   
+        begin : timeout_thread 
+          int timeout_counter, curr_test;
+          timeout_counter = 0; 
+          curr_test = test_num;
+          while (timeout_counter < TIMEOUT) begin
+            if (test_complete) break; 
+              if (curr_test != test_num) begin
+                  timeout_counter = 0; 
+                  curr_test = test_num; 
+              end 
+              else timeout_counter++;
+              @(posedge clk);
+          end
+          if (~test_complete) fatalc($sformatf("### TIMEOUT ON TEST %0d ###", test_num));
+        end 
+      join_none
+    endtask 
+
+    task automatic check_test(input bit cond, input bit has_parts = 0);
+      string passed_string = (cond)? "PASSED" : "FAILED"; 
+      color_t string_color = (cond)? GREEN : RED;  
+      if (test_num >= total_tests) fatalc($sformatf("### TEST NUMBER %0d EXCEEDS EXPECTED LIMIT %0d ###",test_num, total_tests));
+      if (~cond && ~has_parts) error_count++;
+      displayc($sformatf("\n### TEST %0d %s ###", test_num, passed_string), string_color, VERBOSE);
+      test_num++;
+      if (test_num == total_tests) begin 
+        test_complete = 1;  
+        finishc();
+      end 
+    endtask
+
+    function void clear_error_count();
       error_count = 0;
     endfunction
 
-    task display(input string message, input verbosity_t message_verbosity);
-      if (verbosity >= message_verbosity) begin
-        unique case (message_verbosity)
-          DEFAULT:  $display("%s", message);
-          VERBOSE:  $display("  %s", message);
-          DEBUG:    $display("    %s", message);
-        endcase
+    function bit disp_test_part(input int test_part, input bit cond, input string msg);
+      color_t string_color = (cond)? GREEN : RED; 
+      displayc($sformatf("%0d_%0d", test_num, test_part), string_color, DEBUG,1);
+      if (~cond) displayc($sformatf("(-)\n(%s) ", msg), string_color, DEBUG,1);
+      else displayc($sformatf("(+) "), string_color, DEBUG,1);
+      if (~cond) error_count++;
+      return cond;
+    endfunction
+
+    function void displayc(input string msg, input color_t msg_color = DEFAULT_COLOR, input verbosity_t msg_verbosity=DEFAULT, input bit do_write = 0);
+        $write("%c[1;%0dm",27,msg_color); 
+        display(msg, msg_verbosity,do_write);
+        $write("%c[0m",27); 
+    endfunction 
+
+    task fatalc(input string msg);
+      $write("%c[1;%0dm",27,RED); 
+      $display("\n### ENCOUNTERED A FATAL ERROR, STOPPING SIMULATION NOW ###\n%s",msg);
+      $write("%c[0m",27);
+      $fatal(1,"");
+    endtask
+
+    task finishc();
+      if (error_count == 0) begin
+        $write("%c[1;%0dm",27,GREEN); 
+        $display("\n### FINISHED WITH ZERO ERRORS ###\n\n");
+        $write("%c[0m",27);
+        $finish;
+      end else begin
+        $write("%c[1;%0dm",27,RED); 
+        $display("\n### FINISHED WITH %0d ERRORS ###\n\n", error_count);
+        $write("%c[0m",27);
+        $fatal(1,"");
       end
     endtask
+
+    function void display(input string message, input verbosity_t message_verbosity, input bit do_write = 0);
+      if (verbosity >= message_verbosity) begin
+        unique case (message_verbosity)
+          DEFAULT:begin 
+            if (do_write) $write("%s", message);
+            else $display("%s", message);
+          end 
+          VERBOSE:begin 
+            if (do_write) $write("%s", message);
+            else $display("%s", message);
+          end 
+          DEBUG:  begin 
+            if (do_write) $write("%s", message);
+            else $display("%s", message);
+          end 
+        endcase
+      end
+    endfunction
 
     task error(input string message);
       $error(message);
       error_count = error_count + 1;
     endtask
+
 
     task fatal(input string message);
       $display("### ENCOUNTERED A FATAL ERROR, STOPPING SIMULATION NOW ###");

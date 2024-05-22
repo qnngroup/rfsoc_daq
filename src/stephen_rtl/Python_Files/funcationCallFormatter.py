@@ -72,19 +72,12 @@ def formatFuncCall(s,fName = "functionName"):
     return out+align(body)
 
 
-st = """module bram_interface #(parameter DATA_WIDTH, parameter BRAM_DEPTH, parameter BRAM_DELAY)
-			 		  		  (input wire clk, rst,
-			 		  		   input wire [$clog2(BRAM_DEPTH)-1:0] addr,
-			 		  		   input wire[DATA_WIDTH-1:0] line_in,
-			 		  		   input wire we, en, 
-			 		  		   input wire generator_mode, rst_gen_mode, 
-			 		  		   input wire next, 
-			 		  		   output logic[DATA_WIDTH-1:0] line_out,
-			 		  		   output logic valid_line_out,
-			 		  		   output logic[$clog2(BRAM_DEPTH)-1:0] generator_addr,
-			 		  		   output logic write_rdy);
+st = """module axi_receive #(parameter BUS_WIDTH = 32, parameter DATA_WIDTH = 16)
+					(input wire clk, rst,
+					 input wire is_addr,
+					 Recieve_Transmit_IF.receive_bus bus);
                  """
-fName = "sparse_bramint"
+fName = "dut_i"
 out= formatFuncCall(st,fName=fName)
 print(out)
 
