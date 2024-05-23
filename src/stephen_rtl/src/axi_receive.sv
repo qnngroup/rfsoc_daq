@@ -6,39 +6,32 @@ module axi_receive #(parameter BUS_WIDTH = 32, parameter DATA_WIDTH = 16)
 					(input wire clk, rst,
 					 input wire is_addr,
 					 Recieve_Transmit_IF.receive_bus bus);
+	logic[DATA_WIDTH-1:0] buff, mem_id;
+	logic[BUS_WIDTH-1:0] bus_buff;
+	logic[$clog2((BUS_WIDTH > DATA_WIDTH)? BUS_WIDTH : DATA_WIDTH):0] buff_ptr;
 
-	enum logic{IDLE, RECEIVING} axiR_state;
-	logic[DATA_WIDTH-1:0] buff;
-	logic[`A_DATA_WIDTH-1:0] ps_addr_req; 
-	logic[$clog2(`MEM_SIZE)-1:0] mem_id; 
+	always_comb begin 
+		if (BUS_WIDTH > DATA_WIDTH) mem_id = (bus_buff <= `ABS_ADDR_CEILING)? `ADDR2ID(bus_buff) : `ABS_ID_CEILING; 
+		else mem_id = (buff <= `ABS_ADDR_CEILING)? `ADDR2ID(buff) : `ABS_ID_CEILING; 
 
-	assign mem_id = (ps_addr_req <= `ABS_ADDR_CEILING)? `ADDR2ID(ps_addr_req) : `ABS_ID_CEILING; 
-	assign ps_addr_req = buff; 
-	assign bus.valid_data = (axiR_state == RECEIVING && ~bus.valid_pack);
-	assign bus.data = (bus.valid_data)? ( (is_addr)? mem_id : buff ) : 0;
+		bus.valid_data = buff_ptr >= DATA_WIDTH; 
+		if (bus.valid_data) bus.data = (is_addr)? mem_id : buff;
+		else bus.data = 0; 
+	end
 	
 	always_ff @(posedge clk) begin
-		if (rst) begin
-			buff <= 0;
-			axiR_state <= IDLE;
-		end else begin
-			case (axiR_state) 
-				IDLE: begin
-					if (bus.valid_pack) begin
-						if (BUS_WIDTH >= DATA_WIDTH) buff <= bus.packet;
-						else buff <= {buff[DATA_WIDTH-1-BUS_WIDTH:0],bus.packet}; 
-						axiR_state <= RECEIVING;
-					end
+		if (rst) {buff,bus_buff,buff_ptr} <= 0;
+		else begin
+			if (bus.valid_pack) begin
+				if (BUS_WIDTH > DATA_WIDTH) begin 
+					bus_buff <= bus.packet; 
+					buff <= bus.packet[DATA_WIDTH-1:0];
 				end 
-
-				RECEIVING: begin
-					if (bus.valid_pack) begin
-						if (BUS_WIDTH >= DATA_WIDTH) buff <= bus.packet;
-						else buff <= {buff[DATA_WIDTH-1-BUS_WIDTH:0],bus.packet}; 
-					end 
-					else axiR_state <= IDLE;
-				end 
-			endcase 
+				else buff[buff_ptr+:BUS_WIDTH] <= bus.packet;
+				buff_ptr <= (bus.valid_data)? BUS_WIDTH : buff_ptr + BUS_WIDTH; 
+			end else begin
+				if (buff_ptr >= DATA_WIDTH) buff_ptr <= 0; 
+			end
 		end
 	end
 

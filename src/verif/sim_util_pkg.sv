@@ -26,19 +26,25 @@ package sim_util_pkg;
   class debug;
 
     verbosity_t verbosity;
-    int error_count;
+    protected int error_count;
+    protected bit test_complete; 
+    protected string test_name;  
     int test_num, total_tests;
-    bit test_complete;  
 
-    function new (verbosity_t v, int total_tests_in = 0);
+    function new (verbosity_t v, int total_tests_in = 0, string test_name_in = "XXX");
       verbosity = v;
       {error_count,test_num,test_complete} = 0;
       total_tests = total_tests_in;
+      test_name = test_name_in;
       fork 
 
       join_none       
     endfunction
 
+    function string get_test_name();
+      return test_name;
+    endfunction 
+    
     task automatic timeout_watcher(ref logic clk, input int TIMEOUT);
       fork   
         begin : timeout_thread 
@@ -76,10 +82,18 @@ package sim_util_pkg;
       error_count = 0;
     endfunction
 
+    function void set_error_count(input int err);
+      error_count = err;
+    endfunction
+
+    function int get_error_count();
+      return error_count;
+    endfunction
+
     function bit disp_test_part(input int test_part, input bit cond, input string msg);
       color_t string_color = (cond)? GREEN : RED; 
-      displayc($sformatf("%0d_%0d", test_num, test_part), string_color, DEBUG,1);
-      if (~cond) displayc($sformatf("(-)\n(%s) ", msg), string_color, DEBUG,1);
+      displayc($sformatf("%0d_%0d", test_num, test_part), string_color, DEBUG,.do_write(1));
+      if (~cond) displayc($sformatf("(-)\n(%s) ", msg), string_color, DEBUG,.do_write(1));
       else displayc($sformatf("(+) "), string_color, DEBUG,1);
       if (~cond) error_count++;
       return cond;
@@ -92,22 +106,16 @@ package sim_util_pkg;
     endfunction 
 
     task fatalc(input string msg);
-      $write("%c[1;%0dm",27,RED); 
-      $display("\n### ENCOUNTERED A FATAL ERROR, STOPPING SIMULATION NOW ###\n%s",msg);
-      $write("%c[0m",27);
+      displayc($sformatf("\n### ENCOUNTERED A FATAL ERROR, STOPPING %s TEST NOW ###\n%s",test_name, msg), RED, DEFAULT);
       $fatal(1,"");
     endtask
 
     task finishc();
       if (error_count == 0) begin
-        $write("%c[1;%0dm",27,GREEN); 
-        $display("\n### FINISHED WITH ZERO ERRORS ###\n\n");
-        $write("%c[0m",27);
+        displayc($sformatf("\n### FINISHED %s TEST WITH ZERO ERRORS ###\n\n",test_name), GREEN, DEFAULT);
         $finish;
       end else begin
-        $write("%c[1;%0dm",27,RED); 
-        $display("\n### FINISHED WITH %0d ERRORS ###\n\n", error_count);
-        $write("%c[0m",27);
+        displayc($sformatf("\n### FINISHED %s TEST WITH %0d ERRORS ###\n\n",test_name, error_count), RED, DEFAULT);
         $fatal(1,"");
       end
     endtask

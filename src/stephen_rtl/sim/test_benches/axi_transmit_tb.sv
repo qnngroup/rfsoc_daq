@@ -2,7 +2,7 @@
 `timescale 1ns / 1ps
 import mem_layout_pkg::*;
 
-module axi_recieve_tb #(parameter BUS_WIDTH, parameter DATA_WIDTH)
+module axi_transmit_tb #(parameter BUS_WIDTH, parameter DATA_WIDTH)
 					   (input wire clk, rst,
 					    Recieve_Transmit_IF intf);
 	
@@ -11,10 +11,10 @@ module axi_recieve_tb #(parameter BUS_WIDTH, parameter DATA_WIDTH)
 	int samples_to_send = 0;
 	int samples_recieved = 0; 
 
-	axi_transmit #(.BUS_WIDTH(BUS_WIDTH), .DATA_WIDTH(DATA_WIDTH))
-	transmitter(.clk(clk), .rst(rst),
-	            .bus(intf.transmit_bus));
-
+	axi_receive #(.BUS_WIDTH(BUS_WIDTH), .DATA_WIDTH(DATA_WIDTH))
+	receiver(.clk(clk), .rst(rst),
+	         .is_addr(is_addr),
+	         .bus(bus));
 	always @(posedge clk) begin
 		if (intf.valid_data) begin
 			data_out.push_front(intf.data);
@@ -27,24 +27,11 @@ module axi_recieve_tb #(parameter BUS_WIDTH, parameter DATA_WIDTH)
 		for (int i = 0; i < samples_to_send; i++) data_in.push_front($urandom());
 	endtask
 
-	task automatic prepare_addr_samples();
-		samples_to_send = `ADDR_NUM;
-		for (int i = 0; i < samples_to_send; i++) data_in.push_front(addrs[i]);
+	task automatic send_samples(input bit high_dev_rdy = 1);
+		
 	endtask
 
-	task automatic send_samples();
-		intf.dev_rdy <= 1;
-		{intf.data_to_send,intf.send} <= 0; 
-		@(posedge clk);
-		for (int i = samples_to_send-1; i >= 0; i--) begin
-			intf.data_to_send <= data_in[i]; 
-			`flash_signal(intf.send,clk)
-			while (~intf.trans_rdy) @(posedge clk);
-		end
-		repeat(5) @(posedge clk);
-	endtask
-
-	function bit check_samples(inout sim_util_pkg::debug debug, input bit is_addr = 0);
+	function bit check_samples(inout sim_util_pkg::debug debug);
 		int err_in = debug.get_error_count();	
 		if (~debug.disp_test_part(1,samples_recieved != 0,"No samples recieved")) return 0;
 		if (~debug.disp_test_part(2,samples_recieved == samples_to_send,"Sample mismatch")) return 0;

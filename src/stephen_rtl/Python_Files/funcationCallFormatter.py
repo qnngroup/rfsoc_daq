@@ -77,7 +77,7 @@ st = """module axi_receive #(parameter BUS_WIDTH = 32, parameter DATA_WIDTH = 16
 					 input wire is_addr,
 					 Recieve_Transmit_IF.receive_bus bus);
                  """
-fName = "dut_i"
+fName = "receiver"
 out= formatFuncCall(st,fName=fName)
 print(out)
 
