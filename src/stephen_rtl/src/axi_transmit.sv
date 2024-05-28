@@ -22,7 +22,7 @@ module axi_transmit #(parameter BUS_WIDTH = 32, parameter DATA_WIDTH = 32)
 				end else bus.packet = 0;
 			end 
 			TRANSMITTING: begin
-				bus.valid_pack = 1; 
+				bus.valid_pack = bus.dev_rdy; 
 				bus.packet = (trans_ptr + BUS_WIDTH > DATA_WIDTH)? data_to_send_buff[DATA_WIDTH-1:LAST_EVEN_CUT] : data_to_send_buff[trans_ptr+:BUS_WIDTH]; 
 			end
 		endcase	
@@ -34,10 +34,10 @@ module axi_transmit #(parameter BUS_WIDTH = 32, parameter DATA_WIDTH = 32)
 		end else begin
 			if (bus.send && ~bus.dev_rdy) send_buff <= 1;
 			else if (send_buff && bus.dev_rdy) send_buff <= 0;  
+			if (bus.send) data_to_send_buff <= bus.data_to_send; 
 			case (axiT_state)
 				IDLE: begin
 					if (transmit) begin
-						data_to_send_buff <= bus.data_to_send; 
 						trans_ptr <= BUS_WIDTH;
 						if (BUS_WIDTH >= DATA_WIDTH) bus.packet <= (bus.send)? bus.data_to_send[DATA_WIDTH-1:0] : data_to_send_buff[DATA_WIDTH-1:0];
 						else begin
@@ -48,10 +48,12 @@ module axi_transmit #(parameter BUS_WIDTH = 32, parameter DATA_WIDTH = 32)
 				end 
 
 				TRANSMITTING: begin
-					if (trans_ptr+BUS_WIDTH >= DATA_WIDTH) begin
-						trans_ptr <= 0;
-						axiT_state <= IDLE;
-					end else trans_ptr <= trans_ptr + BUS_WIDTH;
+					if (bus.dev_rdy) begin 
+						if (trans_ptr+BUS_WIDTH >= DATA_WIDTH) begin
+							trans_ptr <= 0;
+							axiT_state <= IDLE;
+						end else trans_ptr <= trans_ptr + BUS_WIDTH;
+					end
 				end 
 			endcase
 		end 

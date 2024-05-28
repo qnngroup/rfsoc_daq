@@ -1,7 +1,7 @@
 `timescale 1ns / 1ps
 `default_nettype none
 import mem_layout_pkg::*;
-
+//Try removing clr_rd_out... not sure why I added that
 module axi_slave #(parameter A_BUS_WIDTH=2, parameter A_DATA_WIDTH=5, parameter WD_BUS_WIDTH=8, parameter WD_DATA_WIDTH=32)
 				  (input wire clk, rst,
 				   Recieve_Transmit_IF waddr_if,
@@ -72,8 +72,8 @@ module axi_slave #(parameter A_BUS_WIDTH=2, parameter A_DATA_WIDTH=5, parameter 
 	always_comb begin
 		for (int i = 0; i < `MEM_SIZE; i++) begin
 			if (`is_RTLPOLL(i)) begin
-				rtl_read_reqs_full[i] = fresh_bits[i] && rtl_rdy[i]; 
-				rtl_write_reqs_full[i] = 0; 
+				rtl_read_reqs_full[i] = (fresh_bits[i] && rtl_rdy[i]) || rtl_read_reqs[i]; 
+				rtl_write_reqs_full[i] = rtl_write_reqs[i]; 
 			end else if (`is_READONLY(i)) begin
 				rtl_read_reqs_full[i] = rtl_read_reqs[i]; 
 				rtl_write_reqs_full[i] = 0; 
@@ -117,7 +117,7 @@ module axi_slave #(parameter A_BUS_WIDTH=2, parameter A_DATA_WIDTH=5, parameter 
 
 			if (can_ps_write) begin
 				if (~(`is_READONLY(windex_out))) begin
-					if (windex_out >= `MEM_TEST_BASE_ID && windex_out < `MEM_TEST_END_ADDR) begin
+					if (windex_out >= `MEM_TEST_BASE_ID && windex_out < `MEM_TEST_END_ID) begin
 						mem_map[windex_out] <= wdata_out-10;
 						fresh_bits[windex_out] <= 1; 
 						if (windex_out != `MEM_TEST_END_ID-1) begin

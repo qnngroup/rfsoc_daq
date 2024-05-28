@@ -10,6 +10,8 @@ module axi_recieve_tb #(parameter BUS_WIDTH, parameter DATA_WIDTH)
 	logic [DATA_WIDTH-1:0] data_in [$];
 	int samples_to_send = 0;
 	int samples_recieved = 0; 
+	logic clk2; 
+	assign clk2 = clk;
 
 	axi_transmit #(.BUS_WIDTH(BUS_WIDTH), .DATA_WIDTH(DATA_WIDTH))
 	transmitter(.clk(clk), .rst(rst),
@@ -21,6 +23,11 @@ module axi_recieve_tb #(parameter BUS_WIDTH, parameter DATA_WIDTH)
 			samples_recieved++;
 		end 
 	end
+
+	task automatic init();
+		{intf.dev_rdy, intf.data_to_send, intf.send} <= 0;
+		@(posedge clk);
+	endtask 
 
 	task automatic prepare_rand_samples(input int n_samples);
 		samples_to_send = n_samples;
@@ -38,8 +45,8 @@ module axi_recieve_tb #(parameter BUS_WIDTH, parameter DATA_WIDTH)
 		@(posedge clk);
 		for (int i = samples_to_send-1; i >= 0; i--) begin
 			intf.data_to_send <= data_in[i]; 
-			`flash_signal(intf.send,clk)
-			while (~intf.trans_rdy) @(posedge clk);
+			flash_signal(intf.send,clk2);
+			while (~intf.valid_data) @(posedge clk);
 		end
 		repeat(5) @(posedge clk);
 	endtask

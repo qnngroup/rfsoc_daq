@@ -72,12 +72,22 @@ def formatFuncCall(s,fName = "functionName"):
     return out+align(body)
 
 
-st = """module axi_receive #(parameter BUS_WIDTH = 32, parameter DATA_WIDTH = 16)
-					(input wire clk, rst,
-					 input wire is_addr,
-					 Recieve_Transmit_IF.receive_bus bus);
+st = """module axi_slave #(parameter A_BUS_WIDTH=2, parameter A_DATA_WIDTH=5, parameter WD_BUS_WIDTH=8, parameter WD_DATA_WIDTH=32)
+				  (input wire clk, rst,
+				   Recieve_Transmit_IF waddr_if,
+				   Recieve_Transmit_IF wdata_if,
+				   Recieve_Transmit_IF raddr_if,
+				   Recieve_Transmit_IF rdata_if,
+				   Recieve_Transmit_IF wresp_if,
+				   Recieve_Transmit_IF rresp_if, 
+				   input wire[`MEM_SIZE-1:0] rtl_write_reqs, rtl_read_reqs,
+				   input wire clr_rd_out, 
+				   input wire[`MEM_SIZE-1:0] rtl_rdy, 
+               	   input wire[`MEM_SIZE-1:0][WD_DATA_WIDTH-1:0] rtl_wd_in,
+               	   output logic[`MEM_SIZE-1:0][WD_DATA_WIDTH-1:0] rtl_rd_out,
+               	   output logic[`MEM_SIZE-1:0] fresh_bits);
                  """
-fName = "receiver"
+fName = "dut_i"
 out= formatFuncCall(st,fName=fName)
 print(out)
 

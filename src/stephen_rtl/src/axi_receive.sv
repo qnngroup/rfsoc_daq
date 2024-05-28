@@ -7,11 +7,10 @@ module axi_receive #(parameter BUS_WIDTH = 32, parameter DATA_WIDTH = 16)
 					 input wire is_addr,
 					 Recieve_Transmit_IF.receive_bus bus);
 	logic[DATA_WIDTH-1:0] buff, mem_id;
-	logic[BUS_WIDTH-1:0] bus_buff;
 	logic[$clog2((BUS_WIDTH > DATA_WIDTH)? BUS_WIDTH : DATA_WIDTH):0] buff_ptr;
 
 	always_comb begin 
-		if (BUS_WIDTH > DATA_WIDTH) mem_id = (bus_buff <= `ABS_ADDR_CEILING)? `ADDR2ID(bus_buff) : `ABS_ID_CEILING; 
+		if (BUS_WIDTH > DATA_WIDTH) mem_id = (buff <= `ABS_ADDR_CEILING)? `ADDR2ID(buff) : `ABS_ID_CEILING; 
 		else mem_id = (buff <= `ABS_ADDR_CEILING)? `ADDR2ID(buff) : `ABS_ID_CEILING; 
 
 		bus.valid_data = buff_ptr >= DATA_WIDTH; 
@@ -20,13 +19,10 @@ module axi_receive #(parameter BUS_WIDTH = 32, parameter DATA_WIDTH = 16)
 	end
 	
 	always_ff @(posedge clk) begin
-		if (rst) {buff,bus_buff,buff_ptr} <= 0;
+		if (rst) {buff,buff_ptr} <= 0;
 		else begin
 			if (bus.valid_pack) begin
-				if (BUS_WIDTH > DATA_WIDTH) begin 
-					bus_buff <= bus.packet; 
-					buff <= bus.packet[DATA_WIDTH-1:0];
-				end 
+				if (BUS_WIDTH > DATA_WIDTH) buff <= bus.packet[DATA_WIDTH-1:0];
 				else buff[buff_ptr+:BUS_WIDTH] <= bus.packet;
 				buff_ptr <= (bus.valid_data)? BUS_WIDTH : buff_ptr + BUS_WIDTH; 
 			end else begin

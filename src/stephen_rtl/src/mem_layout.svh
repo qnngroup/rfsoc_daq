@@ -119,6 +119,13 @@
         `define is_PS_VALID(index)   (index == `PS_SEED_VALID_ID || index == `CHAN_MUX_VALID_ID  || index == `SDC_VALID_ID)
         `define is_RTL_VALID(index)  (index == `BUFF_TIME_VALID_ID)
         
+        task automatic flash_signal(ref logic sig, ref logic clk);
+            sig = 0;
+            @(posedge clk);
+            sig = 1;
+            @(posedge clk);
+            sig = 0;
+        endtask 
     endpackage 
 
 

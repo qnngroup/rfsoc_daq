@@ -30,30 +30,36 @@ package sim_util_pkg;
     protected bit test_complete; 
     protected string test_name;  
     int test_num, total_tests;
+    int timeout_counter;
+    bit timeout_reset;
 
     function new (verbosity_t v, int total_tests_in = 0, string test_name_in = "XXX");
       verbosity = v;
       {error_count,test_num,test_complete} = 0;
+      {timeout_counter, timeout_reset} = 0;       
       total_tests = total_tests_in;
       test_name = test_name_in;
-      fork 
-
-      join_none       
     endfunction
 
     function string get_test_name();
       return test_name;
     endfunction 
     
+    task automatic reset_timeout(ref logic clk);
+      timeout_reset = 1;
+      @(posedge clk);
+      timeout_reset = 0;
+      @(posedge clk);
+    endtask 
+
     task automatic timeout_watcher(ref logic clk, input int TIMEOUT);
       fork   
         begin : timeout_thread 
-          int timeout_counter, curr_test;
-          timeout_counter = 0; 
+          int curr_test;
           curr_test = test_num;
           while (timeout_counter < TIMEOUT) begin
             if (test_complete) break; 
-              if (curr_test != test_num) begin
+              if ((curr_test != test_num) || timeout_reset) begin
                   timeout_counter = 0; 
                   curr_test = test_num; 
               end 
@@ -112,10 +118,10 @@ package sim_util_pkg;
 
     task finishc();
       if (error_count == 0) begin
-        displayc($sformatf("\n### FINISHED %s TEST WITH ZERO ERRORS ###\n\n",test_name), GREEN, DEFAULT);
+        displayc($sformatf("\n### FINISHED %0d TESTS OF %s MODULE WITH ZERO ERRORS ###\n\n",test_num,test_name), GREEN, DEFAULT);
         $finish;
       end else begin
-        displayc($sformatf("\n### FINISHED %s TEST WITH %0d ERRORS ###\n\n",test_name, error_count), RED, DEFAULT);
+        displayc($sformatf("\n### FINISHED %0d TESTS OF %s MODULE WITH %0d ERRORS ###\n\n",test_num,test_name, error_count), RED, DEFAULT);
         $fatal(1,"");
       end
     endtask
