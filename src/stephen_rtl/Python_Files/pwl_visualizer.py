@@ -1,10 +1,12 @@
 import matplotlib.pyplot as plt
 from matplotlib.font_manager import FontProperties
 from fpga_constants import *
+from math import log2
 from sys import path
 path.insert(0, r'C:\Users\skand\OneDrive\Documents\GitHub\rfsoc_daq\src\stephen_rtl\Python_Files/cython_files')
 import pwl_wrapper_python as p
 import pwl_wrapper as c 
+from random import randrange as rr 
 
 def flatten(li):
     out = []
@@ -12,6 +14,26 @@ def flatten(li):
         if type(el) == list: out += flatten(el)
         else: out.append(el)
     return out 
+
+def mk_delays(dli = None,n = 10, delay_range=(0,5)):
+    if dli:
+        dli.reverse()
+    else:       
+        dli = []
+        for i in range(n): dli.append(rr(delay_range[0], delay_range[1]))
+    bit_width = int(log2(max(dli)))
+    out = f"logic[{len(dli)-1}:0][{bit_width-1}:0] delays = {{"
+    for el in dli: out+= f"{bit_width}'d{el}, "
+    return out[:-2] + "};"
+
+def assign_packed_probe(probe_len, names, cond=None):
+    if len(names) == 2: template = lambda i: f"assign test{i} = ({cond})? {names[0]}[{i}] : {names[1]}[{i}];\n"
+    else: template = lambda i: f"assign test{i} = {names[0]}[{i}];\n"
+    out = "logic[15:0] "
+    for i in range(probe_len): out+=f"test{i},"
+    out = out[:-1]+";\n\n"
+    for i in range(probe_len): out+=template(i)
+    return out
 
 def plot_path(coords,simple_plot=True,desired_period=None):
     if desired_period:
@@ -73,6 +95,7 @@ coords = [(0,0), (18,18), (36,27), (0, 63)]
 simple_plot = True
 desired_period = None
 fpga_cmds = plot_path(coords,simple_plot=simple_plot,desired_period=desired_period)
+print("\n",fpga_cmds)
 fpga_cmds.reverse()
 print()
 

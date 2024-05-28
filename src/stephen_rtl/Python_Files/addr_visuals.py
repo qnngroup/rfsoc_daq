@@ -44,8 +44,7 @@ print("RTL MMIO Indices:\n"+tabsize(index_str))
 
 
 rtl_addrs = """
-      `define PS_BASE_ADDR            32'h9000_0000 
-        `define RST_ADDR                (`PS_BASE_ADDR)
+         `define RST_ADDR                (`PS_BASE_ADDR)
         `define PS_SEED_BASE_ADDR       (`RST_ADDR + 4)
         `define PS_SEED_VALID_ADDR      (`PS_SEED_BASE_ADDR + 4 * (`BATCH_SAMPLES))
         `define TRIG_WAVE_ADDR          (`PS_SEED_VALID_ADDR + 4)
@@ -56,8 +55,10 @@ rtl_addrs = """
         `define DAC1_ADDR               (`PS_SEED_VALID_ADDR + 4*6)
         `define DAC2_ADDR               (`PS_SEED_VALID_ADDR + 4*7)
         `define RUN_PWL_ADDR            (`PS_SEED_VALID_ADDR + 4*8)
-        `define BUFF_CONFIG_ADDR        (`PS_SEED_VALID_ADDR + 4*9)
-        `define BUFF_TIME_BASE_ADDR     (`PS_SEED_VALID_ADDR + 4*10)
+        `define PWL_PERIOD0_ADDR        (`PS_SEED_VALID_ADDR + 4*9)
+        `define PWL_PERIOD1_ADDR        (`PS_SEED_VALID_ADDR + 4*10)
+        `define BUFF_CONFIG_ADDR        (`PS_SEED_VALID_ADDR + 4*11)
+        `define BUFF_TIME_BASE_ADDR     (`PS_SEED_VALID_ADDR + 4*12)
         `define BUFF_TIME_VALID_ADDR    (`BUFF_TIME_BASE_ADDR + 4*(`BUFF_SAMPLES))
         `define CHAN_MUX_BASE_ADDR      (`BUFF_TIME_VALID_ADDR + 4)
         `define CHAN_MUX_VALID_ADDR     (`CHAN_MUX_BASE_ADDR + 4*(`CHAN_SAMPLES))
