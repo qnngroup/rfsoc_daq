@@ -6,7 +6,7 @@
 module axi_transmit_test();
 	localparam TIMEOUT = 1000;
 	localparam TEST_NUM = 12*2; //12 with oscillating rdy, 12 with constant ready
-	localparam int PS_CLK_RATE_HZ = 100_000_000;
+	localparam int CLK_RATE_MHZ = 150;
 
 	sim_util_pkg::debug debug = new(sim_util_pkg::DEBUG,TEST_NUM,"AXI_TRANSMIT"); 
 
@@ -41,8 +41,8 @@ module axi_transmit_test();
 		debug.clear_error_count(); 
 	endtask 
 
-	always #(0.5s/PS_CLK_RATE_HZ) clk = ~clk;
 
+	always #(0.5s/(CLK_RATE_MHZ*1_000_000)) clk = ~clk;
 	initial begin
         $dumpfile("axi_transmit_test.vcd");
         $dumpvars(0,axi_transmit_test); 

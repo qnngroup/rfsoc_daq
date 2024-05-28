@@ -332,8 +332,8 @@ def fpga_to_pwl(fpga_cmds):
         pwl_cmds.append((x,slope,dt,sb))
     return pwl_cmds
 
-def rtl_cmd_formatter(fpga_cmds):
-    out = "assign dma_buff = {"
+def rtl_cmd_formatter(fpga_cmds): 
+    out = f"localparam BUFF_LEN = {len(fpga_cmds)};\nlogic[BUFF_LEN-1:0][DMA_DATA_WIDTH-1:0] dma_buff;\n dma_buff = {{"
     for el in fpga_cmds: out+=f"{dma_data_width}'d{el}, "
     out = out[:-2]+"};"
     return out 

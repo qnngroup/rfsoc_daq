@@ -1,7 +1,7 @@
 `timescale 1ns / 1ps
 `default_nettype none
 import mem_layout_pkg::*;
-//Try removing clr_rd_out... not sure why I added that
+
 module axi_slave #(parameter A_BUS_WIDTH=2, parameter A_DATA_WIDTH=5, parameter WD_BUS_WIDTH=8, parameter WD_DATA_WIDTH=32)
 				  (input wire clk, rst,
 				   Recieve_Transmit_IF waddr_if,

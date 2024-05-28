@@ -6,7 +6,7 @@
 module slave_test();
 	localparam TIMEOUT = 1000;
 	localparam TEST_NUM = 9*2 + 3; 
-	localparam int PS_CLK_RATE_HZ = 100_000_000;
+	localparam int CLK_RATE_MHZ = 150;
 
     sim_util_pkg::debug debug = new(sim_util_pkg::DEBUG,TEST_NUM,"SLAVE"); 
 
@@ -64,8 +64,7 @@ module slave_test();
         total_errors += debug.get_error_count();
         debug.clear_error_count(); 
     endtask 
-    bit here = 0;
-	always #(0.5s/PS_CLK_RATE_HZ) clk = ~clk;
+	always #(0.5s/(CLK_RATE_MHZ*1_000_000)) clk = ~clk;
 	initial begin
         $dumpfile("slave_test.vcd");
         $dumpvars(0,slave_test); 
@@ -106,7 +105,6 @@ module slave_test();
         tb_i.rtl_read(0,rdata);
         debug.disp_test_part(3,rdata == 250,"Error when writing at same time (2nd rtl read wrong)");
         //2. rtl writes immediately after ps; no conflict, should read rtl value
-        curr_err = debug.get_error_count();
         fork 
             wdata = $urandom();
             begin tb_i.ps_write(debug,`RST_ADDR, 350); end 
@@ -120,7 +118,6 @@ module slave_test();
         tb_i.ps_read(`RST_ADDR,rdata);
         debug.disp_test_part(5,rdata == wdata,"Error when rtl writes immediately after ps (ps read wrong)");
         //3. rtl writes immediately before ps; no conflict, should read ps value (rtl should read its own at first since the rtl read takes precedence over the ps write)
-        curr_err = debug.get_error_count();
         fork 
             wdata = $urandom();
             begin tb_i.ps_write(debug,`RST_ADDR, 450); end 
@@ -192,6 +189,8 @@ module slave_test();
         repeat(2) @(posedge clk);
         debug.disp_test_part(3,fresh_bits[`SCALE_DAC_OUT_ID] == 0,"Freshbits should have fallen");
         debug.disp_test_part(4,rtl_rd_out[`SCALE_DAC_OUT_ID] == 5,"Correct value not polled");
+        total_errors += debug.get_error_count();
+        debug.set_error_count(total_errors); 
         debug.check_test(curr_err == debug.get_error_count(), .has_parts(1));
 
         debug.fatalc("### SHOULD NOT BE HERE. CHECK TEST NUMBER ###");

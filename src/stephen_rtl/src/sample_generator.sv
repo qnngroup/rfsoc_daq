@@ -32,7 +32,7 @@ module sample_generator #(parameter CMD_WIDTH, parameter RESP_WIDTH, parameter S
 			LFSR #(.DATA_WIDTH(SAMPLE_WIDTH)) 
 			lfsr(.clk(clk), .rst(rst || set_seeds || halt),
 				 .seed(rand_seed[i]),
-				 .run(run_shift_regs && dac0_rdy),
+				 .run(run_shift_regs && dac0_rdy && ~set_seeds),
 				 .sample_out(rand_samples[i]));
 		end
 	endgenerate
@@ -57,20 +57,22 @@ module sample_generator #(parameter CMD_WIDTH, parameter RESP_WIDTH, parameter S
 		curr_resp = {0,pwl_rdy};
 		halt = (valid_cmd && ps_cmd[3]);
 		active_out = (run_shift_regs || run_trig_wav || run_pwl);
-		if (active_out) begin
+		if (active_out && ~set_seeds) begin
 			if (run_shift_regs) {dac_batch_in,valid_dac_batch_in} = {rand_samples,dac0_rdy};
 			else if (run_trig_wav) {dac_batch_in,valid_dac_batch_in} = {trig_out,dac0_rdy};
 			else if (run_pwl) {dac_batch_in,valid_dac_batch_in} = {pwl_batch_out,valid_pwl_batch};
 		end else {dac_batch_in,valid_dac_batch_in} = 0;
-		{valid_dac_batch,dac_batch}	= batch_pipe[DAC_STAGES-1];      
+		{valid_dac_batch,dac_batch}	= (dac0_rdy)? batch_pipe[DAC_STAGES-1] : 0;      
 	end 
 
 	always_ff @(posedge clk) begin
-		batch_pipe[DAC_STAGES-1:1] <= batch_pipe[DAC_STAGES-2:0]; 
-		batch_pipe[0] <= {valid_dac_batch_in,dac_batch_in}; 
+		if (dac0_rdy) begin 
+			batch_pipe[DAC_STAGES-1:1] <= batch_pipe[DAC_STAGES-2:0]; 
+			batch_pipe[0] <= {valid_dac_batch_in,dac_batch_in}; 
+		end 
 
 		if (rst || halt) begin
-			{rand_seed,run_shift_regs,run_trig_wav,run_pwl,resp,resp_valid}  <= 0; 
+			{rand_seed,run_shift_regs,run_trig_wav,run_pwl,resp,resp_valid,set_seeds}  <= 0; 
 		end else begin
 			if (transfer_rdy && resp != curr_resp) begin
 				resp <= curr_resp;

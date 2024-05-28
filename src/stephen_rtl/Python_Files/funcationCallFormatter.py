@@ -72,22 +72,17 @@ def formatFuncCall(s,fName = "functionName"):
     return out+align(body)
 
 
-st = """module axi_slave #(parameter A_BUS_WIDTH=2, parameter A_DATA_WIDTH=5, parameter WD_BUS_WIDTH=8, parameter WD_DATA_WIDTH=32)
-				  (input wire clk, rst,
-				   Recieve_Transmit_IF waddr_if,
-				   Recieve_Transmit_IF wdata_if,
-				   Recieve_Transmit_IF raddr_if,
-				   Recieve_Transmit_IF rdata_if,
-				   Recieve_Transmit_IF wresp_if,
-				   Recieve_Transmit_IF rresp_if, 
-				   input wire[`MEM_SIZE-1:0] rtl_write_reqs, rtl_read_reqs,
-				   input wire clr_rd_out, 
-				   input wire[`MEM_SIZE-1:0] rtl_rdy, 
-               	   input wire[`MEM_SIZE-1:0][WD_DATA_WIDTH-1:0] rtl_wd_in,
-               	   output logic[`MEM_SIZE-1:0][WD_DATA_WIDTH-1:0] rtl_rd_out,
-               	   output logic[`MEM_SIZE-1:0] fresh_bits);
+st = """module dac_intf_tb #(parameter MEM_SIZE, parameter DATA_WIDTH)
+					   (input wire ps_clk,dac_clk,ps_rst, dac_rst,
+					   	input wire dac_intf_rdy, 
+						output logic[MEM_SIZE-1:0] fresh_bits,
+						output logic[MEM_SIZE-1:0][DATA_WIDTH-1:0] read_resps,
+						output logic[$clog2(DATA_WIDTH)-1:0] scale_factor_in,
+						output logic halt,
+						output logic dac0_rdy, 
+						Axis_IF dma);
                  """
-fName = "dut_i"
+fName = "tb_i"
 out= formatFuncCall(st,fName=fName)
 print(out)
 

@@ -5,7 +5,7 @@ import mem_layout_pkg::*;
 module axi_recieve_test();
 	localparam TIMEOUT = 1000;
 	localparam TEST_NUM = 1*12+6; // 1 test for all plus 1 additional address tests for the 32 data widths
-	localparam int PS_CLK_RATE_HZ = 100_000_000;
+	localparam int CLK_RATE_MHZ = 150;
 
 	sim_util_pkg::debug debug = new(sim_util_pkg::DEBUG,TEST_NUM,"AXI_RECIEVE"); 
 
@@ -41,7 +41,7 @@ module axi_recieve_test();
 	endtask 
 
 
-	always #(0.5s/PS_CLK_RATE_HZ) clk = ~clk;
+	always #(0.5s/(CLK_RATE_MHZ*1_000_000)) clk = ~clk;
 	initial begin
         $dumpfile("axi_recieve_test.vcd");
         $dumpvars(0,axi_recieve_test); 

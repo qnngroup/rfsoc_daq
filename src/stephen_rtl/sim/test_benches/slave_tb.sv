@@ -28,76 +28,7 @@ module slave_tb #(parameter MEM_SIZE, parameter DATA_WIDTH, parameter ADDR_WIDTH
 		{rtl_rdy, wd_if.dev_rdy, wa_if.dev_rdy , ra_if.dev_rdy, rd_if.dev_rdy, wr_if.dev_rdy} <= -1;	
 		{clr_rd_out, rtl_write_reqs, rtl_read_reqs} <= 0;
 		@(posedge clk);
-	endtask 
-
-	task automatic oscillate_rdys(ref bit halt_osc);
-		bit[6:0][3:0] delay_timers;
-		fork 
-			begin
-				while (~halt_osc) begin
-					delay_timers[0] = $urandom_range(1,8);
-					wa_if.dev_rdy <= 0; 
-					for (int i = 0; i < delay_timers[0]; i++) @(posedge clk); 
-					wa_if.dev_rdy <= 1;
-					@(posedge clk); 
-				end
-			end
-			begin
-				while (~halt_osc) begin
-					delay_timers[1] = $urandom_range(1,8);
-					wd_if.dev_rdy <= 0; 
-					for (int i = 0; i < delay_timers[1]; i++) @(posedge clk); 
-					wd_if.dev_rdy <= 1;
-					@(posedge clk); 
-				end
-			end
-			begin
-				while (~halt_osc) begin
-					delay_timers[2] = $urandom_range(1,8);
-					ra_if.dev_rdy <= 0; 
-					for (int i = 0; i < delay_timers[2]; i++) @(posedge clk); 
-					ra_if.dev_rdy <= 1;
-					@(posedge clk); 
-				end
-			end
-			begin
-				while (~halt_osc) begin
-					delay_timers[3] = $urandom_range(1,8);
-					rd_if.dev_rdy <= 0; 
-					for (int i = 0; i < delay_timers[3]; i++) @(posedge clk); 
-					rd_if.dev_rdy <= 1;
-					@(posedge clk); 
-				end
-			end
-			begin
-				while (~halt_osc) begin
-					delay_timers[4] = $urandom_range(1,8);
-					wr_if.dev_rdy <= 0; 
-					for (int i = 0; i < delay_timers[4]; i++) @(posedge clk); 
-					wr_if.dev_rdy <= 1;
-					@(posedge clk); 
-				end
-			end
-			begin
-				while (~halt_osc) begin
-					delay_timers[5] = $urandom_range(1,8);
-					rr_if.dev_rdy <= 0; 
-					for (int i = 0; i < delay_timers[5]; i++) @(posedge clk); 
-					rr_if.dev_rdy <= 1;
-					@(posedge clk); 
-				end
-			end
-			begin
-				while (~halt_osc) begin
-					delay_timers[6] = $urandom_range(1,8);
-					rtl_rdy <= 0; 
-					for (int i = 0; i < delay_timers[6]; i++) @(posedge clk); 
-					rtl_rdy <= -1;
-					@(posedge clk); 
-				end
-			end
-		join_none
-	endtask 
+	endtask 	
 
 	task automatic ps_read(input logic[ADDR_WIDTH-1:0] addr, output logic[DATA_WIDTH-1:0] data);
 		ra_if.data_to_send <= addr; 
@@ -203,6 +134,76 @@ module slave_tb #(parameter MEM_SIZE, parameter DATA_WIDTH, parameter ADDR_WIDTH
 			end 
 		end
 	endtask
+
+	task automatic oscillate_rdys(ref bit halt_osc);
+		bit[6:0][3:0] delay_timers;
+		fork 
+			begin
+				while (~halt_osc) begin
+					delay_timers[0] = $urandom_range(1,8);
+					wa_if.dev_rdy <= 0; 
+					for (int i = 0; i < delay_timers[0]; i++) @(posedge clk); 
+					wa_if.dev_rdy <= 1;
+					@(posedge clk); 
+				end
+			end
+			begin
+				while (~halt_osc) begin
+					delay_timers[1] = $urandom_range(1,8);
+					wd_if.dev_rdy <= 0; 
+					for (int i = 0; i < delay_timers[1]; i++) @(posedge clk); 
+					wd_if.dev_rdy <= 1;
+					@(posedge clk); 
+				end
+			end
+			begin
+				while (~halt_osc) begin
+					delay_timers[2] = $urandom_range(1,8);
+					ra_if.dev_rdy <= 0; 
+					for (int i = 0; i < delay_timers[2]; i++) @(posedge clk); 
+					ra_if.dev_rdy <= 1;
+					@(posedge clk); 
+				end
+			end
+			begin
+				while (~halt_osc) begin
+					delay_timers[3] = $urandom_range(1,8);
+					rd_if.dev_rdy <= 0; 
+					for (int i = 0; i < delay_timers[3]; i++) @(posedge clk); 
+					rd_if.dev_rdy <= 1;
+					@(posedge clk); 
+				end
+			end
+			begin
+				while (~halt_osc) begin
+					delay_timers[4] = $urandom_range(1,8);
+					wr_if.dev_rdy <= 0; 
+					for (int i = 0; i < delay_timers[4]; i++) @(posedge clk); 
+					wr_if.dev_rdy <= 1;
+					@(posedge clk); 
+				end
+			end
+			begin
+				while (~halt_osc) begin
+					delay_timers[5] = $urandom_range(1,8);
+					rr_if.dev_rdy <= 0; 
+					for (int i = 0; i < delay_timers[5]; i++) @(posedge clk); 
+					rr_if.dev_rdy <= 1;
+					@(posedge clk); 
+				end
+			end
+			begin
+				while (~halt_osc) begin
+					delay_timers[6] = $urandom_range(1,8);
+					rtl_rdy <= 0; 
+					for (int i = 0; i < delay_timers[6]; i++) @(posedge clk); 
+					rtl_rdy <= -1;
+					@(posedge clk); 
+				end
+			end
+		join_none
+	endtask 
+	
 endmodule 
 
 `default_nettype wire

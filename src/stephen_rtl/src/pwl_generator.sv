@@ -156,8 +156,6 @@ module pwl_generator #(parameter DMA_DATA_WIDTH, parameter SAMPLE_WIDTH, paramet
 					end else 
 					if ((curr_dma_valid && nxt_dma_valid && curr_dma_sb)) dma.ready <= 0; 
 				end
-				if (curr_dma_valid && nxt_dma_valid && ~curr_dma_sb && nxt_dma_sb == 1) dma.ready <= 0;
-				else if (pwlState == STORE_DENSE_WAVE && ~valid_intrp_out) dma.ready <= 1;
 			end 
 
 			if (pwlState == HALT) done <= 0; 

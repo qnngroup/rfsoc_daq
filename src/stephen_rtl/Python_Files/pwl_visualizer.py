@@ -24,6 +24,7 @@ def plot_path(coords,simple_plot=True,desired_period=None):
     path = c.fpga_to_pwl(fpga_cmds)
     waves = c.decode_pwl_cmds(path)
     flat_wave = flatten(waves)
+    print(flat_wave)
     if desired_period:
         flat_wave = [(el/max_voltage)*100 for el in flat_wave]
         ts = [round((i*dac_T)/1e-6,3) for i in range(len(flat_wave))]
@@ -65,16 +66,23 @@ def plot_path(coords,simple_plot=True,desired_period=None):
 
 
 mv = max_voltage
-coords = [(0,0), (300,300), (300,1000),(0,5800), (0, 6500)]
+coords = [(0,0), (18,18), (36,27), (0, 63)]
 # coords = [(0,0), (5,5), (10,10), (15,16)]
 
 
-simple_plot = False
+simple_plot = True
 desired_period = None
 fpga_cmds = plot_path(coords,simple_plot=simple_plot,desired_period=desired_period)
 fpga_cmds.reverse()
 print()
-print(c.rtl_cmd_formatter(fpga_cmds),len(fpga_cmds))
+
+def rtl_cmd_formatter(fpga_cmds): 
+    out = f"localparam BUFF_LEN = {len(fpga_cmds)};\nlogic[BUFF_LEN-1:0][DMA_DATA_WIDTH-1:0] dma_buff;\n dma_buff = {{"
+    for el in fpga_cmds: out+=f"{dma_data_width}'d{el}, "
+    out = out[:-2]+"};"
+    return out 
+
+print(rtl_cmd_formatter(fpga_cmds))
 
 
 
