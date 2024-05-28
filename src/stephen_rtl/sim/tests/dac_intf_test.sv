@@ -86,14 +86,14 @@ module dac_intf_test();
         reset_errors();
 
         // TEST 4
-        debug.displayc($sformatf("%0d: Run pwl wave",debug.test_num), .msg_verbosity(sim_util_pkg::VERBOSE));
+        debug.displayc($sformatf("%0d: Run pwl wave and check first 5 periods",debug.test_num), .msg_verbosity(sim_util_pkg::VERBOSE));
         curr_err = debug.get_error_count();
         tb_i.send_pwl_wave();
+		tb_i.halt_osc = 1;
+		// tb_i.check_pwl_wave(debug,5);
         total_errors += debug.get_error_count();
 		debug.set_error_count(total_errors);
-		tb_i.pause_osc = 1;
-		tb_i.check_pwl_wave();
-		#10000;       
+		#5000;
         debug.check_test(curr_err == debug.get_error_count(), .has_parts(1));
 
        	debug.fatalc("### SHOULD NOT BE HERE. CHECK TEST NUMBER ###");

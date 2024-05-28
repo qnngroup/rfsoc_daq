@@ -291,7 +291,7 @@ cdef void mk_fpga_cmds(Tup_List* pwl_cmds, int n):
         set_item(pwl_cmds,i,&pwl_cmd)
     
 
-##################################### Tests  ############################################
+##################################### Useful Functions and Main  ############################################
 
 def create_c_coords_py(py_coords):
     cdef int size = len(py_coords)
@@ -305,17 +305,6 @@ def create_c_coords_py(py_coords):
         ct = {"x": x, "t": t}
         set_item(&tl,i,&ct)
     return tlw
-
-def decode_pwl_cmds(pwl_cmds):
-    wave = []
-    for x,slope,dt,_ in pwl_cmds:
-        t = 0
-        w = [] 
-        while t < dt:
-            w.append(x+slope*t)
-            t+=1 
-        wave.append(w)
-    return wave 
 
 def fpga_to_pwl(fpga_cmds):
     pwl_cmds = []
@@ -332,16 +321,32 @@ def fpga_to_pwl(fpga_cmds):
         pwl_cmds.append((x,slope,dt,sb))
     return pwl_cmds
 
-def rtl_cmd_formatter(fpga_cmds): 
-    out = f"localparam BUFF_LEN = {len(fpga_cmds)};\nlogic[BUFF_LEN-1:0][DMA_DATA_WIDTH-1:0] dma_buff;\n dma_buff = {{"
-    for el in fpga_cmds: out+=f"{dma_data_width}'d{el}, "
+def decode_pwl_cmds(pwl_cmds):
+    wave = []
+    batch = []
+    for x,slope,dt,sb in pwl_cmds:
+        t = 0
+        while (t < dt):
+            batch.append(x+slope*t)
+            if len(batch) == batch_size:
+                wave.append(batch)
+                batch = []
+            t+=1
+    return wave
+
+def expected_wave_formatter(pwl_cmds):
+    wave = decode_pwl_cmds(pwl_cmds)
+    out = f"logic[{len(wave)-1}:0][BATCH_SIZE-1:0][DATA_WIDTH-1:0] expected = {{"
+    wave.reverse()
+    for w in wave:
+        w.reverse()
+        out += "{"
+        for el in w: out+=f"16'd{el}, "
+        out = out[:-2] + "}, "
     out = out[:-2]+"};"
     return out 
     
 def get_bs(): return batch_size
-
-def pwl_to_py(li):
-    return []
 
 def main(coords):
     t0 = perf_counter() 

@@ -76,7 +76,7 @@ module sample_generator #(parameter CMD_WIDTH, parameter RESP_WIDTH, parameter S
 		end 
 
 		if (rst || halt) begin
-			{rand_seed,run_shift_regs,run_trig_wav,run_pwl,resp,resp_valid,set_seeds}  <= 0; 
+			{rand_seed,run_shift_regs,run_trig_wav,run_pwl,set_seeds,valid_dac_cmd,dac_cmd}  <= 0; 
 		end else begin
 			if (transfer_rdy && dac_cmd != curr_dac_cmd) begin
 				dac_cmd <= curr_dac_cmd;

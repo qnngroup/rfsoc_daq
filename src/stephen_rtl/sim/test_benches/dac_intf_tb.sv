@@ -19,11 +19,8 @@ module dac_intf_tb #(parameter MEM_SIZE, parameter DATA_WIDTH, parameter BATCH_S
 	logic ps_clk2, dac_clk2;
 	bit halt_osc = 0;
 	bit pause_osc = 0; 	
-	logic here;	
-	logic test;
-	logic[BATCH_SIZE-1:0][DATA_WIDTH-1:0] testwave = {{16'd15, 16'd14, 16'd13, 16'd12, 16'd11, 16'd10, 16'd9, 16'd8, 16'd7, 16'd6, 16'd5, 16'd4, 16'd3, 16'd2, 16'd1, 16'd0}};
-	// assign test = (dac_batch == testwave && valid_dac_batch);
 	assign {ps_clk2, dac_clk2} = {ps_clk, dac_clk};
+
 
 	task automatic init();
 		{dma.valid, dma.last, dma.data} <= 0;
@@ -93,9 +90,9 @@ module dac_intf_tb #(parameter MEM_SIZE, parameter DATA_WIDTH, parameter BATCH_S
 
 	task automatic send_pwl_wave();
 		bit[1:0] delay_timer;
-		localparam BUFF_LEN = 7;
+		localparam BUFF_LEN = 21; 
 		logic[BUFF_LEN-1:0][DMA_DATA_WIDTH-1:0] dma_buff;
-		dma_buff = {48'd2, 48'd68719411230, 48'd137438887969, 48'd158913724426, 48'd77309542418, 48'd68719542276, 48'd65569};
+		dma_buff = {48'd24, 48'd450971500552, 48'd3405909001569, 48'd3440268738576, 48'd3435973836816, 48'd3435973841057, 48'd3435973836828, 48'd3427383967748, 48'd678604899585, 48'd644245159952, 48'd644245094416, 48'd644245097761, 48'd644245094424, 48'd665719865352, 48'd1902670447169, 48'd1937030184976, 48'd1932735283216, 48'd1932735284257, 48'd1932735283228, 48'd1924145414148, 48'd66433}; 
 		notify_dac(`RUN_PWL_ID); 
 		for (int i = 0; i < BUFF_LEN; i++) begin
 			dma.data <= dma_buff[i];
@@ -109,13 +106,16 @@ module dac_intf_tb #(parameter MEM_SIZE, parameter DATA_WIDTH, parameter BATCH_S
 		end		
 	endtask  
 
-	task automatic check_pwl_wave();
-		logic[3:0][BATCH_SIZE-1:0][DATA_WIDTH-1:0] pwl_test_wave = {{16'd0, 16'd1, 16'd2, 16'd3, 16'd4, 16'd5, 16'd6, 16'd7, 16'd8, 16'd9, 16'd10, 16'd11, 16'd12, 16'd13, 16'd14, 16'd15}, {16'd16, 16'd17, 16'd18, 16'd19, 16'd20, 16'd21, 16'd22, 16'd23, 16'd24, 16'd25, 16'd26, 16'd27, 16'd28, 16'd29, 16'd30, 16'd31}, {16'd32, 16'd33, 16'd34, 16'd35, 16'd36, 16'd34, 16'd32, 16'd30, 16'd28, 16'd26, 16'd24, 16'd22, 16'd20, 16'd18, 16'd17, 16'd16}, {16'd15, 16'd14, 16'd13, 16'd12, 16'd11, 16'd10, 16'd9, 16'd8, 16'd7, 16'd6, 16'd5, 16'd4, 16'd3, 16'd2, 16'd1, 16'd0}};
-		while (1) begin 
-			if (dac_batch == pwl_test_wave[0] && valid_dac_batch) here = 1;
-			else here = 0;
-			@(posedge dac_clk);  
-		end       
+	task automatic check_pwl_wave(inout sim_util_pkg::debug debug, input int periods_to_check);
+		logic[3:0][BATCH_SIZE-1:0][DATA_WIDTH-1:0] expected = {{16'd0, 16'd1, 16'd2, 16'd3, 16'd4, 16'd5, 16'd6, 16'd7, 16'd8, 16'd9, 16'd10, 16'd11, 16'd12, 16'd13, 16'd14, 16'd15}, {16'd16, 16'd17, 16'd18, 16'd19, 16'd20, 16'd21, 16'd22, 16'd23, 16'd24, 16'd25, 16'd26, 16'd27, 16'd28, 16'd29, 16'd30, 16'd31}, {16'd32, 16'd33, 16'd34, 16'd35, 16'd36, 16'd34, 16'd32, 16'd30, 16'd28, 16'd26, 16'd24, 16'd22, 16'd20, 16'd18, 16'd17, 16'd16}, {16'd15, 16'd14, 16'd13, 16'd12, 16'd11, 16'd10, 16'd9, 16'd8, 16'd7, 16'd6, 16'd5, 16'd4, 16'd3, 16'd2, 16'd1, 16'd0}};
+		while (~(dac_batch == expected[0] && valid_dac_batch)) @(posedge dac_clk); 
+		repeat(periods_to_check) begin
+			for (int i = 0; i < 4; i++) begin
+				while (~valid_dac_batch) @(posedge dac_clk); 
+				debug.disp_test_part(i,dac_batch == expected[i], $sformatf("Error on pwl wave sample #%0d",i));
+				@(posedge dac_clk);
+			end 
+		end
   	endtask 
 
 	task automatic halt_dac();

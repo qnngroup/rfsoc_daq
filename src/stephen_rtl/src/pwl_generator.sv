@@ -5,7 +5,6 @@ module pwl_generator #(parameter DMA_DATA_WIDTH, parameter SAMPLE_WIDTH, paramet
 			 		  (input wire clk,rst,
 			 		   input wire halt, 
 			 		   input wire run, 
-			 		   input wire dac0_rdy,
 			 		   output logic rdy_to_run,
 			 		   output logic[(2*`WD_DATA_WIDTH)-1:0] pwl_wave_period,
 			 		   output logic[BATCH_SIZE-1:0][SAMPLE_WIDTH-1:0] batch_out,
@@ -165,7 +164,10 @@ module pwl_generator #(parameter DMA_DATA_WIDTH, parameter SAMPLE_WIDTH, paramet
 					if (curr_dma_valid && ~nxt_dma_valid) dma_pipe[0] <= {dma.last,dma.valid,dma.data};
 					if (curr_dma_valid && nxt_dma_valid) dma_pipe <= {dma_pipe[0], {dma.last,dma.valid,dma.data}};
 				end else begin
-					if (curr_dma_valid && ~nxt_dma_valid && curr_is_last && intrp_count == 0) dma_pipe[1] <= 0;
+					if (curr_dma_valid && ~nxt_dma_valid && curr_is_last) begin
+						if (~curr_dma_sb) dma_pipe[1] <= 0;	
+						else if (intrp_count == 0) dma_pipe[1] <= 0;
+					end 
 					if (curr_dma_valid && nxt_dma_valid) dma_pipe <= {dma_pipe[0], {(DMA_DATA_WIDTH+2){1'b0}}};
 				end
 			end
