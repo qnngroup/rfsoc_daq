@@ -1,3 +1,6 @@
+from sys import path
+path.insert(0, r'C:\Users\skand\OneDrive\Documents\GitHub\rfsoc_daq\src\stephen_rtl\Python_Files')
+path.insert(0, r'C:\Users\skand\OneDrive\Documents\GitHub\rfsoc_daq\src\stephen_rtl\Python_Files\cython_files')
 import pwl_wrapper as c
 import pwl_wrapper_python as p
 import matplotlib.pyplot as plt
@@ -5,8 +8,7 @@ from matplotlib.font_manager import FontProperties
 from math import ceil,floor
 from random import randrange as rr
 from time import time,sleep, perf_counter
-from sys import path
-path.insert(0, r'C:\Users\skand\OneDrive\Documents\GitHub\rfsoc_daq\src\stephen_rtl\Python_Files')
+
 from fpga_constants import *
 
 
@@ -194,9 +196,10 @@ coords = [(0,0), (300,300), (350,1000),(0,1800)]
 coords.reverse()
 intvp,py_fpga_cmds = p.main(coords)
 path = c.fpga_to_pwl(py_fpga_cmds)
-waves = c.decode_pwl_cmds(path)
-flat_wave = flatten(waves)
-split = lambda li: ([el[0] for el in li],[el[1] for el in li])
-x,t = split(coords)
-plt.scatter(t,x)
-plt.plot(flat_wave)
+print(path)
+# waves = c.decode_pwl_cmds(path)
+# flat_wave = flatten(waves)
+# split = lambda li: ([el[0] for el in li],[el[1] for el in li])
+# x,t = split(coords)
+# plt.scatter(t,x)
+# plt.plot(flat_wave)

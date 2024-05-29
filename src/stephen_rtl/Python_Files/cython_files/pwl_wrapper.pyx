@@ -127,7 +127,7 @@ cdef int round_slope(float slope):
     return <int> floor(slope)
 
 cdef void batchify_fast(pwl_tup* pwl_cmd, int* newx, int* leftover_dt):
-    cdef int clean_dt = (dref(pwl_cmd).dt/batch_size)*batch_size
+    cdef int clean_dt = <int> ((dref(pwl_cmd).dt/batch_size)*batch_size)
     if clean_dt == 0:
         dref(pwl_cmd).sb = 0 
         return  
@@ -317,19 +317,33 @@ def decode_pwl_cmds(pwl_cmds):
         wave.append(w)
     return wave 
 
+def float_to_fixed(num,n): return round(num*(2**n))
+    
+def fixed_to_float(num,m,n):
+    whole,fract = 0,0
+    for i in range(0,m+n):
+        if num&(1<<i) != 0:
+            addition = 2**(i-n)
+            if i >= n: whole+=addition
+            else: fract+=addition
+    return whole+fract
+
 def fpga_to_pwl(fpga_cmds):
     pwl_cmds = []
     for num in fpga_cmds:
-        x_mask = 0xffff << (8*4)
-        x = (num&x_mask) >> (8*4)
+        x_mask = 0xffff << (12*4)
+        x = (num&x_mask) >> (12*4)
         if x & 0x8000: x = -0x8000 + (x & 0x7fff)
-        slope_mask = 0xffff << (4*4)
-        slope = (num&slope_mask) >> (4*4)
-        if slope & 0x8000: slope = -0x8000 + (slope & 0x7fff)
+        whole_mask = 0xffff << (8*4)
+        whole = (num&whole_mask) >> (8*4)
+        if whole & 0x8000: whole = -0x8000 + (whole & 0x7fff)
+        fract_mask = 0xffff << (4*4)
+        fract = (num&fract_mask) >> (4*4) 
         dt_mask = 0xffff
         sb = num & 0b1
         dt = (num&dt_mask) >> 1
-        pwl_cmds.append((x,slope,dt,sb))
+        slope = whole+fixed_to_float(fract,16,16)
+        pwl_cmds.append((x,slope,dt,sb)) 
     return pwl_cmds
 
 def rtl_cmd_formatter(fpga_cmds):

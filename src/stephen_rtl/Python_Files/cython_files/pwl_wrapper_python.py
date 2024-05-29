@@ -7,16 +7,27 @@ fixed_point_percision = 8
 
 def create_slope_obj(slope):
     sign = 1 if slope > 0 else -1  
-    whole = floor(slope) if slope > 0 else ceil(slope)
+    whole = floor(slope) if sign > 0 else ceil(slope)
     fract = round(whole-slope,fixed_point_percision)
     return {"sign": sign, "whole": abs(whole), "fract":abs(fract)}
 
 def scale(slope,i):
     out = slope["sign"]*slope["whole"]*i
     out+= slope["sign"]*floor(slope["fract"]*i)
-    return out
+    return int(out)
 
 def is_zero_slope(slope): return slope["whole"] == 0 and slope["fract"] == 0.0
+
+def float_to_fixed(num,n): return round(num*(2**n))
+    
+def fixed_to_float(num,m,n):
+    whole,fract = 0,0
+    for i in range(0,m+n):
+        if num&(1<<i) != 0:
+            addition = 2**(i-n)
+            if i >= n: whole+=addition
+            else: fract+=addition
+    return whole+fract
 
 def gen_rand_coords(avg_dt=100,T=500,n=5,max_val=2**15-1):
     coords = [(0,0)]
@@ -32,15 +43,16 @@ def gen_rand_coords(avg_dt=100,T=500,n=5,max_val=2**15-1):
 def mk_fpga_cmds(pwl_cmds):
     fpga_cmds = []
     for x,slope,dt,sb in pwl_cmds: 
-        x1,slope1,dt1 = x,slope,dt
-
+        whole = slope["sign"]*slope["whole"]
+        fract = float_to_fixed(slope["fract"],16)
         if x < 0: x = 0x10000+x 
-        x = x<<(8*4) 
-        # if slope < 0: slope = 0x10000+slope
-        # slope = slope<<(4*4)
+        x = x<<(12*4) 
+        if whole < 0: whole = 0x10000+whole
+        whole = whole<<(8*4)
+        fract = fract<<(4*4)
         dt = (dt<<1)+sb
         if dt & 0x8000: dt -= 0x8000
-        # fpga_cmds.append(x+slope+dt)
+        fpga_cmds.append(x+whole+fract+dt)
     return fpga_cmds
         
 
@@ -70,7 +82,7 @@ def mk_pwl_cmds_fast(coords, path):
     batch_t = 0 
     path_ptr = 0 
     skip_calc = False
-    slope = {"sign": -1, "whole": -1, "fract": 0}
+    slope = {"sign": -1, "whole": 1, "fract": 0}
     pwl_cmd = {"x":-1,"slope":slope.copy(),"dt":-1,"sb":-1}
     i-=1
     
@@ -87,7 +99,7 @@ def mk_pwl_cmds_fast(coords, path):
                 slope = create_slope_obj(dx/dt)
                 # If out of bounds:
                 if (slope["sign"] > 0 and (x1+scale(slope,dt-1)) > x2) or (slope["sign"] < 0 and (x1+scale(slope,dt-1)) < x2):
-                    print("Oop. It's out of bounds FIX ############################################3")
+                    print("Oop. It's out of bounds FIX ############################################")
                     # t = (x2-x1)//slope
                     # coord["x"] = x1+slope*t 
                     # coord["t"] = t1+t 
@@ -201,17 +213,21 @@ def main(coords):
     path_wrapper = [0]*((len(coords)-1)*6)
     l = mk_pwl_cmds_fast(coords,path_wrapper)
     path = toLi(path_wrapper,l)
+    print(toLi(path_wrapper,l,True))
     fpga_cmds = mk_fpga_cmds(path)
     intv = perf_counter() - t0
     coords = [] 
     return intv,fpga_cmds
 
 
-def toLi(path,n): 
+def toLi(path,n,pretty=False): 
     out = []
     for i,di in enumerate(path):
         if i >= n: break
         el = tuple([e for e in di.values()])
+        if pretty:
+            s = el[1]["sign"]*(el[1]["whole"]+el[1]["fract"])
+            el = el[0:1] + (s,)+ el[2:]
         out.append(el)
     return out
 
@@ -228,9 +244,9 @@ def toDi(li):
 
 #############################################################
 
-# coords = [(0,0), (300,300), (300,1000),(0,5800), (0, 6500)]
-# # coords = gen_rand_coords(n=50)
+# coords = [(0,0), (300,300), (350,1000),(0,1800)]
 # coords.reverse()
 # intv,fpga_cmds = main(coords)
+# print([hex(el) for el in fpga_cmds])
 
 
