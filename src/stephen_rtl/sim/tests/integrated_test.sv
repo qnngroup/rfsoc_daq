@@ -5,23 +5,46 @@
 
 module integrated_test();
 	localparam TIMEOUT = 1000;
-	localparam TEST_NUM = 12*2; //12 with oscillating rdy, 12 with constant ready
-	localparam int PS_CLK_RATE_HZ = 100_000_000;
-	always #(0.5s/PS_CLK_RATE_HZ) clk = ~clk;
-	logic clk, rst; 
+	localparam MOD_TEST_NUM = 1;
+	int total_errors = 0; 
+
+	sim_util_pkg::debug debug = new(sim_util_pkg::DEBUG,1,"INTEGRATED_TEST"); 
+
+	axi_transmit_test #(.IS_INTEGRATED(1'b1)) at_test();
+	axi_recieve_test #(.IS_INTEGRATED(1'b1)) ar_test();
+	slave_test #(.IS_INTEGRATED(1'b1)) slave_test();
+	dac_intf_test #(.IS_INTEGRATED(1'b1)) dac_intf_test();
+
+	`define any_timed_out at_test.debug.timed_out || ar_test.debug.timed_out || slave_test.debug.timed_out || dac_intf_test.debug.timed_out 
 	initial begin
         $dumpfile("integrated_test.vcd");
         $dumpvars(0,integrated_test); 
-        {clk,rst} = 0;
-     	repeat (20) @(posedge clk);
-        debug.displayc($sformatf("\n\n### TESTING %s ###\n\n",debug.get_test_name()));
-     	debug.timeout_watcher(clk,TIMEOUT);
-        repeat (5) @(posedge clk);
-        `flash_signal(rst,clk);        
-       	repeat (20) @(posedge clk);
-       	#500;
-       	$finish;
-    end 
+        #1;
+        debug.displayc("\n\n### BEGINNING INTEGRATED TEST ###\n\n");
+        fork
+        	begin
+		       	at_test.run_tests();
+		       	total_errors+=at_test.debug.get_error_count();
+		       	ar_test.run_tests();
+		       	total_errors+=ar_test.debug.get_error_count();
+		       	slave_test.run_tests();
+		       	total_errors+=slave_test.debug.get_error_count();
+		       	dac_intf_test.run_tests();
+		       	total_errors+=dac_intf_test.debug.get_error_count();		       
+		    end 
+		    begin
+		    	while (1) begin
+		    		if (`any_timed_out) break;
+		    		#1;
+		    	end
+		    	total_errors+=1;
+		    end 
+		join_any
+
+		if (total_errors > 0) debug.displayc($sformatf("\n\n### FAILED INTEGRATED TEST SUITE (%0d ERRORS) ###\n\n",total_errors),sim_util_pkg::RED);
+		else debug.displayc("\n\n### PASSED INTEGRATED TEST SUITE ###\n\n",sim_util_pkg::GREEN);
+		$finish;
+    end    
 endmodule 
 
 `default_nettype wire

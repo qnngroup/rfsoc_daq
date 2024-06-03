@@ -2,12 +2,12 @@
 `timescale 1ns / 1ps
 import mem_layout_pkg::*;
 
-module axi_recieve_test();
+module axi_recieve_test #(parameter IS_INTEGRATED = 0)();
 	localparam TIMEOUT = 1000;
 	localparam TEST_NUM = 1*12+6; // 1 test for all plus 1 additional address tests for the 32 data widths
 	localparam int CLK_RATE_MHZ = 150;
 
-	sim_util_pkg::debug debug = new(sim_util_pkg::DEBUG,TEST_NUM,"AXI_RECIEVE"); 
+	sim_util_pkg::debug debug = new(sim_util_pkg::DEBUG,TEST_NUM,"AXI_RECIEVE",IS_INTEGRATED); 
 
 	logic clk, rst; 
 	int total_errors = 0;
@@ -35,17 +35,22 @@ module axi_recieve_test();
 		end
 	endgenerate
 
+	always #(0.5s/(CLK_RATE_MHZ*1_000_000)) clk = ~clk;
+	initial begin
+		if (~IS_INTEGRATED) begin 
+	        $dumpfile("axi_recieve_test.vcd");
+	        $dumpvars(0,axi_recieve_test); 
+	        run_tests(); 
+	     end         
+    end 
+
 	task automatic reset_errors();
 		total_errors += debug.get_error_count();
 		debug.clear_error_count(); 
 	endtask 
 
-
-	always #(0.5s/(CLK_RATE_MHZ*1_000_000)) clk = ~clk;
-	initial begin
-        $dumpfile("axi_recieve_test.vcd");
-        $dumpvars(0,axi_recieve_test); 
-        {clk,rst} = 0;
+    task automatic run_tests();
+    	{clk,rst} = 0;
      	repeat (20) @(posedge clk);
         debug.displayc($sformatf("\n\n### TESTING %s ###\n\n",debug.get_test_name()));
      	debug.timeout_watcher(clk,TIMEOUT);
@@ -170,8 +175,10 @@ module axi_recieve_test();
 		debug.set_error_count(total_errors); 
 		debug.check_test(test_sets1[5].test_sets2[1].tb_i.check_samples(debug,.is_addr(1)),.has_parts(1));
 
-        debug.fatalc("### SHOULD NOT BE HERE. CHECK TEST NUMBER ###");
-    end 
+        if (~IS_INTEGRATED) debug.fatalc("### SHOULD NOT BE HERE. CHECK TEST NUMBER ###");
+        else if (debug.test_num < TEST_NUM) debug.fatalc("### SHOULD NOT BE HERE. CHECK TEST NUMBER ###");
+        debug.set_test_complete();
+    endtask
 endmodule 
 
 `default_nettype wire

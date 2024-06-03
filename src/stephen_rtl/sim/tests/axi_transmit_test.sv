@@ -2,13 +2,14 @@
 `timescale 1ns / 1ps
 // import mem_layout_pkg::*;
 `include "mem_layout.svh"
-
-module axi_transmit_test();
+// Clean up this test and recieve's test so you're not repeating the test.
+// have an inital begin in the generate and wait for a start vecotr, and continue to next with a done. 
+module axi_transmit_test #(parameter IS_INTEGRATED = 0)();
 	localparam TIMEOUT = 1000;
-	localparam TEST_NUM = 12*2; //12 with oscillating rdy, 12 with constant ready
+	localparam TEST_NUM = 12*2;; //12 with oscillating rdy, 12 with constant ready
 	localparam int CLK_RATE_MHZ = 150;
 
-	sim_util_pkg::debug debug = new(sim_util_pkg::DEBUG,TEST_NUM,"AXI_TRANSMIT"); 
+	sim_util_pkg::debug debug = new(sim_util_pkg::DEBUG,TEST_NUM,"AXI_TRANSMIT",IS_INTEGRATED); 
 
 	logic clk, rst; 
 	int total_errors = 0;
@@ -41,13 +42,19 @@ module axi_transmit_test();
 		debug.clear_error_count(); 
 	endtask 
 
-
 	always #(0.5s/(CLK_RATE_MHZ*1_000_000)) clk = ~clk;
 	initial begin
-        $dumpfile("axi_transmit_test.vcd");
-        $dumpvars(0,axi_transmit_test); 
-        {clk,rst} = 0;
+        if (~IS_INTEGRATED) begin 
+	        $dumpfile("axi_transmit_test.vcd");
+	        $dumpvars(0,axi_transmit_test); 
+	        run_tests(); 
+	    end 
+    end 
+
+	task automatic run_tests();
+		{clk,rst} = 0;
      	repeat (20) @(posedge clk);
+
         debug.displayc($sformatf("\n\n### TESTING %s ###\n\n",debug.get_test_name()));
      	debug.timeout_watcher(clk,TIMEOUT);
         repeat (5) @(posedge clk);
@@ -201,9 +208,11 @@ module axi_transmit_test();
 		debug.set_error_count(total_errors);
 		debug.check_test(test_sets1[5].test_sets2[1].tb_i.check_samples(debug),.has_parts(1));
 
-        debug.fatalc("### SHOULD NOT BE HERE. CHECK TEST NUMBER ###");
-    end 
+        if (~IS_INTEGRATED) debug.fatalc("### SHOULD NOT BE HERE. CHECK TEST NUMBER ###");
+        else if (debug.test_num < TEST_NUM) debug.fatalc("### SHOULD NOT BE HERE. CHECK TEST NUMBER ###");
+        debug.set_test_complete();
+	endtask
+
 endmodule 
 
 `default_nettype wire
-

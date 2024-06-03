@@ -3,7 +3,7 @@
 // import mem_layout_pkg::*;
 `include "mem_layout.svh"
 
-module dac_intf_test();
+module dac_intf_test #(parameter IS_INTEGRATED = 0)();
 	localparam TIMEOUT = 1000;
 	localparam TEST_NUM = 4;
 	localparam int PS_CLK_RATE_MHZ = 150;
@@ -11,7 +11,7 @@ module dac_intf_test();
 	localparam DATA_WIDTH = `WD_DATA_WIDTH;
 	localparam BATCH_SIZE = `BATCH_WIDTH/DATA_WIDTH; 
 
-	sim_util_pkg::debug debug = new(sim_util_pkg::DEBUG,TEST_NUM,"DAC_INTERFACE"); 
+	sim_util_pkg::debug debug = new(sim_util_pkg::DEBUG,TEST_NUM,"DAC_INTERFACE",IS_INTEGRATED); 
 
 	logic ps_clk, ps_rst, dac_clk, dac_rst; 
 	logic halt, dac0_rdy,valid_dac_batch; 
@@ -41,22 +41,27 @@ module dac_intf_test();
 	      .halt(halt), .dac0_rdy(dac0_rdy),
 	      .dac_batch(dac_batch), .valid_dac_batch(valid_dac_batch),
 	      .pwl_dma_if(pwl_dma_if));
+	
+	always_comb begin 
+		for (int i = 0; i < BATCH_SIZE; i++) rand_sample_batch[i] = 16'hBEEF+i;
+	end 
+	always #(0.5s/(PS_CLK_RATE_MHZ*1_000_000)) ps_clk = ~ps_clk;
+	always #(0.5s/(DAC_CLK_RATE_MHZ*1_000_000)) dac_clk = ~dac_clk;
+	initial begin
+		if (~IS_INTEGRATED) begin 
+	        $dumpfile("dac_intf_test.vcd");
+	        $dumpvars(0,dac_intf_test); 
+            run_tests(); 
+         end                      
+    end 
 
-	 task automatic reset_errors();
+	task automatic reset_errors();
         total_errors += debug.get_error_count();
         debug.clear_error_count(); 
     endtask 
 	
-	always #(0.5s/(PS_CLK_RATE_MHZ*1_000_000)) ps_clk = ~ps_clk;
-	always #(0.5s/(DAC_CLK_RATE_MHZ*1_000_000)) dac_clk = ~dac_clk;
-	always_comb begin 
-		for (int i = 0; i < BATCH_SIZE; i++) rand_sample_batch[i] = 16'hBEEF+i;
-	end 
-
-	initial begin
-        $dumpfile("dac_intf_test.vcd");
-        $dumpvars(0,dac_intf_test); 
-        {ps_clk,ps_rst} = 0;
+    task automatic run_tests();
+    	{ps_clk,ps_rst} = 0;
         {dac_clk, dac_rst} = 0; 
      	repeat (20) @(posedge ps_clk);
         debug.displayc($sformatf("\n\n### TESTING %s ###\n\n",debug.get_test_name()));
@@ -96,8 +101,10 @@ module dac_intf_test();
 		#5000;
         debug.check_test(curr_err == debug.get_error_count(), .has_parts(1));
 
-       	debug.fatalc("### SHOULD NOT BE HERE. CHECK TEST NUMBER ###");
-    end 
+       	if (~IS_INTEGRATED) debug.fatalc("### SHOULD NOT BE HERE. CHECK TEST NUMBER ###");
+        else if (debug.test_num < TEST_NUM) debug.fatalc("### SHOULD NOT BE HERE. CHECK TEST NUMBER ###");
+        debug.set_test_complete();
+    endtask 
 endmodule 
 
 `default_nettype wire

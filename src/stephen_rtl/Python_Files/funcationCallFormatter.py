@@ -72,17 +72,9 @@ def formatFuncCall(s,fName = "functionName"):
     return out+align(body)
 
 
-st = """module dac_intf_tb #(parameter MEM_SIZE, parameter DATA_WIDTH)
-					   (input wire ps_clk,dac_clk,ps_rst, dac_rst,
-					   	input wire dac_intf_rdy, 
-						output logic[MEM_SIZE-1:0] fresh_bits,
-						output logic[MEM_SIZE-1:0][DATA_WIDTH-1:0] read_resps,
-						output logic[$clog2(DATA_WIDTH)-1:0] scale_factor_in,
-						output logic halt,
-						output logic dac0_rdy, 
-						Axis_IF dma);
+st = """module axi_transmit_test #(parameter IS_INTEGRATED = 0)(output logic done);
                  """
-fName = "tb_i"
+fName = "at_test"
 out= formatFuncCall(st,fName=fName)
 print(out)
 

@@ -3,12 +3,12 @@
 // import mem_layout_pkg::*;
 `include "mem_layout.svh"
 
-module slave_test();
+module slave_test #(parameter IS_INTEGRATED = 0)();
 	localparam TIMEOUT = 1000;
 	localparam TEST_NUM = 9*2 + 3; 
 	localparam int CLK_RATE_MHZ = 150;
 
-    sim_util_pkg::debug debug = new(sim_util_pkg::DEBUG,TEST_NUM,"SLAVE"); 
+    sim_util_pkg::debug debug = new(sim_util_pkg::DEBUG,TEST_NUM,"SLAVE", IS_INTEGRATED); 
 
     logic clk, rst; 
     logic clr_rd_out; 
@@ -60,27 +60,34 @@ module slave_test();
         ps_raddr_transmit(.clk(clk), .rst(rst),
                           .bus(ra_if.transmit_bus)); 
 
+	always #(0.5s/(CLK_RATE_MHZ*1_000_000)) clk = ~clk;
+	initial begin
+        if (~IS_INTEGRATED) begin 
+            $dumpfile("slave_test.vcd");
+            $dumpvars(0,slave_test); 
+            run_tests(); 
+         end              
+    end 
+
     task automatic reset_errors();
         total_errors += debug.get_error_count();
         debug.clear_error_count(); 
     endtask 
-	always #(0.5s/(CLK_RATE_MHZ*1_000_000)) clk = ~clk;
-	initial begin
-        $dumpfile("slave_test.vcd");
-        $dumpvars(0,slave_test); 
+
+    task automatic run_tests(); 
         {clk,rst} = 0;
-     	repeat (20) @(posedge clk);
+        repeat (20) @(posedge clk);
         debug.displayc($sformatf("\n\n### TESTING %s ###\n\n",debug.get_test_name()));
-     	debug.timeout_watcher(clk,TIMEOUT);
+        debug.timeout_watcher(clk,TIMEOUT);
         repeat (5) @(posedge clk);
         flash_signal(rst,clk);        
         tb_i.init(); 
-       	repeat (20) @(posedge clk);
+        repeat (20) @(posedge clk);
         //Run tests first with constant ready
-        run_tests();
+        run_rdy_tests();
         tb_i.oscillate_rdys(halt_osc);
         //Run same tests with oscillating ready
-        run_tests("(ready signals oscillating)");
+        run_rdy_tests("(ready signals oscillating)");
         halt_osc = 1;
         tb_i.init();
 
@@ -193,11 +200,12 @@ module slave_test();
         debug.set_error_count(total_errors); 
         debug.check_test(curr_err == debug.get_error_count(), .has_parts(1));
 
-        debug.fatalc("### SHOULD NOT BE HERE. CHECK TEST NUMBER ###");
-    end 
+        if (~IS_INTEGRATED) debug.fatalc("### SHOULD NOT BE HERE. CHECK TEST NUMBER ###");
+        else if (debug.test_num < TEST_NUM) debug.fatalc("### SHOULD NOT BE HERE. CHECK TEST NUMBER ###");
+        debug.set_test_complete();
+    endtask 
 
-
-    task automatic run_tests(input string osc_string = "");
+    task automatic run_rdy_tests(input string osc_string = "");
         // TEST 1
         debug.displayc($sformatf("%0d: PS Write (addr delayed) %s",debug.test_num,osc_string), .msg_verbosity(sim_util_pkg::VERBOSE));
         wdata = $urandom();

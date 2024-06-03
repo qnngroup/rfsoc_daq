@@ -31,14 +31,15 @@ package sim_util_pkg;
     protected string test_name;  
     int test_num, total_tests;
     int timeout_counter;
-    bit timeout_reset;
+    bit timeout_reset, is_integrated, done, timed_out;
 
-    function new (verbosity_t v, int total_tests_in = 0, string test_name_in = "XXX");
+    function new (verbosity_t v, int total_tests_in = 0, string test_name_in = "XXX", bit is_integrated_in = 0);
       verbosity = v;
       {error_count,test_num,test_complete} = 0;
-      {timeout_counter, timeout_reset} = 0;       
+      {timeout_counter, timeout_reset, done} = 0;       
       total_tests = total_tests_in;
       test_name = test_name_in;
+      is_integrated = is_integrated_in; 
     endfunction
 
     function string get_test_name();
@@ -68,6 +69,13 @@ package sim_util_pkg;
           end
           if (~test_complete) fatalc($sformatf("### TIMEOUT ON TEST %0d ###", test_num));
         end 
+
+        begin 
+          while (1) begin
+            timed_out = done && ~test_complete; 
+            @(posedge clk);
+          end
+        end 
       join_none
     endtask 
 
@@ -83,6 +91,10 @@ package sim_util_pkg;
         finishc();
       end 
     endtask
+
+    function void set_test_complete();
+      test_complete = 1;
+    endfunction
 
     function void clear_error_count();
       error_count = 0;
@@ -113,16 +125,19 @@ package sim_util_pkg;
 
     task fatalc(input string msg);
       displayc($sformatf("\n### ENCOUNTERED A FATAL ERROR, STOPPING %s TEST NOW ###\n%s",test_name, msg), RED, DEFAULT);
-      $fatal(1,"");
+      if (~is_integrated) $fatal(1,"");
+      done = 1;
     endtask
 
     task finishc();
       if (error_count == 0) begin
         displayc($sformatf("\n### FINISHED %0d TESTS OF %s MODULE WITH ZERO ERRORS ###\n\n",test_num,test_name), GREEN, DEFAULT);
-        $finish;
+        if (~is_integrated) $finish;
+        done = 1;
       end else begin
         displayc($sformatf("\n### FINISHED %0d TESTS OF %s MODULE WITH %0d ERRORS ###\n\n",test_num,test_name, error_count), RED, DEFAULT);
-        $fatal(1,"");
+        if (~is_integrated) $fatal(1,"");
+        done = 1;
       end
     endtask
 
