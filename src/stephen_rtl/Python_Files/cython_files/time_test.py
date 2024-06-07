@@ -15,13 +15,18 @@ def gen_rand_coords(avg_dt=100,T=500,n=5,max_val=2**15-1):
     return coords
 
 def test_avg(n,test_num=50,scale=1e6):
-    intvs = []
+    intvsp,intvsc = [],[]
     for i in range(test_num):
         coords = gen_rand_coords(n=n)
         intv,fpga_cmds = p.main(coords)
         intv*=scale
-        intvs.append(intv)
-    return sum(intvs)/len(intvs)
+        intvsp.append(intv)
+        
+        intv,fpga_cmds = c.main(coords)
+        intv*=scale
+        intvsc.append(intv)
+    return sum(intvsp)/len(intvsp), sum(intvsc)/len(intvsc)
+ 
 times = []
 sizes = [10, 30, 50, 100, 300, 500, 1000, 1300, 1500, 5000, 10000, 15000]
 for s in sizes:
@@ -35,7 +40,7 @@ font.set_name('Times New Roman')
 plt.plot(sizes,times)
 plt.ylabel(r"Function Time (us)",fontsize=17,fontproperties=font,fontweight='light')
 plt.xlabel(r"Input Size",fontsize=17,fontproperties=font,fontweight='light')
-t = test_avg(5000)
+t = test_avg(1000)
 plt.title(f"1000 samples => {round(t)} us (Python Algorithm)",fontsize=20,fontproperties=font)
 
 # coords = [(0,0),(96,48),(116,58),(122,64), (10,176),(0,181),(0,192)]

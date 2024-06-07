@@ -6,15 +6,22 @@ from cython.operator import dereference as dref
 from time import perf_counter 
 from sys import path
 path.insert(0, r'C:\Users\skand\OneDrive\Documents\GitHub\rfsoc_daq\src\stephen_rtl\Python_Files')
-from fpga_constants import dma_data_width, batch_size as bs 
+from fpga_constants import dma_data_width, fixed_point_percision, batch_size as bs 
 
 ##################################### Classes and Method Defs  ############################################
 
 ctypedef unsigned long long uint64
 ctypedef long long int64
 
+cdef struct s_slope_obj:
+    int8_t sign
+    int whole
+    double fract
+ctypedef s_slope_obj slope_obj
+
 cdef struct s_pwl_tuple:
-    int x,slope,dt
+    int x,dt
+    slope_obj slope 
     int8_t sb
     uint64 fpga_cmd
 ctypedef s_pwl_tuple pwl_tup
@@ -68,6 +75,40 @@ cdef Tup_List create_c_coords(py_coords):
         set_item(&tl,i,&ct)
     return tl
 
+cdef slope_obj cpy_slope(slope_obj slope):
+    cdef slope_obj cpy 
+    cpy.sign = slope.sign 
+    cpy.whole = slope.whole
+    cpy.fract = slope.fract
+    return cpy 
+
+cdef slope_obj create_slope_obj(double slope_in):
+    cdef slope_obj slope
+    slope.sign = 1 if slope_in > 0 else -1  
+    slope.whole = <int>floor(slope_in) if slope.sign > 0 else <int>ceil(slope_in)
+    slope.fract = round(slope.whole-slope_in,fixed_point_percision)
+    slope.whole = abs(slope.whole)
+    slope.fract = abs(slope.fract)
+    return slope
+
+cdef int scale(slope_obj slope,int i):
+    cdef int out
+    out = slope.sign*slope.whole*i
+    out+= slope.sign*<int>floor(slope.fract*i)
+    return out
+
+cdef int8_t is_zero_slope(slope_obj slope): return slope.whole == 0 and slope.fract == 0.0
+
+cdef int64 inv_num(int64 num, int bit_width):
+    cdef int64 mask = ((<int64>1)<<bit_width)-1
+    num = (abs(num) ^ mask)+1
+    return num
+
+cdef uint64 double_to_fixed(double num,int m, int n): 
+    cdef uint64 raw_fixed = round(abs(num)*(2**n))
+    if num < 0: raw_fixed = inv_num(raw_fixed,m+n)   
+    return raw_fixed
+    
 cdef tupli_to_li(Tup_List* li, int n):
     out = []
     cdef pwl_tup e 
@@ -117,22 +158,22 @@ cdef class TupLiWrapper:
 cdef void printTL(Tup_List* tl, int n):
     cdef pwl_tup pwl_cmd
     li = [] 
+    cdef double slope 
     for i in range(n):
         pwl_cmd = get_pwl_tup(tl,i)
-        li.append((pwl_cmd.x,pwl_cmd.slope,pwl_cmd.dt,pwl_cmd.sb))
+        slope = pwl_cmd.slope.sign*(pwl_cmd.slope.whole+pwl_cmd.slope.fract)
+        li.append((pwl_cmd.x,slope,pwl_cmd.dt,pwl_cmd.sb))
     print(li)
 
-cdef int round_slope(float slope): 
-    if ((slope < -1) or (slope > 0 and slope < 1)): return <int> ceil(slope)
-    return <int> floor(slope)
+cdef int8_t are_slopes_eq(slope_obj slope1, slope_obj slope2): return slope1.sign == slope2.sign and slope1.whole == slope2.whole and slope1.fract == slope2.fract 
 
-cdef void batchify_fast(pwl_tup* pwl_cmd, int* newx, int* leftover_dt):
-    cdef int clean_dt = (dref(pwl_cmd).dt/batch_size)*batch_size
+cdef void batchify(pwl_tup* pwl_cmd, int* newx, int* leftover_dt):
+    cdef int clean_dt = <int> ((dref(pwl_cmd).dt/batch_size)*batch_size)
     if clean_dt == 0:
         dref(pwl_cmd).sb = 0 
         return  
     leftover_dt[0] = dref(pwl_cmd).dt-clean_dt 
-    newx[0] = dref(pwl_cmd).x+dref(pwl_cmd).slope*clean_dt
+    newx[0] = dref(pwl_cmd).x+scale(dref(pwl_cmd).slope,clean_dt)
     dref(pwl_cmd).dt = clean_dt
     dref(pwl_cmd).sb = 1
     
@@ -144,7 +185,13 @@ cdef int mk_pwl_cmds(Tup_List* coords, Tup_List* path):
     cdef pwl_tup pwl_cmd,prev_pwl_cmd
     pwl_cmd.dt = -1 
     cdef coord_tup coord 
-    cdef int x1,t1,x2,t2,dx,dt,slope,t,left_in_batch,newx,leftover_dt,ending_x
+    cdef int x1,t1,x2,t2,dx,dt,t,left_in_batch,newx,leftover_dt,ending_x
+    cdef slope_obj slope 
+    slope.sign = 1
+    slope.whole = 0
+    slope.fract = 0.0 
+    pwl_cmd.slope = cpy_slope(slope)
+    prev_pwl_cmd.slope = cpy_slope(slope)
     
     coord = get_coord_tup(coords,i)
     x1 = coord.x 
@@ -160,19 +207,12 @@ cdef int mk_pwl_cmds(Tup_List* coords, Tup_List* path):
                 t2 = coord.t 
                 dx = x2-x1
                 dt = t2-t1
-                slope = round_slope(<float>(<float>dx)/(<float>dt))
-                # If out of bounds:
-                if (slope > 0 and x1+slope*(dt-1) > x2) or (slope < 0 and x1+slope*(dt-1) < x2):
-                    t = (x2-x1)//slope
-                    coord.x = x1+slope*t 
-                    coord.t = t1+t 
-                    set_item(coords,i+1,&coord)
-                    i+=1
-                    continue
+                slope = create_slope_obj(<double>(<double>dx)/(<double>dt))
+
             # See if we must grow the current pwl_cmd before adding to path 
             if pwl_cmd.dt == -1:
                 pwl_cmd.x = x1 
-                pwl_cmd.slope = slope 
+                pwl_cmd.slope = cpy_slope(slope) 
                 pwl_cmd.dt = dt 
                 pwl_cmd.sb = -1 
                 # Move onto next point 
@@ -180,7 +220,7 @@ cdef int mk_pwl_cmds(Tup_List* coords, Tup_List* path):
                 t1 = t2 
                 i-=1
                 continue 
-            if slope == pwl_cmd.slope:
+            if are_slopes_eq(slope,pwl_cmd.slope):
                 pwl_cmd.dt+=dt 
                 # Move onto next point
                 x1 = x2
@@ -192,20 +232,20 @@ cdef int mk_pwl_cmds(Tup_List* coords, Tup_List* path):
         if i == -2:
             if batch_t == 0 or batch_t == batch_size: 
                 prev_pwl_cmd = get_pwl_tup(path,path_ptr-1)
-                ending_x = prev_pwl_cmd.x + (prev_pwl_cmd.slope)*((prev_pwl_cmd.dt) - 1)
+                ending_x = prev_pwl_cmd.x + scale(prev_pwl_cmd.slope,prev_pwl_cmd.dt - 1)
                 if ending_x == x2: break
             left_in_batch = batch_size-batch_t
             pwl_cmd.x = x2
             if left_in_batch == batch_size: pwl_cmd.sb = 1 
             else: pwl_cmd.sb = 0 
             # If the last slope was 0, we can consolidate 
-            if pwl_cmd.slope == 0:
+            if is_zero_slope(pwl_cmd.slope):
                 # If the only thing in the batch we have to finish is a cmd with 0 slope, fill it all with this. 
                 if pwl_cmd.dt == batch_t:
                     pwl_cmd.dt = batch_size
                     pwl_cmd.sb = 1
                     prev_pwl_cmd = get_pwl_tup(path,path_ptr-2)
-                    if prev_pwl_cmd.slope == 0 and prev_pwl_cmd.sb:
+                    if is_zero_slope(prev_pwl_cmd.slope) and prev_pwl_cmd.sb:
                         prev_pwl_cmd.dt+=batch_size
                         path_ptr-=1
                         pwl_cmd = prev_pwl_cmd 
@@ -213,14 +253,16 @@ cdef int mk_pwl_cmds(Tup_List* coords, Tup_List* path):
                 set_item(path,path_ptr-1,&pwl_cmd)
                 break
             pwl_cmd.dt = left_in_batch
-            pwl_cmd.slope = 0
+            pwl_cmd.slope.sign = 1
+            pwl_cmd.slope.whole = 0
+            pwl_cmd.slope.fract = 0.0
             set_item(path,path_ptr,&pwl_cmd)
             path_ptr+=1
             break 
 
         # When are we allowed to add sparse cmds? If the current batch isn't fragmented and the current pwl_cmd would fill atleast 1 full batch
         if batch_t >= batch_size or (batch_t == 0 and pwl_cmd.dt >= batch_size):
-            batchify_fast(&pwl_cmd,&newx,&leftover_dt)
+            batchify(&pwl_cmd,&newx,&leftover_dt)
             set_item(path,path_ptr,&pwl_cmd)
             path_ptr+=1 
             batch_t = 0
@@ -235,7 +277,7 @@ cdef int mk_pwl_cmds(Tup_List* coords, Tup_List* path):
         else:
             if batch_t+pwl_cmd.dt <= batch_size: 
                 # This means the pwl_cmd-to-add will not fully fill up a batch. So we add it, then consider the next pwl point.
-                # (sb will surely be 0 since we'll need to fill the batch we're currently making)
+                # (sb will surely be 0 since we'll need to fill the batch we're currently making)                
                 pwl_cmd.sb = 0 
                 set_item(path,path_ptr,&pwl_cmd)
                 path_ptr+=1 
@@ -252,7 +294,7 @@ cdef int mk_pwl_cmds(Tup_List* coords, Tup_List* path):
                 set_item(path,path_ptr,&pwl_cmd)
                 path_ptr+=1 
                 batch_t = 0
-                pwl_cmd.x += pwl_cmd.slope*left_in_batch
+                pwl_cmd.x += scale(pwl_cmd.slope,left_in_batch)
                 pwl_cmd.dt = full_pwlcmd_dt-left_in_batch
                 pwl_cmd.sb = -1
                 skip_calc = 1
@@ -261,29 +303,29 @@ cdef int mk_pwl_cmds(Tup_List* coords, Tup_List* path):
         # Move onto next point (if there is one)
         if i > -1:
             pwl_cmd.x = x1
-            pwl_cmd.slope = slope
+            pwl_cmd.slope = cpy_slope(slope)
             pwl_cmd.dt = dt 
             pwl_cmd.sb = -1 
             x1 = x2
             t1 = t2 
         i-=1
-        
     return path_ptr
 
-# Assuming a dma_width of 48 (16+16+16)
+# Assuming a dma_width of 64 (x(16)+slope(32)+dt+sb(16))
 cdef void mk_fpga_cmds(Tup_List* pwl_cmds, int n):
     cdef pwl_tup pwl_cmd
-    cdef int64 x,slope,dt,sb 
+    cdef int64 x,dt,sb,slope
+    cdef double slope_d  
     for i in range(n): 
         pwl_cmd = get_pwl_tup(pwl_cmds,i)
         x = pwl_cmd.x
-        slope = pwl_cmd.slope
+        slope_d = pwl_cmd.slope.sign*(pwl_cmd.slope.whole+pwl_cmd.slope.fract)
         dt = pwl_cmd.dt
         sb = pwl_cmd.sb
 
-        if x < 0: x = 0x10000 + x 
-        x = x << (8*4) 
-        if slope < 0: slope = 0x10000 + slope
+        if x < 0: x = inv_num(x,16)
+        x = x << (12*4) 
+        slope = double_to_fixed(slope_d,16,16)
         slope = slope<<(4*4)
         dt = (dt << 1) + sb
         if dt & 0x8000: dt -= 0x8000
@@ -306,19 +348,41 @@ def create_c_coords_py(py_coords):
         set_item(&tl,i,&ct)
     return tlw
 
+def decode_pwl_cmds(pwl_cmds):
+    wave = []
+    for x,slope,dt,_ in pwl_cmds:
+        t = 0
+        w = [] 
+        slope = create_slope_obj(slope)
+        while t < dt:
+            w.append(x+scale(slope,t))
+            t+=1 
+        wave.append(w)
+    return wave
+    
+def fixed_to_double(num,m,n):
+    whole,fract = 0,0
+    bin_num = bin(num)[2:]
+    j = -n
+    out = 0
+    for i in range(len(bin_num)-1,-1,-1):
+        if bin_num[i] == "1": out+=2**j if j != (m-1) else -2**j
+        j+=1
+    return out 
+
 def fpga_to_pwl(fpga_cmds):
     pwl_cmds = []
     for num in fpga_cmds:
-        x_mask = 0xffff << (8*4)
-        x = (num&x_mask) >> (8*4)
+        x_mask = 0xffff << (12*4)
+        x = (num&x_mask) >> (12*4)
         if x & 0x8000: x = -0x8000 + (x & 0x7fff)
-        slope_mask = 0xffff << (4*4)
+        slope_mask = 0xffffffff << (4*4)
         slope = (num&slope_mask) >> (4*4)
-        if slope & 0x8000: slope = -0x8000 + (slope & 0x7fff)
+        slope = fixed_to_double(slope,16,16)    
         dt_mask = 0xffff
         sb = num & 0b1
         dt = (num&dt_mask) >> 1
-        pwl_cmds.append((x,slope,dt,sb))
+        pwl_cmds.append((x,slope,dt,sb)) 
     return pwl_cmds
 
 def decode_pwl_cmds(pwl_cmds):

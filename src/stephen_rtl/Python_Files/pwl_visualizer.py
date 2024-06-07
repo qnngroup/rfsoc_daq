@@ -82,22 +82,26 @@ def plot_path(coords,simple_plot=True,desired_period=None):
                 f = [el for el in wave]
             plt.plot(t,f)
             abs_t+=len(wave)
-    print(path)
-    return fpga_cmds
+    # print(path)
+    return fpga_cmds,flat_wave
 
 
 mv = max_voltage
-coords = [(0,0), (18,18), (36,27), (0, 63)]
-# coords = [(0,0), (5,5), (10,10), (15,16)]
+# coords = [(0,0), (mv,64), (mv,1050),(mv/4,1150), (mv/4,2000), (mv/2,2400),(mv/2,3000), (0,4000), (0,4500)]
+coords = [(0,0), (-6,5),(6,16),(10,40),(0,64)]
 
 
 simple_plot = True
 desired_period = None
-fpga_cmds = plot_path(coords,simple_plot=simple_plot,desired_period=desired_period)
+fpga_cmds,fw = plot_path(coords,simple_plot=simple_plot,desired_period=desired_period)
 # print("\n",fpga_cmds)
+# fpga_cmds.reverse()
+# print(c.rtl_cmd_formatter(fpga_cmds),len(fpga_cmds))
 
-pwls = c.fpga_to_pwl(fpga_cmds)
-print(c.expected_wave_formatter(pwls))
+# dli = [1,2,1,2,2,1]
+# print(mk_delays(n=len(fpga_cmds),delay_range=(0,150)),"\n")
+# plt.axhline(-,color="orange", alpha=0.4)
+# print(assign_packed_probe(16,["batch_out","intrp_batch"],"gen_mode"))
 
 
 
