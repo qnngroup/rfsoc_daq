@@ -158,29 +158,31 @@ def test_coords(coords,do_plot=True,show_batches=False,simple_plot=False, ignore
     return path,passed,wrong,intvc,intvp
 ##############################################################################################################################################
 
-# test_num = int(5e3)
-# nxt_perc = 10
-# t0 = time()
-# n = 50
-# intvcs,intvps = [],[]
-# for i in range(test_num):
-#     perc = (i/test_num)*100
-#     if round(perc) == nxt_perc: 
-#         print(f"{nxt_perc}%",end="")
-#         if nxt_perc != 90: print(",",end="")
-#         nxt_perc+=10        
-#     coords = gen_rand_coords(n=n,avg_dt=200,max_val=max_voltage)
-#     ignore = ignore_same_sloped_points(coords)
-#     path,result,wrong,intvc,intvp = test_coords(coords[:],do_plot=False,show_batches=False,simple_plot=True, ignore=ignore,scale_plot = False)
-#     intvcs.append(intvc)
-#     intvps.append(intvp)
-#     if not result:
-#         print("\nFailed")
-#         print(coords)
-#         print(wrong)
-#         break
-# else:
-#     print("\nPassed")
+test_num = int(1e5)
+do_plot = False
+simple_plot = True
+nxt_perc = 10
+t0 = time()
+n = 10
+intvcs,intvps = [],[]
+for i in range(test_num):
+    perc = (i/test_num)*100
+    if round(perc) == nxt_perc: 
+        print(f"{nxt_perc}%",end="")
+        if nxt_perc != 90: print(",",end="")
+        nxt_perc+=10        
+    coords = gen_rand_coords(n=n,avg_dt=200,max_val=max_voltage)
+    ignore = ignore_same_sloped_points(coords)
+    path,result,wrong,intvc,intvp = test_coords(coords[:],do_plot=do_plot,show_batches=False,simple_plot=simple_plot, ignore=ignore,scale_plot = False)
+    intvcs.append(intvc)
+    intvps.append(intvp)
+    if not result:
+        print("\nFailed")
+        print(coords)
+        print(wrong)
+        break
+else:
+    print("\nPassed")
 
 # avg_intvc = sum(intvcs)/len(intvcs)
 # avg_intvp = sum(intvps)/len(intvps)
@@ -191,13 +193,24 @@ def test_coords(coords,do_plot=True,show_batches=False,simple_plot=False, ignore
 # print(f"\nTest time:\n{round(time()-t0,2)} s")
 
 
-# coords = [(0,0), (300,300), (350,1000),(0,1800), (500, 2000), (0, 2010)]
-coords = [(0,0), (300,300), (350,1000),(0,1800)]
-coords.reverse()
-intvp,py_fpga_cmds = p.main(coords)
-path = c.fpga_to_pwl(py_fpga_cmds)
-print(path)
-# waves = c.decode_pwl_cmds(path)
+# coords = [(0,0), (300,300), (350,1000),(0,1800)]
+# coords = [(0,0), (18,18), (0,20)]
+# coords = [(0,0), (2,400)]
+# coords = [(0,0), (-6,5)]
+# coords = [(0, 0), (94, 4), (-99, 7)]
+# coords.reverse()
+
+# intvp,py_fpga_cmds = p.main(coords)
+# intvc,c_fpga_cmds = c.main(coords)
+# print(py_fpga_cmds == c_fpga_cmds)
+# py_path = c.fpga_to_pwl(py_fpga_cmds)
+# c_path = c.fpga_to_pwl(c_fpga_cmds)
+
+# print(py_path)
+# print(c_path)
+# path = c_path
+
+# waves = p.decode_pwl_cmds(path)
 # flat_wave = flatten(waves)
 # split = lambda li: ([el[0] for el in li],[el[1] for el in li])
 # x,t = split(coords)

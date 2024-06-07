@@ -1,9 +1,8 @@
-from math import ceil,floor
 from time import perf_counter
 from random import randrange as rr
-from pwl_wrapper import get_bs
-batch_size = get_bs()
-fixed_point_percision = 8
+from sys import path
+path.insert(0, r'C:\Users\skand\OneDrive\Documents\GitHub\rfsoc_daq\src\stephen_rtl\Python_Files')
+from fpga_constants import *
 
 def create_slope_obj(slope):
     sign = 1 if slope > 0 else -1  
@@ -18,17 +17,16 @@ def scale(slope,i):
 
 def is_zero_slope(slope): return slope["whole"] == 0 and slope["fract"] == 0.0
 
-def float_to_fixed(num,n): return round(num*(2**n))
-    
-def fixed_to_float(num,m,n):
-    whole,fract = 0,0
-    for i in range(0,m+n):
-        if num&(1<<i) != 0:
-            addition = 2**(i-n)
-            if i >= n: whole+=addition
-            else: fract+=addition
-    return whole+fract
+def inv_num(num,bit_width):
+    mask = (1<<bit_width)-1
+    num = (abs(num) ^ mask)+1  
+    return num
 
+def float_to_fixed(num,m,n): 
+    raw_fixed = round(abs(num)*(2**n))
+    if num < 0: raw_fixed = inv_num(raw_fixed,m+n)  
+    return raw_fixed
+    
 def gen_rand_coords(avg_dt=100,T=500,n=5,max_val=2**15-1):
     coords = [(0,0)]
     abs_t = 0
@@ -43,16 +41,14 @@ def gen_rand_coords(avg_dt=100,T=500,n=5,max_val=2**15-1):
 def mk_fpga_cmds(pwl_cmds):
     fpga_cmds = []
     for x,slope,dt,sb in pwl_cmds: 
-        whole = slope["sign"]*slope["whole"]
-        fract = float_to_fixed(slope["fract"],16)
-        if x < 0: x = 0x10000+x 
+        if x < 0: x = inv_num(x,16)
         x = x<<(12*4) 
-        if whole < 0: whole = 0x10000+whole
-        whole = whole<<(8*4)
-        fract = fract<<(4*4)
-        dt = (dt<<1)+sb
+        slope = slope["sign"]*(slope["whole"]+slope["fract"])
+        slope = float_to_fixed(slope,16,16)
+        slope = slope<<(4*4)
+        dt = (dt << 1) + sb
         if dt & 0x8000: dt -= 0x8000
-        fpga_cmds.append(x+whole+fract+dt)
+        fpga_cmds.append(x+slope+dt)
     return fpga_cmds
         
 
@@ -60,7 +56,7 @@ def mk_fpga_cmds(pwl_cmds):
 # (where dt is a multiple of batch_size) as possible and assigns all but the last to have a valid sparse_bit
 # (since assignment of the last depends on the points that follow). Assumes function was called the moment sum of all t's in coords >= batch_size
 # Returns the number of pwl_tups that were modified or changed in the passed pwl_coord list
-def batchify_fast(pwl_cmd):
+def batchify(pwl_cmd):
     clean_dt = (pwl_cmd["dt"]//batch_size)*batch_size
     if clean_dt == 0:
         pwl_cmd["sb"] = 0 
@@ -74,7 +70,7 @@ def batchify_fast(pwl_cmd):
 # Given coords of the form (x,t) that describe a wave, produces pwl_coords of the form (x,dx/dt,dt,sparse_bit).
 # Also produces a list of hex numbers (representing the same pwl commands) that can be sent to the FPGA.
 # Bitwidths look like (16,16,16,1)
-def mk_pwl_cmds_fast(coords, path):
+def mk_pwl_cmds(coords, path):
     i = len(coords)-1
     coord = coords[i].copy()
     x1 = coord["x"] 
@@ -87,7 +83,8 @@ def mk_pwl_cmds_fast(coords, path):
     i-=1
     
     # Fill up path with (x,slope,dt,sparse_bit) points
-    while i >= -2: 
+    while i >= -2:
+        
         if i > -1:
             if skip_calc: skip_calc = False
             else:
@@ -96,16 +93,7 @@ def mk_pwl_cmds_fast(coords, path):
                 t2 = coord["t"] 
                 dx = x2-x1
                 dt = t2-t1
-                slope = create_slope_obj(dx/dt)
-                # If out of bounds:
-                if (slope["sign"] > 0 and (x1+scale(slope,dt-1)) > x2) or (slope["sign"] < 0 and (x1+scale(slope,dt-1)) < x2):
-                    print("Oop. It's out of bounds FIX ############################################")
-                    # t = (x2-x1)//slope
-                    # coord["x"] = x1+slope*t 
-                    # coord["t"] = t1+t 
-                    # coords[i+1] = coord.copy()
-                    # i+=1
-                    # continue
+                slope = create_slope_obj(dx/dt)  
 
             # See if we must grow the current pwl_cmd before adding to path 
             if pwl_cmd["dt"] == -1:
@@ -141,23 +129,24 @@ def mk_pwl_cmds_fast(coords, path):
                 if pwl_cmd["dt"] == batch_t:
                     pwl_cmd["dt"] = batch_size
                     pwl_cmd["sb"] = 1
-                    prev_pwl_cmd = path[path_ptr-2]
-                    if is_zero_slope(prev_pwl_cmd["slope"]) and prev_pwl_cmd["sb"]: 
-                        prev_pwl_cmd["dt"]+=batch_size
-                        path_ptr-=1
-                        pwl_cmd = prev_pwl_cmd.copy()
+                    if path_ptr > 1:
+                        prev_pwl_cmd = path[path_ptr-2]
+                        if is_zero_slope(prev_pwl_cmd["slope"]) and prev_pwl_cmd["sb"]: 
+                            prev_pwl_cmd["dt"]+=batch_size
+                            path_ptr-=1
+                            pwl_cmd = prev_pwl_cmd.copy()                        
                 else: pwl_cmd["dt"]+=left_in_batch
                 path[path_ptr-1] = pwl_cmd.copy()
                 break
             pwl_cmd["dt"] = left_in_batch
-            pwl_cmd["slope"] = {"sign": -1, "whole":0,"fract":0.0}
+            pwl_cmd["slope"] = {"sign": 1, "whole":0,"fract":0.0}
             path[path_ptr] = pwl_cmd.copy()
             path_ptr+=1
             break 
          
         # When are we allowed to add sparse cmds? If the current batch isn't fragmented and the current pwl_cmd would fill atleast 1 full batch
         if batch_t >= batch_size or (batch_t == 0 and pwl_cmd["dt"] >= batch_size):
-            newx, leftover_dt = batchify_fast(pwl_cmd)
+            newx, leftover_dt = batchify(pwl_cmd)
             path[path_ptr] = pwl_cmd.copy()
             path_ptr+=1 
             batch_t = 0
@@ -173,6 +162,7 @@ def mk_pwl_cmds_fast(coords, path):
             if batch_t+pwl_cmd["dt"] <= batch_size: 
                 # This means the pwl_cmd-to-add will not fully fill up a batch. So we add it, then consider the next pwl point.
                 # (sb will surely be 0 since we'll need to fill the batch we're currently making)
+                # print(pwl_cmd["x"])
                 pwl_cmd["sb"] = 0 
                 path[path_ptr] = pwl_cmd.copy()
                 path_ptr+=1 
@@ -204,16 +194,15 @@ def mk_pwl_cmds_fast(coords, path):
             x1 = x2
             t1 = t2 
         i-=1
-        
     return path_ptr
 
 def main(coords):
     t0 = perf_counter()
     coords = [{"x":el[0], "t":el[1]} for el in coords]
     path_wrapper = [0]*((len(coords)-1)*6)
-    l = mk_pwl_cmds_fast(coords,path_wrapper)
+    l = mk_pwl_cmds(coords,path_wrapper)
+    # print(toLi(path_wrapper,l,True))
     path = toLi(path_wrapper,l)
-    print(toLi(path_wrapper,l,True))
     fpga_cmds = mk_fpga_cmds(path)
     intv = perf_counter() - t0
     coords = [] 
@@ -242,11 +231,53 @@ def toDi(li):
         out.append(di)
     return out
 
+def decode_pwl_cmds(pwl_cmds):
+    wave = []
+    for x,slope,dt,_ in pwl_cmds:
+        t = 0
+        w = [] 
+        slope = create_slope_obj(slope)
+        while t < dt:
+            w.append(x+scale(slope,t))
+            t+=1 
+        wave.append(w)
+    return wave 
+
+def fixed_to_float(num,m,n):
+    whole,fract = 0,0
+    bin_num = bin(num)[2:]
+    j = -n
+    out = 0
+    for i in range(len(bin_num)-1,-1,-1):
+        if bin_num[i] == "1": out+=2**j if j != (m-1) else -2**j
+        j+=1
+    return out 
+
+def fpga_to_pwl(fpga_cmds):
+    pwl_cmds = []
+    for num in fpga_cmds:
+        x_mask = 0xffff << (12*4)
+        x = (num&x_mask) >> (12*4)
+        print(hex(x_mask),hex(x))
+        if x & 0x8000: x = -0x8000 + (x & 0x7fff)
+        print(x)
+        slope_mask = 0xffffffff << (4*4)
+        slope = (num&slope_mask) >> (4*4)
+        slope = fixed_to_float(slope,16,16)    
+        dt_mask = 0xffff
+        sb = num & 0b1
+        dt = (num&dt_mask) >> 1
+        pwl_cmds.append((x,slope,dt,sb)) 
+    return pwl_cmds
+
 #############################################################
 
-# coords = [(0,0), (300,300), (350,1000),(0,1800)]
+# coords = [(0,0), (-6,5)]
 # coords.reverse()
 # intv,fpga_cmds = main(coords)
 # print([hex(el) for el in fpga_cmds])
+# pwl = fpga_to_pwl(fpga_cmds)
+# print(pwl)
+
 
 

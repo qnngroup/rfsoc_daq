@@ -1,4 +1,4 @@
-from math import log2
+from math import log2,ceil,floor
 firmware_version = 1.004
 raw_fv = 0x1004
 mem_size = 256
@@ -8,6 +8,7 @@ sample_width = 16
 wd_data_width = sample_width
 batch_width = 256
 batch_size = batch_width//sample_width
+fixed_point_percision = 8
 rfdc_channels = 8
 sdc_data_width = 2*rfdc_channels*sample_width
 sdc_samples = sdc_data_width//wd_data_width
