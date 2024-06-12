@@ -91,11 +91,9 @@ cdef slope_obj create_slope_obj(double slope_in):
     slope.fract = abs(slope.fract)
     return slope
 
-cdef int scale(slope_obj slope,int i):
-    cdef int out
-    out = slope.sign*slope.whole*i
-    out+= slope.sign*<int>floor(slope.fract*i)
-    return out
+cdef int nearest_int(double num): return <int>floor(num+0.5)
+
+cdef int scale(slope_obj slope,int i): return nearest_int(slope.sign*(slope.whole+slope.fract)*i)
 
 cdef int8_t is_zero_slope(slope_obj slope): return slope.whole == 0 and slope.fract == 0.0
 
@@ -347,18 +345,6 @@ def create_c_coords_py(py_coords):
         ct = {"x": x, "t": t}
         set_item(&tl,i,&ct)
     return tlw
-
-def decode_pwl_cmds(pwl_cmds):
-    wave = []
-    for x,slope,dt,_ in pwl_cmds:
-        t = 0
-        w = [] 
-        slope = create_slope_obj(slope)
-        while t < dt:
-            w.append(x+scale(slope,t))
-            t+=1 
-        wave.append(w)
-    return wave
     
 def fixed_to_double(num,m,n):
     whole,fract = 0,0
@@ -388,15 +374,19 @@ def fpga_to_pwl(fpga_cmds):
 def decode_pwl_cmds(pwl_cmds):
     wave = []
     batch = []
-    for x,slope,dt,sb in pwl_cmds:
+    for x,slope,dt,_ in pwl_cmds:
         t = 0
-        while (t < dt):
-            batch.append(x+slope*t)
-            if len(batch) == batch_size:
+        slope = create_slope_obj(slope)
+        while t < dt:
+            batch.append(x+scale(slope,t))
+            if len(batch) == batch_size: 
                 wave.append(batch)
-                batch = []
-            t+=1
-    return wave
+                batch = [] 
+            t+=1 
+    if len(batch) != 0:
+        print("UNEVEN WAVE CREATED")
+        return None
+    return wave 
 
 def expected_wave_formatter(pwl_cmds):
     wave = decode_pwl_cmds(pwl_cmds)

@@ -24,6 +24,7 @@ module sample_generator #(parameter CMD_WIDTH, parameter RESP_WIDTH, parameter S
 	logic set_seeds,run_shift_regs,run_trig_wav,run_pwl;
 	logic pwl_rdy, valid_pwl_batch;
 	logic[(2*`WD_DATA_WIDTH)-1:0] pwl_wave_period;
+	logic valid_pwl_wave_period; 
 	logic active_out;
 	logic[RESP_WIDTH-1:0] curr_dac_cmd; 
 
@@ -50,6 +51,7 @@ module sample_generator #(parameter CMD_WIDTH, parameter RESP_WIDTH, parameter S
 	        .run(run_pwl && dac0_rdy),
 	        .rdy_to_run(pwl_rdy),
 	        .pwl_wave_period(pwl_wave_period),
+	        .valid_pwl_wave_period(valid_pwl_wave_period),
 	        .batch_out(pwl_batch_out),
 	        .valid_batch_out(valid_pwl_batch),
 	        .dma(pwl_dma_if.stream_in));

@@ -101,10 +101,24 @@ def test_coords(coords,do_plot=True,show_batches=False,simple_plot=False, ignore
         if simple_plot: plt.plot(flat_wave)
         else:
             abs_t = 0
-            for wave in waves:
-                t = [abs_t+el for el in range(len(wave))]
-                plt.plot(t,wave)
-                abs_t+=len(wave)
+            wavlet_cmd = [] 
+            path_cpy = path[:]
+            batch_t = 0
+            while path_cpy:
+                cmd = path_cpy.pop(0)                
+                while cmd[-1] == 0 and path_cpy[0][-1] == 0 and (batch_t+cmd[-2]) < batch_size: 
+                    wavlet_cmd+=[cmd]
+                    batch_t+=cmd[-2]
+                    cmd = path_cpy.pop(0) 
+                    if len(path_cpy) == 0: break
+                wavlet_cmd +=[cmd]
+                cmd_wave = flatten(c.decode_pwl_cmds(wavlet_cmd))
+                t = [abs_t+el for el in range(len(cmd_wave))]
+                plt.plot(t,cmd_wave)
+                abs_t+=len(cmd_wave)
+                wavlet_cmd = []
+                batch_t = 0
+          
 
     wrong = []
     if py_path != path: wrong.append(("paths not equal"))
@@ -158,9 +172,9 @@ def test_coords(coords,do_plot=True,show_batches=False,simple_plot=False, ignore
     return path,passed,wrong,intvc,intvp
 ##############################################################################################################################################
 
-test_num = int(1e5)
+test_num = int(1e6)
 do_plot = False
-simple_plot = True
+simple_plot = False
 nxt_perc = 10
 t0 = time()
 n = 10
@@ -171,7 +185,7 @@ for i in range(test_num):
         print(f"{nxt_perc}%",end="")
         if nxt_perc != 90: print(",",end="")
         nxt_perc+=10        
-    coords = gen_rand_coords(n=n,avg_dt=200,max_val=max_voltage)
+    coords = gen_rand_coords(n=n,avg_dt=100,max_val=max_voltage)
     ignore = ignore_same_sloped_points(coords)
     path,result,wrong,intvc,intvp = test_coords(coords[:],do_plot=do_plot,show_batches=False,simple_plot=simple_plot, ignore=ignore,scale_plot = False)
     intvcs.append(intvc)

@@ -35,65 +35,68 @@ def assign_packed_probe(probe_len, names, cond=None):
     for i in range(probe_len): out+=template(i)
     return out
 
-def plot_path(coords,simple_plot=True,desired_period=None):
-    if desired_period:
-        req_max_t = desired_period//dac_T
-        given_max_t = coords[-1][1]
-        coords = [(el[0],int(req_max_t*(el[1]/given_max_t))) for el in coords]
-    
-    coords.reverse()
-    intv,fpga_cmds = c.main(coords)
-    path = c.fpga_to_pwl(fpga_cmds)
-    waves = c.decode_pwl_cmds(path)
-    flat_wave = flatten(waves)
-    if desired_period:
-        flat_wave = [(el/max_voltage)*100 for el in flat_wave]
-        ts = [round((i*dac_T)/1e-6,3) for i in range(len(flat_wave))]
-    else: ts = [i for i in range(len(flat_wave))]
-    
-    dense_packs,sparse_packs = 0,0
-    for x,slope,dt,sb in path:
-        if sb == 0: dense_packs+=1
-        else: sparse_packs+=1
-    total_bytes = ((dense_packs*batch_width) + (sparse_packs*dma_data_width))/8
+def get_wave(coords_in=None, path=None):
+    if path is None:
+        if coords_in is None: return None
+        coords = coords_in[:]
+        coords.reverse()
+        intv,fpga_cmds = p.main(coords)
+        path = c.fpga_to_pwl(fpga_cmds)
+    waves,coords_decoded = p.decode_pwl_cmds(path)
+    if coords_in is None: coords = coords_decoded
+    return waves,coords,path
 
-    period = round((dac_T*len(flat_wave))/1e-6,3)
-    font = FontProperties()
-    font.set_family('serif')
-    font.set_name('Times New Roman')
-    if desired_period: 
-        plt.xlabel(r"$\mu s$",fontsize=17,fontproperties=font,fontweight='light')
-        plt.ylabel("% of Max DAC Voltage",fontsize=17,fontproperties=font,fontweight='light')
-    plt.title(f"PWL Wave Period: {period} us\n{total_bytes/1e3} KB required",fontsize=20,fontproperties=font,fontweight='heavy')
-    if desired_period: split = lambda li: ([(el[0]/max_voltage)*100 for el in li],[(el[1]*dac_T)/1e-6 for el in li])
-    else: split = lambda li: ([el[0] for el in li],[el[1]for el in li])
-    x,t = split(coords)
-    plt.scatter(t,x)
-    # print(flat_wave,"\n")
-    if simple_plot: plt.plot(ts,flat_wave)
+def plot_wave(coords, waves, simple_plot=True):
+    flat_wave = flatten(waves)
+    split = lambda li: ([el[0] for el in li],[el[1]for el in li])
+    if coords is not None:
+        x,t = split(coords)
+        plt.scatter(t,x)
+    if simple_plot: plt.plot(flat_wave)
     else:
         abs_t = 0
         for wave in waves:
-            if desired_period:
-                t = [((abs_t+i)*dac_T)/1e-6 for i in range(len(wave))]
-                f = [(el/max_voltage)*100 for el in wave]
-            else: 
-                t = [abs_t+i for i in range(len(wave))]
-                f = [el for el in wave]
+            t = [abs_t+i for i in range(len(wave))]
+            f = [el for el in wave]
             plt.plot(t,f)
             abs_t+=len(wave)
-    # print(path)
-    return fpga_cmds,flat_wave
-
-
+            
+def make_expc_test(path,waves):
+    cmd = "dma_buff = {"
+    path = [(x,p.create_slope_obj(slope),dt,sb) for x,slope,dt,sb in path]
+    fpga_cmds = p.mk_fpga_cmds(path)
+    for el in fpga_cmds:
+        cmd+=f"64'd{el}, "
+    cmd = cmd[:-2]+"};"
+    flat_wave = flatten(waves)
+    expc_wave = "expc_wave = {"
+    flat_wave.reverse()
+    for el in flat_wave: expc_wave+=f"{el},"
+    expc_wave = expc_wave[:-1]+"};"
+    return cmd,expc_wave
+    
 mv = max_voltage
+coords = None
+path = None
+
 # coords = [(0,0), (mv,64), (mv,1050),(mv/4,1150), (mv/4,2000), (mv/2,2400),(mv/2,3000), (0,4000), (0,4500)]
-coords = [(0,0), (-6,5),(6,16),(10,40),(0,64)]
+# coords = [(0,0), (-6,5),(6,16),(10,40),(0,64),(10,74), (-15, 84), (10,130), (0,135)]
+# coords = [(0,0), (129,15)]
+coords = [(0,0), (16,8),(133,10),(0,14),(1,15)]
 
 
-simple_plot = True
-desired_period = None
-fpga_cmds,fw = plot_path(coords,simple_plot=simple_plot,desired_period=desired_period)
+# path = [(0,2,8,0),(16,-10,8,0)]
+# path = [(0, 8.600006103515625,16,1)]
+
+
+waves,coords,path = get_wave(coords_in = coords, path=path)
+plot_wave(coords,waves)
+cmd,expc_wave = make_expc_test(path,waves)
+print(cmd)
+print(expc_wave)
+# simple_plot = True
+# desired_period = None
+# fpga_cmds,fw = plot_path(coords,simple_plot=simple_plot,desired_period=desired_period)
 # print("\n",fpga_cmds)
 # fpga_cmds.reverse()
 # print(c.rtl_cmd_formatter(fpga_cmds),len(fpga_cmds))
@@ -102,6 +105,62 @@ fpga_cmds,fw = plot_path(coords,simple_plot=simple_plot,desired_period=desired_p
 # print(mk_delays(n=len(fpga_cmds),delay_range=(0,150)),"\n")
 # plt.axhline(-,color="orange", alpha=0.4)
 # print(assign_packed_probe(16,["batch_out","intrp_batch"],"gen_mode"))
+
+
+
+
+
+
+# def plot_path(coords,simple_plot=True,desired_period=None):
+#     if desired_period:
+#         req_max_t = desired_period//dac_T
+#         given_max_t = coords[-1][1]
+#         coords = [(el[0],int(req_max_t*(el[1]/given_max_t))) for el in coords]
+    
+#     coords.reverse()
+#     intv,fpga_cmds = c.main(coords)
+#     path = c.fpga_to_pwl(fpga_cmds)
+#     waves = c.decode_pwl_cmds(path)
+#     flat_wave = flatten(waves)
+#     if desired_period:
+#         flat_wave = [(el/max_voltage)*100 for el in flat_wave]
+#         ts = [round((i*dac_T)/1e-6,3) for i in range(len(flat_wave))]
+#     else: ts = [i for i in range(len(flat_wave))]
+    
+#     dense_packs,sparse_packs = 0,0
+#     for x,slope,dt,sb in path:
+#         if sb == 0: dense_packs+=1
+#         else: sparse_packs+=1
+#     total_bytes = ((dense_packs*batch_width) + (sparse_packs*dma_data_width))/8
+
+#     period = round((dac_T*len(flat_wave))/1e-6,3)
+#     font = FontProperties()
+#     font.set_family('serif')
+#     font.set_name('Times New Roman')
+#     if desired_period: 
+#         plt.xlabel(r"$\mu s$",fontsize=17,fontproperties=font,fontweight='light')
+#         plt.ylabel("% of Max DAC Voltage",fontsize=17,fontproperties=font,fontweight='light')
+#     plt.title(f"PWL Wave Period: {period} us\n{total_bytes/1e3} KB required",fontsize=20,fontproperties=font,fontweight='heavy')
+#     if desired_period: split = lambda li: ([(el[0]/max_voltage)*100 for el in li],[(el[1]*dac_T)/1e-6 for el in li])
+#     else: split = lambda li: ([el[0] for el in li],[el[1]for el in li])
+#     x,t = split(coords)
+#     plt.scatter(t,x)
+#     # print(flat_wave,"\n")
+#     if simple_plot: plt.plot(ts,flat_wave)
+#     else:
+#         abs_t = 0
+#         for wave in waves:
+#             if desired_period:
+#                 t = [((abs_t+i)*dac_T)/1e-6 for i in range(len(wave))]
+#                 f = [(el/max_voltage)*100 for el in wave]
+#             else: 
+#                 t = [abs_t+i for i in range(len(wave))]
+#                 f = [el for el in wave]
+#             plt.plot(t,f)
+#             abs_t+=len(wave)
+#     # print(path)
+#     return fpga_cmds,flat_wave
+
 
 
 

@@ -21,7 +21,7 @@ module dac_intf_test #(parameter IS_INTEGRATED = 0)();
 	logic[`MEM_SIZE-1:0] fresh_bits; 
 	logic[`MEM_SIZE-1:0][DATA_WIDTH-1:0] read_resps; 
 	int total_errors = 0;
-	int curr_err;
+	int curr_err,test_num;
 	Axis_IF #(`DMA_DATA_WIDTH) pwl_dma_if();
 
 	dac_intf_tb #(.MEM_SIZE(`MEM_SIZE), .DATA_WIDTH(DATA_WIDTH), .BATCH_SIZE(BATCH_SIZE), .DMA_DATA_WIDTH(`DMA_DATA_WIDTH))
@@ -43,8 +43,9 @@ module dac_intf_test #(parameter IS_INTEGRATED = 0)();
 	      .pwl_dma_if(pwl_dma_if));
 	
 	always_comb begin 
-		for (int i = 0; i < BATCH_SIZE; i++) rand_sample_batch[i] = 16'hBEEF+i;
+		for (int i = 0; i < BATCH_SIZE; i++) rand_sample_batch[i] = 16'hBEEF+i;		
 	end 
+	always_ff @(posedge ps_clk) test_num <= debug.test_num;
 	always #(0.5s/(PS_CLK_RATE_MHZ*1_000_000)) ps_clk = ~ps_clk;
 	always #(0.5s/(DAC_CLK_RATE_MHZ*1_000_000)) dac_clk = ~dac_clk;
 	initial begin
@@ -52,14 +53,18 @@ module dac_intf_test #(parameter IS_INTEGRATED = 0)();
 	        $dumpfile("dac_intf_test.vcd");
 	        $dumpvars(0,dac_intf_test); 
             run_tests(); 
-         end                      
+        end                      
     end 
 
 	task automatic reset_errors();
         total_errors += debug.get_error_count();
         debug.clear_error_count(); 
     endtask 
-	
+	task automatic combine_errors();
+		total_errors += debug.get_error_count();
+		debug.set_error_count(total_errors);
+	endtask 
+
     task automatic run_tests();
     	{ps_clk,ps_rst} = 0;
         {dac_clk, dac_rst} = 0; 
@@ -73,13 +78,11 @@ module dac_intf_test #(parameter IS_INTEGRATED = 0)();
         debug.displayc($sformatf("%0d: Run random samples",debug.test_num), .msg_verbosity(sim_util_pkg::VERBOSE));
        	tb_i.send_rand_samples(sample); 
        	debug.check_test(sample == rand_sample_batch, .has_parts(0));
-        reset_errors();
 
         // TEST 2
         debug.displayc($sformatf("%0d: Halt, check for valid drop",debug.test_num), .msg_verbosity(sim_util_pkg::VERBOSE));
         tb_i.halt_dac();
         debug.check_test(1'b1, .has_parts(0));
-        reset_errors();
 
         // TEST 3
         debug.displayc($sformatf("%0d: Run triangle wave, and check outputs (halt in middle)",debug.test_num), .msg_verbosity(sim_util_pkg::VERBOSE));
@@ -95,10 +98,9 @@ module dac_intf_test #(parameter IS_INTEGRATED = 0)();
         curr_err = debug.get_error_count();
         tb_i.send_pwl_wave();
 		tb_i.halt_osc = 1;
-		// tb_i.check_pwl_wave(debug,5);
-        total_errors += debug.get_error_count();
-		debug.set_error_count(total_errors);
-		#5000;
+		tb_i.check_pwl_wave(debug,5);  
+		#5000;      
+		combine_errors();
         debug.check_test(curr_err == debug.get_error_count(), .has_parts(1));
 
        	if (~IS_INTEGRATED) debug.fatalc("### SHOULD NOT BE HERE. CHECK TEST NUMBER ###");

@@ -13,7 +13,7 @@
         `define MAX_DAC_BURST_SIZE    32767                                  // Max number of batches that can be burst from the DAC (2**15-1 corresponds to about 85 us)
         `define MAX_SCALE_FACTOR      15                                     // Maximum amount the DAC output can be scaled down by
         `define REQ_BUFFER_SZ         8                                      // Number of processor requests to remember that we would otherwise miss. 
-        `define DMA_DATA_WIDTH        (3*`SAMPLE_WIDTH)                      // Bit width of transfers over DMA for the PWL. Each transfer is of the form {time (ns), DAC value, slope}, where slope is r.o.c. between the current point and the next one. The last sample always has a slope of 0 (48).  
+        `define DMA_DATA_WIDTH        64                                     // Bit width of transfers over DMA for the PWL. Each transfer is of the form {x (16), slope (32), dt(15) sb(1)}. sb = sparse_bit
         `define MAX_WAVELET_PERIOD    4                                      // Maximum allowable period of pwl wavelet (in microseconds) (should be 20us)
         `define SPARSE_BRAM_DEPTH     600                                    // Corresponding size of PWL wave sparse BRAM buffer, where each line is of size `DMA_DATA_WIDTH
         `define DENSE_BRAM_DEPTH      600                                    // Corresponding size of PWL wave dense BRAM buffer, where each line is of size `BATCH_SAMPLES    

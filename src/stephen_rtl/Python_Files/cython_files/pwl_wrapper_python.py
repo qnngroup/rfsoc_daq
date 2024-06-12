@@ -10,10 +10,9 @@ def create_slope_obj(slope):
     fract = round(whole-slope,fixed_point_percision)
     return {"sign": sign, "whole": abs(whole), "fract":abs(fract)}
 
-def scale(slope,i):
-    out = slope["sign"]*slope["whole"]*i
-    out+= slope["sign"]*floor(slope["fract"]*i)
-    return int(out)
+def nearest_int(num): return floor(num+0.5)
+
+def scale(slope,i): return nearest_int(slope["sign"]*(slope["whole"]+slope["fract"])*i)
 
 def is_zero_slope(slope): return slope["whole"] == 0 and slope["fract"] == 0.0
 
@@ -233,15 +232,25 @@ def toDi(li):
 
 def decode_pwl_cmds(pwl_cmds):
     wave = []
+    batch = []
+    coords = []
+    abs_t = 0
     for x,slope,dt,_ in pwl_cmds:
         t = 0
-        w = [] 
         slope = create_slope_obj(slope)
+        coords.append((x,abs_t))
         while t < dt:
-            w.append(x+scale(slope,t))
+            batch.append(x+scale(slope,t))
+            if len(batch) == batch_size: 
+                wave.append(batch)
+                batch = [] 
             t+=1 
-        wave.append(w)
-    return wave 
+        abs_t+=t
+    coords.append((wave[-1][-1],abs_t-1))
+    if len(batch) != 0:
+        print("UNEVEN WAVE CREATED")
+        return None
+    return wave,coords
 
 def fixed_to_float(num,m,n):
     whole,fract = 0,0
@@ -278,6 +287,8 @@ def fpga_to_pwl(fpga_cmds):
 # print([hex(el) for el in fpga_cmds])
 # pwl = fpga_to_pwl(fpga_cmds)
 # print(pwl)
+
+
 
 
 

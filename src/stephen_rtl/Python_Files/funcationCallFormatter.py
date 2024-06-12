@@ -72,9 +72,13 @@ def formatFuncCall(s,fName = "functionName"):
     return out+align(body)
 
 
-st = """module axi_transmit_test #(parameter IS_INTEGRATED = 0)(output logic done);
+st = """module intrp_tb #(parameter BATCH_SIZE, parameter SAMPLE_WIDTH)
+					   (input wire clk,
+	                    input wire[BATCH_SIZE-1:0][SAMPLE_WIDTH-1:0] intrp_batch,
+					    output logic[SAMPLE_WIDTH-1:0] x,
+	                    output logic[(2*SAMPLE_WIDTH)-1:0] slope);
                  """
-fName = "at_test"
+fName = "dut_i"
 out= formatFuncCall(st,fName=fName)
 print(out)
 

@@ -56,6 +56,8 @@ module dac_intf_tb #(parameter MEM_SIZE, parameter DATA_WIDTH, parameter BATCH_S
 						end 
 					endcase					
 				end
+				dac0_rdy <= 1;
+				@(posedge dac_clk); 
 			end
 		join_none
 	endtask 
