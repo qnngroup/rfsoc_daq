@@ -24,7 +24,7 @@ module axi_recieve_tb #(parameter BUS_WIDTH, parameter DATA_WIDTH)
 		end 
 	end
 
-	task automatic init();
+	task automatic init();		
 		{intf.dev_rdy, intf.data_to_send, intf.send} <= 0;
 		@(posedge clk);
 	endtask 

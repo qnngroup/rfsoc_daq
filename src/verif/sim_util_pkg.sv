@@ -21,7 +21,7 @@ package sim_util_pkg;
   endclass
 
   typedef enum {DEFAULT=0, VERBOSE=1, DEBUG=2} verbosity_t;
-  typedef enum {GREEN=32, RED=31, DEFAULT_COLOR=33} color_t; 
+  typedef enum {GREEN=32, RED=31, BLUE=34, DEFAULT_COLOR=33} color_t; 
 
   class debug;
 

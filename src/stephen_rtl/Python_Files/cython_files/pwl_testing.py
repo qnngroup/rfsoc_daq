@@ -172,7 +172,7 @@ def test_coords(coords,do_plot=True,show_batches=False,simple_plot=False, ignore
     return path,passed,wrong,intvc,intvp
 ##############################################################################################################################################
 
-test_num = int(1e6)
+test_num = int(1e4)
 do_plot = False
 simple_plot = False
 nxt_perc = 10

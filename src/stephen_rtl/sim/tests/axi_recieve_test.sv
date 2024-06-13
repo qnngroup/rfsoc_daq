@@ -11,6 +11,7 @@ module axi_recieve_test #(parameter IS_INTEGRATED = 0)();
 
 	logic clk, rst; 
 	int total_errors = 0;
+	int seed;
 	bit addr_test = 0;
 	localparam[5:0][7:0] bus_widths = {8'd111, 8'd32, 8'd16, 8'd11, 8'd2, 8'd1};
 	localparam[1:0][7:0] data_widths = {8'd32, 8'd16};
@@ -53,6 +54,9 @@ module axi_recieve_test #(parameter IS_INTEGRATED = 0)();
     	{clk,rst} = 0;
      	repeat (20) @(posedge clk);
         debug.displayc($sformatf("\n\n### TESTING %s ###\n\n",debug.get_test_name()));
+     	seed = generate_rand_seed();
+        debug.displayc($sformatf("Using Seed Value %0d",seed),.msg_color(sim_util_pkg::BLUE),.msg_verbosity(sim_util_pkg::VERBOSE));
+        $srandom(seed);
      	debug.timeout_watcher(clk,TIMEOUT);
         repeat (5) @(posedge clk);
         flash_signal(rst,clk);        

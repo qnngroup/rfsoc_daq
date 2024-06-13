@@ -72,11 +72,17 @@ def formatFuncCall(s,fName = "functionName"):
     return out+align(body)
 
 
-st = """module intrp_tb #(parameter BATCH_SIZE, parameter SAMPLE_WIDTH)
-					   (input wire clk,
-	                    input wire[BATCH_SIZE-1:0][SAMPLE_WIDTH-1:0] intrp_batch,
-					    output logic[SAMPLE_WIDTH-1:0] x,
-	                    output logic[(2*SAMPLE_WIDTH)-1:0] slope);
+st = """module bram_interface #(parameter DATA_WIDTH, parameter BRAM_DEPTH, parameter BRAM_DELAY)
+			 		  		  (input wire clk, rst,
+			 		  		   input wire [$clog2(BRAM_DEPTH)-1:0] addr,
+			 		  		   input wire[DATA_WIDTH-1:0] line_in,
+			 		  		   input wire we, en, 
+			 		  		   input wire generator_mode, rst_gen_mode, 
+			 		  		   input wire next, 
+			 		  		   output logic[DATA_WIDTH-1:0] line_out,
+			 		  		   output logic valid_line_out,
+			 		  		   output logic[$clog2(BRAM_DEPTH)-1:0] generator_addr,
+			 		  		   output logic write_rdy);
                  """
 fName = "dut_i"
 out= formatFuncCall(st,fName=fName)

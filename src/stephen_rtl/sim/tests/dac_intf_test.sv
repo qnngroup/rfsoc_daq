@@ -22,6 +22,7 @@ module dac_intf_test #(parameter IS_INTEGRATED = 0)();
 	logic[`MEM_SIZE-1:0][DATA_WIDTH-1:0] read_resps; 
 	int total_errors = 0;
 	int curr_err,test_num;
+	int seed;
 	Axis_IF #(`DMA_DATA_WIDTH) pwl_dma_if();
 
 	dac_intf_tb #(.MEM_SIZE(`MEM_SIZE), .DATA_WIDTH(DATA_WIDTH), .BATCH_SIZE(BATCH_SIZE), .DMA_DATA_WIDTH(`DMA_DATA_WIDTH))
@@ -70,6 +71,9 @@ module dac_intf_test #(parameter IS_INTEGRATED = 0)();
         {dac_clk, dac_rst} = 0; 
      	repeat (20) @(posedge ps_clk);
         debug.displayc($sformatf("\n\n### TESTING %s ###\n\n",debug.get_test_name()));
+        seed = generate_rand_seed();
+        debug.displayc($sformatf("Using Seed Value %0d",seed),.msg_color(sim_util_pkg::BLUE),.msg_verbosity(sim_util_pkg::VERBOSE));
+        $srandom(seed);
      	debug.timeout_watcher(ps_clk,TIMEOUT);
         tb_i.init();
         repeat (5) @(posedge ps_clk);
