@@ -45,13 +45,6 @@ package sim_util_pkg;
     function string get_test_name();
       return test_name;
     endfunction 
-    
-    task automatic reset_timeout(ref logic clk);
-      timeout_reset = 1;
-      @(posedge clk);
-      timeout_reset = 0;
-      @(posedge clk);
-    endtask 
 
     task automatic timeout_watcher(ref logic clk, input int TIMEOUT);
       fork   

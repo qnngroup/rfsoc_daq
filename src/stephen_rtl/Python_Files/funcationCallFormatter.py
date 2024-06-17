@@ -72,19 +72,17 @@ def formatFuncCall(s,fName = "functionName"):
     return out+align(body)
 
 
-st = """module bram_interface #(parameter DATA_WIDTH, parameter BRAM_DEPTH, parameter BRAM_DELAY)
-			 		  		  (input wire clk, rst,
-			 		  		   input wire [$clog2(BRAM_DEPTH)-1:0] addr,
-			 		  		   input wire[DATA_WIDTH-1:0] line_in,
-			 		  		   input wire we, en, 
-			 		  		   input wire generator_mode, rst_gen_mode, 
-			 		  		   input wire next, 
-			 		  		   output logic[DATA_WIDTH-1:0] line_out,
-			 		  		   output logic valid_line_out,
-			 		  		   output logic[$clog2(BRAM_DEPTH)-1:0] generator_addr,
-			 		  		   output logic write_rdy);
+st = """module cdc_tb #(parameter PS_CMD_WIDTH, parameter DATA_WIDTH)
+			   (input wire ps_clk, dac_clk, 
+			   	input  wire[PS_CMD_WIDTH-1:0] ps_cmd_out,
+			   	input  wire[DAC_RSP_WIDTH-1:0] dac_rsp_out,
+			   	output logic ps_rst, dac_rst, 
+			   	output logic[PS_CMD_WIDTH-1:0] ps_cmd_in,
+			   	output logic ps_cmd_valid_in, ps_cmd_valid_out, ps_cmd_transfer_rdy, ps_cmd_transfer_done,
+			   	output logic[DAC_RSP_WIDTH-1:0] dac_rsp_in, 
+			   	output logic dac_rsp_valid_in, dac_rsp_valid_out, dac_rsp_transfer_rdy, dac_rsp_transfer_done);
                  """
-fName = "dut_i"
+fName = "tb_i"
 out= formatFuncCall(st,fName=fName)
 print(out)
 

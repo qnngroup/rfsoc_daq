@@ -125,11 +125,10 @@
         `define is_RTL_VALID(index)  (index == `BUFF_TIME_VALID_ID)
         
         task automatic flash_signal(ref logic sig, ref logic clk);
-            sig = 0;
-            @(posedge clk);
             sig = 1;
             @(posedge clk);
             sig = 0;
+            @(posedge clk);
         endtask 
 
         function automatic int generate_rand_seed();
@@ -149,6 +148,10 @@
             $system("rm ans.txt");
             return rand_seed+$time;
         endfunction
+
+        task automatic delay(input int dely, ref logic clk); 
+            repeat(dely) @(posedge clk);
+        endtask 
 
     endpackage 
 

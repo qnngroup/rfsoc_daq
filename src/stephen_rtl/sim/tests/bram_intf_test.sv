@@ -4,12 +4,13 @@
 `include "mem_layout.svh"
 
 module bram_intf_test #(parameter IS_INTEGRATED = 0)();
-	localparam TIMEOUT = 1000;
-	localparam TEST_NUM = 0;
-	localparam int PS_CLK_RATE_HZ = 100_000_000;
-    localparam BRAM_DEPTH = 500; 
+	localparam TIMEOUT = 5000;
+	localparam TEST_NUM = 7;
+	localparam int CLK_RATE_MHZ = 150;
+    localparam MAN_SEED = 0; 
+    localparam BRAM_DEPTH = 100; 
     localparam BRAM_DELAY = 3; 
-    localparam DATA_WIDTH = `WD_DATA_WIDTH;
+    localparam DATA_WIDTH = `DMA_DATA_WIDTH;
 
     sim_util_pkg::debug debug = new(sim_util_pkg::DEBUG,TEST_NUM,"BRAM_INTERFACE", IS_INTEGRATED); 
 
@@ -34,7 +35,16 @@ module bram_intf_test #(parameter IS_INTEGRATED = 0)();
           .line_out(line_out), .valid_line_out(valid_line_out),
           .generator_addr(generator_addr), .write_rdy(write_rdy));
 
-	always #(0.5s/PS_CLK_RATE_HZ) clk = ~clk;
+    bram_intf_tb #(.DATA_WIDTH(DATA_WIDTH), .BRAM_DEPTH(BRAM_DEPTH))
+    tb_i(.clk(clk),
+         .line_out(line_out), .valid_line_out(valid_line_out),
+         .generator_addr(generator_addr), .write_rdy(write_rdy),
+         .rst(rst),
+         .addr(addr), .line_in(line_in), .we(we), .en(en),
+         .generator_mode(generator_mode), .rst_gen_mode(rst_gen_mode), .next(next));
+
+
+	always #(0.5s/(CLK_RATE_MHZ*1_000_000)) clk = ~clk;
 	initial begin
         if (~IS_INTEGRATED) begin 
             $dumpfile("bram_intf_test.vcd");
@@ -56,19 +66,72 @@ module bram_intf_test #(parameter IS_INTEGRATED = 0)();
         {clk,rst} = 0;
         repeat (5) @(posedge clk);        
         debug.displayc($sformatf("\n\n### TESTING %s ###\n\n",debug.get_test_name()));
-        seed = generate_rand_seed();
+        seed = (MAN_SEED > 0)?  MAN_SEED : generate_rand_seed();
         debug.displayc($sformatf("Using Seed Value %0d",seed),.msg_color(sim_util_pkg::BLUE),.msg_verbosity(sim_util_pkg::VERBOSE));
         $srandom(seed);
         debug.timeout_watcher(clk,TIMEOUT);
         tb_i.init();
         repeat (20) @(posedge clk);
 
-         // TEST 1
-        debug.displayc($sformatf("%0d: Store and read one value",debug.test_num), .msg_verbosity(sim_util_pkg::VERBOSE));
+        // TEST 1
+        debug.displayc($sformatf("%0d: Store and read one value (20 cycles)",debug.test_num), .msg_verbosity(sim_util_pkg::VERBOSE));
         curr_err = debug.get_error_count();
-        tb_i.store_vals(debug, $urandom_range(-100,100), 2);
+        tb_i.write_rands(1);
+        tb_i.check_bram_vals(debug,20); 
         debug.check_test(curr_err == debug.get_error_count(), .has_parts(1));
         reset_errors();
+
+        // TEST 2
+        debug.displayc($sformatf("%0d: Store and read half a buffer length (10 cycles)",debug.test_num), .msg_verbosity(sim_util_pkg::VERBOSE));
+        curr_err = debug.get_error_count();
+        tb_i.write_rands((BRAM_DELAY+1)/2);
+        tb_i.check_bram_vals(debug,10); 
+        debug.check_test(curr_err == debug.get_error_count(), .has_parts(1));
+        reset_errors();
+
+        // TEST 3
+        debug.displayc($sformatf("%0d: Store and read half a full buffer length (10 cycles)",debug.test_num), .msg_verbosity(sim_util_pkg::VERBOSE));
+        curr_err = debug.get_error_count();
+        tb_i.write_rands(BRAM_DELAY+1);
+        tb_i.check_bram_vals(debug,10); 
+        debug.check_test(curr_err == debug.get_error_count(), .has_parts(1));
+        reset_errors();
+
+        // TEST 4
+        debug.displayc($sformatf("%0d: Store and read half bram length (3 cycles)",debug.test_num), .msg_verbosity(sim_util_pkg::VERBOSE));
+        curr_err = debug.get_error_count();
+        tb_i.write_rands(BRAM_DEPTH/2);
+        tb_i.check_bram_vals(debug,3); 
+        debug.check_test(curr_err == debug.get_error_count(), .has_parts(1));
+        reset_errors();
+
+        // TEST 5
+        debug.displayc($sformatf("%0d: Store and read full bram length (3 cycles)",debug.test_num), .msg_verbosity(sim_util_pkg::VERBOSE));
+        curr_err = debug.get_error_count();
+        tb_i.write_rands(BRAM_DEPTH);
+        tb_i.check_bram_vals(debug,3); 
+        debug.check_test(curr_err == debug.get_error_count(), .has_parts(1));
+        reset_errors();
+
+        // TEST 6
+        debug.displayc($sformatf("%0d: Store and read full bram length (3 cycles, osc next)",debug.test_num), .msg_verbosity(sim_util_pkg::VERBOSE));
+        curr_err = debug.get_error_count();
+        tb_i.write_rands(BRAM_DEPTH);
+        tb_i.check_bram_vals(debug,3,.osc_next(1)); 
+        debug.check_test(curr_err == debug.get_error_count(), .has_parts(1));
+        reset_errors();
+
+        // TEST 7
+        debug.displayc($sformatf("%0d: Reset gen_mode and restart prev test",debug.test_num), .msg_verbosity(sim_util_pkg::VERBOSE));
+        curr_err = debug.get_error_count();
+        flash_signal(rst_gen_mode,clk);  
+        tb_i.check_bram_vals(debug,3,.osc_next(1)); 
+        combine_errors();
+        debug.check_test(curr_err == debug.get_error_count(), .has_parts(1));
+
+        if (~IS_INTEGRATED) debug.fatalc("### SHOULD NOT BE HERE. CHECK TEST NUMBER ###");
+        else if (debug.test_num < TEST_NUM) debug.fatalc("### SHOULD NOT BE HERE. CHECK TEST NUMBER ###");
+        debug.set_test_complete();
     endtask 
 endmodule 
 

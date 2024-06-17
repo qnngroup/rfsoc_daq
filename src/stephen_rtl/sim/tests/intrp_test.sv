@@ -6,7 +6,7 @@
 module intrp_test #(parameter IS_INTEGRATED = 0)();
 	localparam TIMEOUT = 1000;
 	localparam TEST_NUM = 5;
-	localparam int PS_CLK_RATE_HZ = 100_000_000;
+	localparam int CLK_RATE_MHZ = 150;
     logic clk; 
     logic[`SAMPLE_WIDTH-1:0] x;
     logic[(2*`SAMPLE_WIDTH)-1:0] slope; 
@@ -29,7 +29,7 @@ module intrp_test #(parameter IS_INTEGRATED = 0)();
         .intrp_batch(intrp_batch),
         .x(x), .slope(slope));
 
-	always #(0.5s/PS_CLK_RATE_HZ) clk = ~clk;    
+	always #(0.5s/(CLK_RATE_MHZ*1_000_000)) clk = ~clk;
     initial begin
         if (~IS_INTEGRATED) begin 
             $dumpfile("intrp_test.vcd");
@@ -93,6 +93,10 @@ module intrp_test #(parameter IS_INTEGRATED = 0)();
         repeat(20) tb_i.check_intrped_batch(debug, $urandom_range(-100,100), tb_i.gen_rand_real({-100,100}));
         combine_errors();        
         debug.check_test(curr_err == debug.get_error_count(), .has_parts(1));
+
+        if (~IS_INTEGRATED) debug.fatalc("### SHOULD NOT BE HERE. CHECK TEST NUMBER ###");
+        else if (debug.test_num < TEST_NUM) debug.fatalc("### SHOULD NOT BE HERE. CHECK TEST NUMBER ###");
+        debug.set_test_complete();
     endtask 
 
 endmodule 

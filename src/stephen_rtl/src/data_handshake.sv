@@ -3,18 +3,18 @@
 import mem_layout_pkg::*;
 
 module data_handshake #(parameter DATA_WIDTH = 32) 
-						    (input wire clk_src,clk_dst,rst_src,rst_dst,
-							 input wire[DATA_WIDTH-1:0] data_in,
-							 input wire valid_in,
-							 output logic[DATA_WIDTH-1:0] data_out,
-							 output logic valid_out, 
-							 output logic rdy,done);
+		       (input wire clk_src,clk_dst,rst_src,rst_dst,
+		        input wire[DATA_WIDTH-1:0] data_in,
+		        input wire valid_in,
+		        output logic[DATA_WIDTH-1:0] data_out,
+		        output logic valid_out, 
+		        output logic rdy,done);
 	Axis_IF #(DATA_WIDTH) data_src();
     Axis_IF #(DATA_WIDTH) data_dst();
 
     Axis_IF #(DATA_WIDTH) ack_src();
     Axis_IF #(DATA_WIDTH) ack_dst();
-    enum logic[1:0] {IDLE_SRC,SEND_DATA,GET_ACK, ERROR} srcState;
+    enum logic[2:0] {FIRST_TRANSFER,IDLE_SRC,SEND_DATA,GET_ACK, LAST,ERROR} srcState;
     enum logic[1:0] {GET_DATA,SEND_ACK} dstState;
 
     assign rdy = srcState == IDLE_SRC;
@@ -33,14 +33,18 @@ module data_handshake #(parameter DATA_WIDTH = 32)
     always_ff @(posedge clk_src) begin
     	if (rst_src) begin
     		{done, data_src.data,data_src.valid,data_src.last} <= 0;
-    		srcState <= IDLE_SRC; 
+    		srcState <= FIRST_TRANSFER; 
     	end else begin
     		case(srcState) 
+    			FIRST_TRANSFER: begin
+    				{data_src.valid,data_src.last} <= 2; 
+					srcState <= SEND_DATA;
+    			end 
 				IDLE_SRC: begin
 					done <= 0; 
 					if (valid_in) begin
 						data_src.data <= data_in;
-						{data_src.valid,data_src.last} <= 3; 
+						{data_src.valid,data_src.last} <= 2;
 						srcState <= SEND_DATA; 
 					end
 				end 
@@ -52,9 +56,13 @@ module data_handshake #(parameter DATA_WIDTH = 32)
 				GET_ACK: begin
 					if (ack_dst.valid) begin
 						done <= 1; 
-						srcState <= (ack_dst.data == 1)? IDLE_SRC : ERROR;
-						{data_src.valid,data_src.last} <= 0;
+						srcState <= (ack_dst.data == 1)? LAST : ERROR;
+						{data_src.valid,data_src.last} <= 3;
 					end
+				end 
+				LAST: begin
+					srcState <= IDLE_SRC;
+					{data_src.valid,data_src.last} <= 0;
 				end 
     		endcase
     	end
