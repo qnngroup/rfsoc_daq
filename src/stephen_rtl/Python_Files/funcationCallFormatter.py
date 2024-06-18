@@ -72,15 +72,15 @@ def formatFuncCall(s,fName = "functionName"):
     return out+align(body)
 
 
-st = """module cdc_tb #(parameter PS_CMD_WIDTH, parameter DATA_WIDTH)
-			   (input wire ps_clk, dac_clk, 
-			   	input  wire[PS_CMD_WIDTH-1:0] ps_cmd_out,
-			   	input  wire[DAC_RSP_WIDTH-1:0] dac_rsp_out,
-			   	output logic ps_rst, dac_rst, 
-			   	output logic[PS_CMD_WIDTH-1:0] ps_cmd_in,
-			   	output logic ps_cmd_valid_in, ps_cmd_valid_out, ps_cmd_transfer_rdy, ps_cmd_transfer_done,
-			   	output logic[DAC_RSP_WIDTH-1:0] dac_rsp_in, 
-			   	output logic dac_rsp_valid_in, dac_rsp_valid_out, dac_rsp_transfer_rdy, dac_rsp_transfer_done);
+st = """module adc_intf_tb #(parameter MEM_SIZE, parameter DATA_WIDTH)
+					(input wire clk,
+					 output logic rst, 
+					 output logic[MEM_SIZE-1:0] fresh_bits,
+					 output logic[MEM_SIZE-1:0][DATA_WIDTH-1:0] read_resps,
+					 Axis_IF.stream_in bufft, 
+					 Axis_IF.stream_out buffc, 
+					 Axis_IF.stream_out cmc, 
+					 Axis_IF.stream_out sdc);
                  """
 fName = "tb_i"
 out= formatFuncCall(st,fName=fName)

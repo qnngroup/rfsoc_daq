@@ -22,7 +22,7 @@ module intrp_test #(parameter IS_INTEGRATED = 0)();
           .x(x), .slope(slope),
           .intrp_batch(intrp_batch));
 
-    intrp_tb #(.BATCH_SIZE(`BATCH_SAMPLES), .SAMPLE_WIDTH(`SAMPLE_WIDTH), .M(16), .N(16))
+    intrp_tb #(.BATCH_SIZE(`BATCH_SAMPLES), .SAMPLE_WIDTH(`SAMPLE_WIDTH), .INTERPOLATER_DELAY(dut_i.INTERPOLATER_DELAY), .M(16), .N(16))
     tb_i(.clk(clk),
         .slopet(dut_i.slopet),
         .xpslopet(dut_i.xpslopet),

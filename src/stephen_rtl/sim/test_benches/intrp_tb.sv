@@ -3,13 +3,12 @@
 // import mem_layout_pkg::*;
 `include "mem_layout.svh"
 // import mem_layout_pkg::flash_signal;
-module intrp_tb #(parameter BATCH_SIZE, parameter SAMPLE_WIDTH, parameter M, parameter N)
+module intrp_tb #(parameter BATCH_SIZE, parameter SAMPLE_WIDTH, parameter INTERPOLATER_DELAY, parameter M, parameter N)
 					   (input wire clk,
 	                    input wire[BATCH_SIZE-1:0][SAMPLE_WIDTH-1:0] intrp_batch,
                         input wire[BATCH_SIZE-1:0][(2*SAMPLE_WIDTH)-1:0] slopet,xpslopet,
 					    output logic[SAMPLE_WIDTH-1:0] x,
 	                    output logic[(2*SAMPLE_WIDTH)-1:0] slope);
-    localparam INTERPOLATER_DELAY = 3; 					   
 	logic[INTERPOLATER_DELAY-1:0] intrp_pipe;
     logic intrp_batch_valid; 
     logic clk2;
@@ -53,7 +52,7 @@ module intrp_tb #(parameter BATCH_SIZE, parameter SAMPLE_WIDTH, parameter M, par
     	for (int i = 0; i < BATCH_SIZE; i++) expc_batch.push_front($floor((x_in + slope_in*i)+0.5));
     	slope <= float_to_fixed(slope_in); 
     	x <= x_in; 
-    	flash_signal(intrp_pipe[0],clk2);
+    	`flash_signal(intrp_pipe[0],clk2);
     	while (~intrp_batch_valid) @(posedge clk); 
     	for (int i = 0; i < BATCH_SIZE; i++) begin
     		expc_sample = expc_batch.pop_back(); 

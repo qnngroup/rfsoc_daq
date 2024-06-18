@@ -149,7 +149,7 @@
             return rand_seed+$time;
         endfunction
 
-        task automatic delay(input int dely, ref logic clk); 
+    task automatic delay(ref logic clk,input int dely=100); 
             repeat(dely) @(posedge clk);
         endtask 
 

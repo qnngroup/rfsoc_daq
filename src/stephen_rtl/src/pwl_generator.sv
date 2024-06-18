@@ -12,7 +12,7 @@ module pwl_generator #(parameter DMA_DATA_WIDTH, parameter SAMPLE_WIDTH, paramet
 			 		   output logic valid_batch_out,
 			 		   Axis_IF.stream_in dma);
 	localparam BATCH_WIDTH = BATCH_SIZE*SAMPLE_WIDTH;
-	localparam INTERPOLATER_DELAY = 3;
+	localparam INTERPOLATER_DELAY = interpolater.INTERPOLATER_DELAY;
 	localparam BRAM_DELAY = 3; 
 
 	logic[SAMPLE_WIDTH-1:0] curr_dma_x,curr_dma_dt,x,x_reg, dt,dt_reg, intrp_x, curr_dma_slope_whole; 

@@ -46,6 +46,12 @@ package sim_util_pkg;
       return test_name;
     endfunction 
 
+    task automatic reset_timeout(ref logic clk);
+      timeout_reset <= 1;
+      @(posedge clk); 
+      timeout_reset <= 0;
+      @(posedge clk); 
+    endtask 
     task automatic timeout_watcher(ref logic clk, input int TIMEOUT);
       fork   
         begin : timeout_thread 
@@ -72,8 +78,8 @@ package sim_util_pkg;
       join_none
     endtask 
 
-    task automatic check_test(input bit cond, input bit has_parts = 0);
-      string passed_string = (cond)? "PASSED" : "FAILED"; 
+    task automatic check_test(input bit cond, input bit has_parts = 0, input string fail_msg = "");
+      string passed_string = (cond)? "PASSED" : $sformatf("FAILED: %s",fail_msg); 
       color_t string_color = (cond)? GREEN : RED;  
       if (test_num >= total_tests) fatalc($sformatf("### TEST NUMBER %0d EXCEEDS EXPECTED LIMIT %0d ###",test_num, total_tests));
       if (~cond && ~has_parts) error_count++;

@@ -5,7 +5,6 @@
 
 module integrated_test();
 	localparam TIMEOUT = 1000;
-	localparam MOD_TEST_NUM = 1;
 	int total_errors = 0; 
 
 	sim_util_pkg::debug debug = new(sim_util_pkg::DEBUG,1,"INTEGRATED_TEST"); 
@@ -14,8 +13,12 @@ module integrated_test();
 	axi_recieve_test #(.IS_INTEGRATED(1'b1)) ar_test();
 	slave_test #(.IS_INTEGRATED(1'b1)) slave_test();
 	dac_intf_test #(.IS_INTEGRATED(1'b1)) dac_intf_test();
+	intrp_test #(.IS_INTEGRATED(1'b1)) intrp_test();
+	cdc_test #(.IS_INTEGRATED(1'b1)) cdc_test();
+	adc_intf_test #(.IS_INTEGRATED(1'b1)) adc_intf_test();
 
-	`define any_timed_out at_test.debug.timed_out || ar_test.debug.timed_out || slave_test.debug.timed_out || dac_intf_test.debug.timed_out 
+	`define any_timed_out at_test.debug.timed_out || ar_test.debug.timed_out || slave_test.debug.timed_out || dac_intf_test.debug.timed_out \
+						                          || intrp_test.debug.timed_out || cdc_test.debug.timed_out || adc_intf_test.debug.timed_out 
 	initial begin
         $dumpfile("integrated_test.vcd");
         $dumpvars(0,integrated_test); 
@@ -23,14 +26,27 @@ module integrated_test();
         debug.displayc("\n\n### BEGINNING INTEGRATED TEST ###\n\n");
         fork
         	begin
-		       	at_test.run_tests();
-		       	total_errors+=at_test.debug.get_error_count();
-		       	ar_test.run_tests();
-		       	total_errors+=ar_test.debug.get_error_count();
+		       	// at_test.run_tests();
+		       	// total_errors+=at_test.debug.get_error_count();
+		       	
+		       	// ar_test.run_tests();
+		       	// total_errors+=ar_test.debug.get_error_count();
+		       	
 		       	slave_test.run_tests();
 		       	total_errors+=slave_test.debug.get_error_count();
-		       	dac_intf_test.run_tests();
-		       	total_errors+=dac_intf_test.debug.get_error_count();		       
+		       	
+		       	// dac_intf_test.run_tests();
+		       	// total_errors+=dac_intf_test.debug.get_error_count();	
+		       		
+		       	// intrp_test.run_tests();
+		       	// total_errors+=intrp_test.debug.get_error_count();
+		       			
+		       	cdc_test.run_tests();
+		       	total_errors+=cdc_test.debug.get_error_count();
+		       			
+		       	// adc_intf_test.run_tests();
+		       	// total_errors+=adc_intf_test.debug.get_error_count();	
+		       		       
 		    end 
 		    begin
 		    	while (1) begin
