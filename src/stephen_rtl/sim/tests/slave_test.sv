@@ -7,6 +7,7 @@ module slave_test #(parameter IS_INTEGRATED = 0)();
 	localparam TIMEOUT = 1000;
 	localparam TEST_NUM = 9*2 + 3; 
 	localparam int CLK_RATE_MHZ = 150;
+    localparam MAN_SEED = 0; 
 
     sim_util_pkg::debug debug = new(sim_util_pkg::DEBUG,TEST_NUM,"SLAVE", IS_INTEGRATED); 
 
@@ -70,17 +71,26 @@ module slave_test #(parameter IS_INTEGRATED = 0)();
          end              
     end 
 
-    task automatic reset_errors();
+   task automatic reset_errors();
         total_errors += debug.get_error_count();
         debug.clear_error_count(); 
+    endtask 
+    task automatic combine_errors();
+        total_errors += debug.get_error_count();
+        debug.set_error_count(total_errors);
     endtask 
 
     task automatic run_tests(); 
         {clk,rst} = 0;
         repeat (20) @(posedge clk);
         debug.displayc($sformatf("\n\n### TESTING %s ###\n\n",debug.get_test_name()));
-        seed = generate_rand_seed();
-        debug.displayc($sformatf("Using Seed Value %0d",seed),.msg_color(sim_util_pkg::BLUE),.msg_verbosity(sim_util_pkg::VERBOSE));
+        if (MAN_SEED > 0) begin
+            seed = MAN_SEED;
+            debug.displayc($sformatf("Using manually selected seed value %0d",seed),.msg_color(sim_util_pkg::BLUE),.msg_verbosity(sim_util_pkg::VERBOSE));
+        end else begin
+            seed = generate_rand_seed();
+            debug.displayc($sformatf("Using random seed value %0d",seed),.msg_color(sim_util_pkg::BLUE),.msg_verbosity(sim_util_pkg::VERBOSE));            
+        end
         $srandom(seed);
         debug.timeout_watcher(clk,TIMEOUT);
         repeat (5) @(posedge clk);
@@ -200,8 +210,7 @@ module slave_test #(parameter IS_INTEGRATED = 0)();
         repeat(2) @(posedge clk);
         debug.disp_test_part(3,fresh_bits[`SCALE_DAC_OUT_ID] == 0,"Freshbits should have fallen");
         debug.disp_test_part(4,rtl_rd_out[`SCALE_DAC_OUT_ID] == 5,"Correct value not polled");
-        total_errors += debug.get_error_count();
-        debug.set_error_count(total_errors); 
+        combine_errors();
         debug.check_test(curr_err == debug.get_error_count(), .has_parts(1));
 
         if (~IS_INTEGRATED) debug.fatalc("### SHOULD NOT BE HERE. CHECK TEST NUMBER ###");

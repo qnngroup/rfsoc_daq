@@ -6,6 +6,7 @@ module axi_recieve_test #(parameter IS_INTEGRATED = 0)();
 	localparam TIMEOUT = 1000;
 	localparam TEST_NUM = 1*12+6; // 1 test for all plus 1 additional address tests for the 32 data widths
 	localparam int CLK_RATE_MHZ = 150;
+	localparam MAN_SEED = 0;
 
 	sim_util_pkg::debug debug = new(sim_util_pkg::DEBUG,TEST_NUM,"AXI_RECIEVE",IS_INTEGRATED); 
 
@@ -46,16 +47,25 @@ module axi_recieve_test #(parameter IS_INTEGRATED = 0)();
     end 
 
 	task automatic reset_errors();
-		total_errors += debug.get_error_count();
-		debug.clear_error_count(); 
-	endtask 
+        total_errors += debug.get_error_count();
+        debug.clear_error_count(); 
+    endtask 
+    task automatic combine_errors();
+        total_errors += debug.get_error_count();
+        debug.set_error_count(total_errors);
+    endtask 
 
     task automatic run_tests();
     	{clk,rst} = 0;
      	repeat (20) @(posedge clk);
         debug.displayc($sformatf("\n\n### TESTING %s ###\n\n",debug.get_test_name()));
-     	seed = generate_rand_seed();
-        debug.displayc($sformatf("Using Seed Value %0d",seed),.msg_color(sim_util_pkg::BLUE),.msg_verbosity(sim_util_pkg::VERBOSE));
+     	if (MAN_SEED > 0) begin
+            seed = MAN_SEED;
+            debug.displayc($sformatf("Using manually selected seed value %0d",seed),.msg_color(sim_util_pkg::BLUE),.msg_verbosity(sim_util_pkg::VERBOSE));
+        end else begin
+            seed = generate_rand_seed();
+            debug.displayc($sformatf("Using random seed value %0d",seed),.msg_color(sim_util_pkg::BLUE),.msg_verbosity(sim_util_pkg::VERBOSE));            
+        end
         $srandom(seed);
      	debug.timeout_watcher(clk,TIMEOUT);
         repeat (5) @(posedge clk);
@@ -171,12 +181,12 @@ module axi_recieve_test #(parameter IS_INTEGRATED = 0)();
 		test_sets1[5].test_sets2[1].tb_i.send_samples();
 		debug.check_test(test_sets1[5].test_sets2[1].tb_i.check_samples(debug),.has_parts(1));
 		reset_errors();
+		
 		debug.displayc($sformatf("%0d: Receive address space (bus_width = %0d, data_width = %0d)",debug.test_num,bus_widths[5], data_widths[1]), .msg_verbosity(sim_util_pkg::VERBOSE));
 		addr_test = 1;
 		test_sets1[5].test_sets2[1].tb_i.prepare_addr_samples();
 		test_sets1[5].test_sets2[1].tb_i.send_samples();
-		total_errors += debug.get_error_count();
-		debug.set_error_count(total_errors); 
+		combine_errors();
 		debug.check_test(test_sets1[5].test_sets2[1].tb_i.check_samples(debug,.is_addr(1)),.has_parts(1));
 
         if (~IS_INTEGRATED) debug.fatalc("### SHOULD NOT BE HERE. CHECK TEST NUMBER ###");

@@ -26,6 +26,7 @@
         `define CHAN_SAMPLES          (`CHANNEL_MUX_WIDTH/`WD_DATA_WIDTH)    // Number of mem_map entries for one channel mux register (2)
         `define BUFF_TIMESTAMP_WIDTH  32                                     // Bit width for buffer timestamp register (32) 
         `define BUFF_SAMPLES          (`BUFF_TIMESTAMP_WIDTH/`WD_DATA_WIDTH) // Number of mem_map entries for one buff_timestamp register (2)
+        `define INTERPOLATER_DELAY    3                                     // Clock cycles required to produce an output from the interpolater module 
         `define FIRMWARE_VERSION      16'h1_0045_3                           // Data Acquisition System (DAS) Version Number: 
                                                                              // _0 => stephen_dev (main) 
                                                                              // _1 => pwl_software_dev 
@@ -105,8 +106,8 @@
         logic[`ADDR_NUM-1:0][31:0] addrs = {32'(`MEM_SIZE_ADDR), 32'(`VERSION_ADDR), 32'(`SDC_VALID_ADDR), 32'(`SDC_BASE_ADDR), 32'(`CHAN_MUX_VALID_ADDR), 32'(`CHAN_MUX_BASE_ADDR), 32'(`BUFF_TIME_VALID_ADDR), 32'(`BUFF_TIME_BASE_ADDR), 32'(`BUFF_CONFIG_ADDR), 32'(`PWL_PERIOD1_ADDR), 32'(`PWL_PERIOD0_ADDR), 32'(`RUN_PWL_ADDR), 32'(`DAC2_ADDR), 32'(`DAC1_ADDR), 32'(`SCALE_DAC_OUT_ADDR), 32'(`MAX_DAC_BURST_SIZE_ADDR), 32'(`DAC_BURST_SIZE_ADDR), 32'(`DAC_HLT_ADDR), 32'(`TRIG_WAVE_ADDR), 32'(`PS_SEED_VALID_ADDR), 32'(`PS_SEED_BASE_ADDR), 32'(`RST_ADDR)};
         logic[`ADDR_NUM-1:0][31:0] ids = {32'(`MEM_SIZE_ID), 32'(`VERSION_ID), 32'(`SDC_VALID_ID), 32'(`SDC_BASE_ID), 32'(`CHAN_MUX_VALID_ID), 32'(`CHAN_MUX_BASE_ID), 32'(`BUFF_TIME_VALID_ID), 32'(`BUFF_TIME_BASE_ID), 32'(`BUFF_CONFIG_ID), 32'(`PWL_PERIOD1_ID), 32'(`PWL_PERIOD0_ID), 32'(`RUN_PWL_ID), 32'(`DAC2_ID), 32'(`DAC1_ID), 32'(`SCALE_DAC_OUT_ID), 32'(`MAX_DAC_BURST_SIZE_ID), 32'(`DAC_BURST_SIZE_ID), 32'(`DAC_HLT_ID), 32'(`TRIG_WAVE_ID), 32'(`PS_SEED_VALID_ID), 32'(`PS_SEED_BASE_ID), 32'(`RST_ID)};
 
-        `define flash_sig(sig) sig = 1; #10; sig = 0; #10;
-        `define flash_signal(sig,clk) sig <= 1; @(posedge clk); sig <= 0; @(posedge clk);
+        `define flash_sig(sig) #10; sig = 1; #10; sig = 0;
+        `define flash_signal(sig,clk) @(posedge clk); sig <= 1; @(posedge clk); sig <= 0;
         `define ADDR2ID(addr)        ((addr - `PS_BASE_ADDR) >> 2)
         `define ID2ADDR(index)       ((index << 2) + `PS_BASE_ADDR)
         /*
@@ -125,10 +126,10 @@
         `define is_RTL_VALID(index)  (index == `BUFF_TIME_VALID_ID)
         
         task automatic flash_signal(ref logic sig, ref logic clk);
+            @(posedge clk);
             sig = 1;
             @(posedge clk);
             sig = 0;
-            @(posedge clk);
         endtask 
 
         function automatic int generate_rand_seed();

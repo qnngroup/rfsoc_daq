@@ -86,7 +86,8 @@ def test_coords(coords,do_plot=True,show_batches=False,simple_plot=False, ignore
     path = c.fpga_to_pwl(fpga_cmds)
     intvp,py_fpga_cmds = p.main(coords)
     py_path = c.fpga_to_pwl(py_fpga_cmds)
-    waves = c.decode_pwl_cmds(path)
+    waves,_ = p.decode_pwl_cmds(path)
+    
     if scale_plot:
         for i in range(len(waves)):
             waves[i] = [(el/mv)*100 for el in waves[i]]
@@ -121,6 +122,8 @@ def test_coords(coords,do_plot=True,show_batches=False,simple_plot=False, ignore
           
 
     wrong = []
+    waves2,_= p.decode_pwl_cmds(path)
+    if waves != waves2: wrong.append("decoded paths not equal")
     if py_path != path: wrong.append(("paths not equal"))
     if py_fpga_cmds != fpga_cmds: wrong.append(("fpga_cmds not equal"))
     
@@ -186,6 +189,7 @@ for i in range(test_num):
         if nxt_perc != 90: print(",",end="")
         nxt_perc+=10        
     coords = gen_rand_coords(n=n,avg_dt=100,max_val=max_voltage)
+    # coords = [(0, 0), (9, 64)]
     ignore = ignore_same_sloped_points(coords)
     path,result,wrong,intvc,intvp = test_coords(coords[:],do_plot=do_plot,show_batches=False,simple_plot=simple_plot, ignore=ignore,scale_plot = False)
     intvcs.append(intvc)

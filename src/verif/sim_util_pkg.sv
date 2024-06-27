@@ -109,7 +109,8 @@ package sim_util_pkg;
 
     function bit disp_test_part(input int test_part, input bit cond, input string msg);
       color_t string_color = (cond)? GREEN : RED; 
-      displayc($sformatf("%0d_%0d", test_num, test_part), string_color, DEBUG,.do_write(1));
+      string test_part_str = (test_part >= 0)? $sformatf("%0d",test_part) : "x";
+      displayc($sformatf("%0d_%s", test_num, test_part_str), string_color, DEBUG,.do_write(1));
       if (~cond) displayc($sformatf("(-)\n(%s) ", msg), string_color, DEBUG,.do_write(1));
       else displayc($sformatf("(+) "), string_color, DEBUG,1);
       if (~cond) error_count++;

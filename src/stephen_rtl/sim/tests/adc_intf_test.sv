@@ -18,7 +18,7 @@ module adc_intf_test #(parameter IS_INTEGRATED = 0)();
     logic[`CHAN_SAMPLES-1:0][`WD_DATA_WIDTH-1:0] exp_cmc_data; 
     logic[`SDC_SAMPLES-1:0][`WD_DATA_WIDTH-1:0] exp_sdc_data; 
     int total_errors = 0;
-    int curr_err, seed; 
+    int curr_err, seed, test_num; 
     Axis_IF #(`BUFF_TIMESTAMP_WIDTH) bufft(); 
     Axis_IF #(`BUFF_CONFIG_WIDTH) buffc();
     Axis_IF #(`CHANNEL_MUX_WIDTH) cmc();
@@ -39,6 +39,7 @@ module adc_intf_test #(parameter IS_INTEGRATED = 0)();
          .bufft(bufft), .buffc(buffc), .cmc(cmc), .sdc(sdc));
 
 	always #(0.5s/(CLK_RATE_MHZ*1_000_000)) clk = ~clk;
+    always_ff @(posedge clk) test_num <= debug.test_num;
     initial begin
         if (~IS_INTEGRATED) begin 
             $dumpfile("adc_intf_test.vcd");
@@ -63,7 +64,8 @@ module adc_intf_test #(parameter IS_INTEGRATED = 0)();
         debug.disp_test_part(1, cmc.valid == 1, "Valid should be high"); 
         debug.disp_test_part(2,cmc.data == read_resps[`CHAN_MUX_BASE_ID+:`CHAN_SAMPLES],$sformatf("Expected %h, got %h",cmc.data, read_resps[`CHAN_MUX_BASE_ID+:`CHAN_SAMPLES])); 
         if (signal_rdy) begin 
-            `flash_signal(cmc.ready,clk); 
+            `flash_signal(cmc.ready,clk);
+            @(posedge clk); 
             debug.disp_test_part(3, cmc.valid == 0, "Valid should have fallen");
         end 
     endtask 
@@ -74,7 +76,8 @@ module adc_intf_test #(parameter IS_INTEGRATED = 0)();
         debug.disp_test_part(1, buffc.valid == 1, "Valid should be high"); 
         debug.disp_test_part(2,buffc.data == read_resps[`BUFF_CONFIG_ID][0+:`BUFF_CONFIG_WIDTH],$sformatf("Expected %h, got %h",buffc.data,read_resps[`BUFF_CONFIG_ID][0+:`BUFF_CONFIG_WIDTH])); 
         if (signal_rdy) begin 
-            `flash_signal(buffc.ready,clk); 
+            `flash_signal(buffc.ready,clk);
+            @(posedge clk); 
             debug.disp_test_part(3, buffc.valid == 0, "Valid should have fallen");
         end 
     endtask 
@@ -86,6 +89,7 @@ module adc_intf_test #(parameter IS_INTEGRATED = 0)();
         debug.disp_test_part(2,sdc.data == read_resps[`SDC_BASE_ID+:`SDC_SAMPLES],$sformatf("Expected %h, got %h",sdc.data, read_resps[`SDC_BASE_ID+:`SDC_SAMPLES])); 
         if (signal_rdy) begin 
             `flash_signal(sdc.ready,clk); 
+            @(posedge clk);
             debug.disp_test_part(3, sdc.valid == 0, "Valid should have fallen");
         end 
     endtask 
@@ -94,8 +98,13 @@ module adc_intf_test #(parameter IS_INTEGRATED = 0)();
         {clk,rst} = 0;
         repeat (5) @(posedge clk);        
         debug.displayc($sformatf("\n\n### TESTING %s ###\n\n",debug.get_test_name()));
-        seed = (MAN_SEED > 0)?  MAN_SEED : generate_rand_seed();
-        debug.displayc($sformatf("Using Seed Value %0d",seed),.msg_color(sim_util_pkg::BLUE),.msg_verbosity(sim_util_pkg::VERBOSE));
+        if (MAN_SEED > 0) begin
+            seed = MAN_SEED;
+            debug.displayc($sformatf("Using manually selected seed value %0d",seed),.msg_color(sim_util_pkg::BLUE),.msg_verbosity(sim_util_pkg::VERBOSE));
+        end else begin
+            seed = generate_rand_seed();
+            debug.displayc($sformatf("Using random seed value %0d",seed),.msg_color(sim_util_pkg::BLUE),.msg_verbosity(sim_util_pkg::VERBOSE));            
+        end
         $srandom(seed);
         debug.timeout_watcher(clk,TIMEOUT);
         tb_i.init();
@@ -155,7 +164,8 @@ module adc_intf_test #(parameter IS_INTEGRATED = 0)();
             begin `flash_signal(sdc.ready,clk) end 
             begin `flash_signal(buffc.ready,clk) end 
         join
-        debug.disp_test_part(4, ~cmc.valid && ~sdc.valid && ~buffc.valid, "All valids should have fallen");
+        @(posedge clk);
+        debug.disp_test_part(4, ~cmc.valid && ~sdc.valid && ~buffc.valid, "All valids should have fallen");         
         debug.check_test(curr_err == debug.get_error_count(), .has_parts(1));
         reset_errors();
 
@@ -168,15 +178,18 @@ module adc_intf_test #(parameter IS_INTEGRATED = 0)();
         delay(clk, $urandom_range(100,500)); 
         debug.disp_test_part(3, cmc.valid && sdc.valid && buffc.valid, "All valids should still be high");
         `flash_signal(cmc.ready,clk)
+        @(posedge clk);
         debug.disp_test_part(4, ~cmc.valid && sdc.valid && buffc.valid, "Only cmc valid should have fallen");
         delay(clk, $urandom_range(10,30)); 
         `flash_signal(sdc.ready,clk)
+        @(posedge clk);
         debug.disp_test_part(5, ~cmc.valid && ~sdc.valid && buffc.valid, "sdc and cmc valids should have fallen");
         delay(clk, $urandom_range(10,30));
         `flash_signal(buffc.ready,clk)
+        @(posedge clk);
         debug.disp_test_part(6, ~cmc.valid && ~sdc.valid && ~buffc.valid, "All valids should have fallen");
+        combine_errors();
         debug.check_test(curr_err == debug.get_error_count(), .has_parts(1));
-        reset_errors();
 
         if (~IS_INTEGRATED) debug.fatalc("### SHOULD NOT BE HERE. CHECK TEST NUMBER ###");
         else if (debug.test_num < TEST_NUM) debug.fatalc("### SHOULD NOT BE HERE. CHECK TEST NUMBER ###");
@@ -186,4 +199,3 @@ endmodule
 
 `default_nettype wire
 
-//Oh did u guys have that convo already? With timmy

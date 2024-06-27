@@ -10,22 +10,35 @@ module top_level(input wire ps_clk,ps_rst, dac_clk, dac_rst,
                  output logic valid_dac_batch, 
                  output logic pl_rstn, 
                  //Inputs from PS
-                 input wire [`A_BUS_WIDTH-1:0] raddr_packet,
-                 input wire raddr_valid_packet,
-                 input wire [`A_BUS_WIDTH-1:0] waddr_packet,
-                 input wire waddr_valid_packet,
-                 input wire [`WD_BUS_WIDTH-1:0] wdata_packet,
-                 input wire wdata_valid_packet,
-                 input wire ps_wresp_rdy,ps_read_rdy,
+                 input  wire [`A_BUS_WIDTH-1:0] raddr_packet,
+                 input  wire raddr_valid_packet,
+                 input  wire [`A_BUS_WIDTH-1:0] waddr_packet,
+                 input  wire waddr_valid_packet,
+                 input  wire [`WD_BUS_WIDTH-1:0] wdata_packet,
+                 input  wire wdata_valid_packet,
+                 input  wire ps_wresp_rdy,ps_read_rdy,
                  //axi_slave Outputs
                  output logic [1:0] wresp_out,rresp_out,
                  output logic wresp_valid_out, rresp_valid_out,
                  output logic [`WD_BUS_WIDTH-1:0] rdata_packet,
                  output logic rdata_valid_out,
+                 //Config Registers
+                 input  wire sdc_rdy_in,
+                 output logic[`SDC_DATA_WIDTH-1:0] sdc_data_out,
+                 output logic sdc_valid_out,
+                 input  wire buffc_rdy_in,
+                 output logic[`BUFF_CONFIG_WIDTH-1:0] buffc_data_out,
+                 output logic buffc_valid_out,
+                 input  wire cmc_rdy_in,
+                 output logic[`CHANNEL_MUX_WIDTH-1:0] cmc_data_out,
+                 output logic cmc_valid_out, 
+                 input  wire[`BUFF_TIMESTAMP_WIDTH-1:0] bufft_data_in,
+                 input  wire bufft_valid_in,
+                 output logic bufft_rdy_out, 
                  //DMA Inputs/Outputs (axi-stream)
-                 input wire[`DMA_DATA_WIDTH-1:0] pwl_tdata,
-                 input wire[3:0] pwl_tkeep,
-                 input wire pwl_tlast, pwl_tvalid,
+                 input  wire[`DMA_DATA_WIDTH-1:0] pwl_tdata,
+                 input  wire[(`DMA_DATA_WIDTH/8)-1:0] pwl_tkeep,
+                 input  wire pwl_tlast, pwl_tvalid,
                  output logic pwl_tready);
 
     Recieve_Transmit_IF #(`A_BUS_WIDTH, `A_DATA_WIDTH)   wa_if (); 
@@ -34,8 +47,6 @@ module top_level(input wire ps_clk,ps_rst, dac_clk, dac_rst,
     Recieve_Transmit_IF #(`WD_BUS_WIDTH, `WD_DATA_WIDTH) rd_if (); 
     Recieve_Transmit_IF #(2,2) wr_if (); 
     Recieve_Transmit_IF #(2,2) rr_if ();
-
-
 
     Axis_IF #(`BUFF_TIMESTAMP_WIDTH) bufft_if(); 
     Axis_IF #(`BUFF_CONFIG_WIDTH) buffc_if();
@@ -49,12 +60,23 @@ module top_level(input wire ps_clk,ps_rst, dac_clk, dac_rst,
     assign pwl_dma_if.last = pwl_tlast;
     assign pwl_tready = pwl_dma_if.ready; 
 
-    assign {bufft_if.data, bufft_if.valid, bufft_if.last} = 0; //Swap with Reed's out signals when he needs them.
-    assign bufft_if.ready = 1; 
+    assign bufft_if.data = bufft_data_in;
+    assign bufft_if.valid = bufft_valid_in;
+    assign bufft_if.last = bufft_if.valid;
+    assign bufft_rdy_out = bufft_if.ready;
+    //xxx.last signals get assigned in ADC_Interface for the following three interfaces
 
-    assign sdc_if.ready = 1;   //Swap with Reed's in signals when he needs them
-    assign buffc_if.ready = 1; //Swap with Reed's in signals when he needs them
-    assign cmc_if.ready = 1;   //Swap with Reed's in signals when he needs them
+    assign sdc_if.ready = sdc_rdy_in;
+    assign sdc_data_out = sdc_if.data;
+    assign sdc_valid_out = sdc_if.valid;
+
+    assign buffc_if.ready = buffc_rdy_in;
+    assign buffc_data_out = buffc_if.data;
+    assign buffc_valid_out = buffc_if.valid;
+
+    assign cmc_if.ready = cmc_rdy_in;
+    assign cmc_data_out = cmc_if.data;
+    assign cmc_valid_out = cmc_if.valid;
 
     assign ra_if.packet     = raddr_packet;
     assign ra_if.valid_pack = raddr_valid_packet;

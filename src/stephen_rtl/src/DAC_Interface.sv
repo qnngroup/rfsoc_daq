@@ -7,22 +7,26 @@ module DAC_Interface (input wire ps_clk,dac_clk,ps_rst, dac_rst,
 					  input wire[`MEM_SIZE-1:0] fresh_bits,
 					  input wire[`MEM_SIZE-1:0][`WD_DATA_WIDTH-1:0] read_resps,
 					  input wire[$clog2(`SAMPLE_WIDTH)-1:0] scale_factor_in,
+					  input wire[$clog2(`MAX_DAC_BURST_SIZE):0] dac_bs_in,
 					  input wire halt,
 					  input wire dac0_rdy, 
 					  output logic[`BATCH_SAMPLES-1:0][`SAMPLE_WIDTH-1:0] dac_batch,
 					  output logic valid_dac_batch,
 					  Axis_IF pwl_dma_if);
-	localparam CMD_WIDTH = 5;
+	localparam CMD_WIDTH = 4;
 	localparam RESP_WIDTH = (2*`WD_DATA_WIDTH) + 1;
 	localparam SCALE_WIDTH = $clog2(`SAMPLE_WIDTH); 
+	localparam BS_WIDTH = $clog2(`MAX_DAC_BURST_SIZE)+1;
+	localparam FULL_CMD_WIDTH = BS_WIDTH+SCALE_WIDTH+`BATCH_WIDTH+CMD_WIDTH;
 
-	enum logic[2:0] {IDLE,SEND_CMD,RUN_PWL_DELAY,RST_DAC, HALT_DAC} dacConfigState;
+	enum logic[1:0] {IDLE,SEND_CMD,RUN_PWL_DELAY,HALT_DAC} dacConfigState;
 	logic[`BATCH_SAMPLES-1:0][`SAMPLE_WIDTH-1:0] seed_set, dac_batch_out; 
 	logic[SCALE_WIDTH-1:0] scale_factor_out;
-	logic[1:0] scale_edge; 
-	logic scale_changed;  
+	logic [BS_WIDTH-1:0] dac_bs_out; 
+	logic[1:0] scale_edge, dac_bs_edge; 
+	logic scale_changed, dac_bs_changed; 
 	logic state_rdy; 
-	logic[(`BATCH_WIDTH+SCALE_WIDTH+CMD_WIDTH)-1:0] ps_cmd_in, ps_cmd_out;
+	logic[FULL_CMD_WIDTH-1:0] ps_cmd_in, ps_cmd_out;
 	logic ps_cmd_in_valid, ps_cmd_out_valid; 
 	logic ps_cmd_transfer_rdy, ps_cmd_transfer_done;
 	logic[RESP_WIDTH-1:0] dac_cmd_in, dac_cmd_out;
@@ -34,8 +38,11 @@ module DAC_Interface (input wire ps_clk,dac_clk,ps_rst, dac_rst,
 	logic pwl_rdy;
 
 	assign ps_cmd_in[CMD_WIDTH+:`BATCH_WIDTH] = seed_set;
-	assign ps_cmd_in[(`BATCH_WIDTH+CMD_WIDTH)+:SCALE_WIDTH] = scale_factor_in; 
-	assign scale_factor_out = ps_cmd_out[(`BATCH_WIDTH+CMD_WIDTH)+:SCALE_WIDTH]; 
+	assign ps_cmd_in[(CMD_WIDTH+`BATCH_WIDTH)+:SCALE_WIDTH] = scale_factor_in;
+	assign ps_cmd_in[(CMD_WIDTH+`BATCH_WIDTH+SCALE_WIDTH)+:BS_WIDTH] = dac_bs_in;
+
+	assign scale_factor_out = ps_cmd_out[(CMD_WIDTH+`BATCH_WIDTH)+:SCALE_WIDTH]; 
+	assign dac_bs_out = ps_cmd_out[(CMD_WIDTH+`BATCH_WIDTH+SCALE_WIDTH)+:BS_WIDTH]; 
 	assign save_pwl_wave_period = wave_period_edge != 0;
 
 	always_comb begin
@@ -44,16 +51,21 @@ module DAC_Interface (input wire ps_clk,dac_clk,ps_rst, dac_rst,
         end 
     end
 
-	edetect	scale_ed(.clk(ps_clk), .rst(ps_rst),
-	                   .val(scale_factor_in),
-	                   .comb_posedge_out(scale_edge)); 
+	edetect	#(.DATA_WIDTH(SCALE_WIDTH))
+	scale_ed(.clk(ps_clk), .rst(ps_rst),
+			 .val(scale_factor_in),
+			 .comb_posedge_out(scale_edge)); 
+	edetect	#(.DATA_WIDTH(BS_WIDTH))
+	dac_bs_ed(.clk(ps_clk), .rst(ps_rst),
+			 .val(dac_bs_in),
+			 .comb_posedge_out(dac_bs_edge)); 
 	edetect #(.DATA_WIDTH(2*`WD_DATA_WIDTH))
 	wave_period_ed(.clk(ps_clk), .rst(ps_rst),
 	               .val(pwl_wave_period),
 	               .comb_posedge_out(wave_period_edge));
 
-	//cmd: [scale_factor(4),sample_seed(256),rst_cmd(1),halt_cmd(1),run_shift_regs(1),run_trig_wave(1),run_pwl(1)]
-	data_handshake #(.DATA_WIDTH(`BATCH_WIDTH+SCALE_WIDTH+CMD_WIDTH))
+	//cmd: [dac_burst_size(16),scale_factor(4),sample_seed(256),ps_halt_cmd(1),run_shift_regs(1),run_trig_wave(1),run_pwl(1)]
+	data_handshake #(.DATA_WIDTH(FULL_CMD_WIDTH))
 	    ps_cmd_transfer(.clk_src(ps_clk), .rst_src(ps_rst),
 	                 	.clk_dst(dac_clk), .rst_dst(dac_rst),
 	                 	.data_in(ps_cmd_in),
@@ -62,7 +74,7 @@ module DAC_Interface (input wire ps_clk,dac_clk,ps_rst, dac_rst,
 	                 	.valid_out(ps_cmd_out_valid),
 	                 	.rdy(ps_cmd_transfer_rdy),
 	                 	.done(ps_cmd_transfer_done));
-	//resp: [null(1),pwl_rdy(1)]
+	//resp: [pwl_wave_period(32), pwl_ready(1)]
 	data_handshake #(.DATA_WIDTH(RESP_WIDTH))
 	   dac_cmd_transfer(.clk_src(dac_clk), .rst_src(dac_rst),
 	                 	.clk_dst(ps_clk), .rst_dst(ps_rst),
@@ -72,27 +84,34 @@ module DAC_Interface (input wire ps_clk,dac_clk,ps_rst, dac_rst,
 	                 	.valid_out(dac_cmd_out_valid),
 	                 	.rdy(dac_cmd_transfer_rdy),
 	                 	.done(dac_cmd_transfer_done));
-	sample_generator #(.CMD_WIDTH(CMD_WIDTH), .RESP_WIDTH(RESP_WIDTH), .SAMPLE_WIDTH(`SAMPLE_WIDTH), .BATCH_WIDTH(`BATCH_WIDTH), .DMA_DATA_WIDTH(`DMA_DATA_WIDTH), .DENSE_BRAM_DEPTH(`DENSE_BRAM_DEPTH), .SPARSE_BRAM_DEPTH(`SPARSE_BRAM_DEPTH))
-	sample_gen(.clk(dac_clk),.rst_in(dac_rst),
+	sample_generator #(.FULL_CMD_WIDTH(FULL_CMD_WIDTH), .CMD_WIDTH(CMD_WIDTH), .RESP_WIDTH(RESP_WIDTH), .SAMPLE_WIDTH(`SAMPLE_WIDTH), .BATCH_WIDTH(`BATCH_WIDTH), .DMA_DATA_WIDTH(`DMA_DATA_WIDTH), .DENSE_BRAM_DEPTH(`DENSE_BRAM_DEPTH), .SPARSE_BRAM_DEPTH(`SPARSE_BRAM_DEPTH), .BS_WIDTH(BS_WIDTH))
+	sample_gen(.clk(dac_clk),.rst(dac_rst),
 	           .ps_cmd(ps_cmd_out),.valid_ps_cmd(ps_cmd_out_valid),
-	           .dac0_rdy(dac0_rdy),
+	           .dac0_rdy(dac0_rdy), .dac_bs(dac_bs_out),
 	           .dac_cmd(dac_cmd_in),.valid_dac_cmd(dac_cmd_in_valid),
 	           .transfer_rdy(dac_cmd_transfer_rdy), .transfer_done(dac_cmd_transfer_done),
 	           .dac_batch(dac_batch_out),.valid_dac_batch(valid_dac_batch),
 	           .pwl_dma_if(pwl_dma_if));
 
+	// State machine for transmitting ps commands
 	always_ff @(posedge ps_clk) begin
 		if (ps_rst || halt) begin 
-			if (ps_rst) {pwl_rdy,seed_set,scale_changed} <= 0; 
-			state_rdy <= 0;
 			{ps_cmd_in[0+:CMD_WIDTH],ps_cmd_in_valid} <= 0; 
-			dacConfigState <= (ps_rst)? RST_DAC : HALT_DAC;
+			if (ps_rst) begin
+				{pwl_rdy,seed_set,scale_changed,dac_bs_changed} <= 0;
+				state_rdy <= 1;
+				dacConfigState <= IDLE;
+			end else begin
+				state_rdy <= 0;
+				dacConfigState <= HALT_DAC;
+			end
 		end else begin
 			if (dac_cmd_out_valid) begin
 				pwl_rdy <= dac_cmd_out[0];
 				pwl_wave_period <= dac_cmd_out[1+:(2*`WD_DATA_WIDTH)];
 			end 
-			if (scale_edge != 0 && scale_changed == 0) scale_changed <= 1; 
+			if (scale_edge != 0 && scale_changed == 0) scale_changed <= 1;
+			if (dac_bs_edge != 0 && dac_bs_changed == 0) dac_bs_changed <= 1; 
 			case (dacConfigState) 
 				IDLE: begin
 					if (fresh_bits[`RUN_PWL_ID]) begin
@@ -117,15 +136,21 @@ module DAC_Interface (input wire ps_clk,dac_clk,ps_rst, dac_rst,
 						scale_changed <= 0; 
 						ps_cmd_in_valid <= 1;
 						state_rdy <= 0;
+					end else 
+					if (dac_bs_changed) begin
+						dac_bs_changed <= 0;
+						ps_cmd_in_valid <= 1;
+						state_rdy <= 0;
 					end
+
 					if (ps_cmd_in_valid && ps_cmd_transfer_rdy) begin
 						ps_cmd_in_valid <= 0;
+						ps_cmd_in[3] <= 0; //clear halt command to avoid repeat halts. 
 						dacConfigState <= SEND_CMD;
 					end
 				end 
 				SEND_CMD: begin
 					if (ps_cmd_transfer_done) begin
-						ps_cmd_in[0+:CMD_WIDTH] <= 0;
 						dacConfigState <= IDLE; 
 						state_rdy <= 1;
 					end
@@ -136,11 +161,7 @@ module DAC_Interface (input wire ps_clk,dac_clk,ps_rst, dac_rst,
 						dacConfigState <= IDLE; 
 					end
 				end 
-				RST_DAC: begin
-					ps_cmd_in[0+:CMD_WIDTH] <= 1 << 4;
-					ps_cmd_in_valid <= 1;
-					dacConfigState <= IDLE;
-				end 
+				
 				HALT_DAC: begin
 					ps_cmd_in[0+:CMD_WIDTH] <= 1 << 3;
 					ps_cmd_in_valid <= 1;

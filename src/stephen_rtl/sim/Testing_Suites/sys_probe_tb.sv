@@ -39,15 +39,24 @@ module sys_probe_tb();
     assign dac_rstn = ~dac_rst;
     assign pwl_last = dma_i == BUFF_LEN && pwl_valid;
 
-    ps_interface ps_interface(.ps_clk(ps_clk),.ps_rstn(ps_rstn), .pl_rstn(pl_rstn),
-                              .dac_clk(dac_clk),.dac_rstn(dac_rstn),
-                              .dac_tdata(dac_batch),.dac_tvalid(valid_dac_batch),.dac_tready(dac0_rdy),.rtl_dac_valid(rtl_dac_valid),
-                              .ps_axi_araddr(raddr_packet),.ps_axi_arprot(ps_axi_arprot),.ps_axi_arvalid(raddr_valid_packet),.ps_axi_arready(ps_aread_rdy),
-                              .ps_axi_rdata(rdata_packet),.ps_axi_rresp(rresp_out),.ps_axi_rvalid(rdata_valid_out),.ps_axi_rready(ps_read_rdy),
-                              .ps_axi_awaddr(waddr_packet),.ps_axi_awprot(ps_axi_awprot),.ps_axi_awvalid(waddr_valid_packet),.ps_axi_awready(ps_awrite_rdy),
-                              .ps_axi_wdata(wdata_packet),.ps_axi_wstrb(ps_axi_wstrb),.ps_axi_wvalid(wdata_valid_packet),.ps_axi_wready(ps_write_rdy),
-                              .ps_axi_bresp(wresp_out),.ps_axi_bvalid(wresp_valid_out),.ps_axi_bready(ps_wresp_rdy),
-                              .pwl_tdata(pwl_data),.pwl_tkeep(pwl_tkeep),.pwl_tlast(pwl_last),.pwl_tvalid(pwl_valid),.pwl_tready(pwl_ready));
+    // ps_interface ps_interface(.ps_clk(ps_clk),.ps_rstn(ps_rstn), .pl_rstn(pl_rstn),
+    //                           .dac_clk(dac_clk),.dac_rstn(dac_rstn),
+    //                           .dac_tdata(dac_batch),.dac_tvalid(valid_dac_batch),.dac_tready(dac0_rdy),.rtl_dac_valid(rtl_dac_valid),
+    //                           .ps_axi_araddr(raddr_packet),.ps_axi_arprot(ps_axi_arprot),.ps_axi_arvalid(raddr_valid_packet),.ps_axi_arready(ps_aread_rdy),
+    //                           .ps_axi_rdata(rdata_packet),.ps_axi_rresp(rresp_out),.ps_axi_rvalid(rdata_valid_out),.ps_axi_rready(ps_read_rdy),
+    //                           .ps_axi_awaddr(waddr_packet),.ps_axi_awprot(ps_axi_awprot),.ps_axi_awvalid(waddr_valid_packet),.ps_axi_awready(ps_awrite_rdy),
+    //                           .ps_axi_wdata(wdata_packet),.ps_axi_wstrb(ps_axi_wstrb),.ps_axi_wvalid(wdata_valid_packet),.ps_axi_wready(ps_write_rdy),
+    //                           .ps_axi_bresp(wresp_out),.ps_axi_bvalid(wresp_valid_out),.ps_axi_bready(ps_wresp_rdy),
+    //                           .pwl_tdata(pwl_data),.pwl_tkeep(pwl_tkeep),.pwl_tlast(pwl_last),.pwl_tvalid(pwl_valid),.pwl_tready(pwl_ready));
+
+    logic[`SAMPLE_WIDTH-1:0] x;
+    logic[(2*`SAMPLE_WIDTH)-1:0] slope; 
+    logic[`BATCH_SAMPLES-1:0][`SAMPLE_WIDTH-1:0] intrp_batch;
+    interpolater #(.SAMPLE_WIDTH(`SAMPLE_WIDTH), .BATCH_SIZE(`BATCH_SAMPLES))
+    dut_i(.clk(dac_clk),
+          .x(x), .slope(slope),
+          .intrp_batch(intrp_batch));
+
 
     
 
@@ -178,34 +187,36 @@ module sys_probe_tb();
         send_dma_data = 0;
         {set_seeds,run_pwl,halt_dac,run_trig} = 0; 
         #10;
-        `flash_sig(dac_rst);
-        `flash_sig(ps_rst);
-        #1000;
-        `flash_sig(send_dma_data);
-        #100;
-        `flash_sig(set_seeds);
-        while (~rtl_dac_valid) #10;
-        #500;
-        `flash_sig(halt_dac);
-        while (rtl_dac_valid) #10;
-        #500;
-        `flash_sig(set_seeds);
-        while (~rtl_dac_valid) #10;
-        #100
-        `flash_sig(run_pwl);
-        #5000
-        `flash_sig(halt_dac);
-        #5000;
-        `flash_sig(run_trig);
-        #5000;
-        `flash_sig(set_seeds);
-        `flash_sig(send_dma_data);
-        #5000;
-        `flash_sig(run_pwl);
-        #5000;
-        `flash_sig(run_trig);
-        #5000;
-        `flash_sig(halt_dac);
+        fork 
+            begin `flash_signal(dac_rst,dac_clk); end 
+            begin `flash_signal(ps_rst,ps_clk); end 
+        join 
+        // #1000;
+        // `flash_sig(send_dma_data);
+        // #100;
+        // `flash_sig(set_seeds);
+        // while (~rtl_dac_valid) #10;
+        // #500;
+        // `flash_sig(halt_dac);
+        // while (rtl_dac_valid) #10;
+        // #500;
+        // `flash_sig(set_seeds);
+        // while (~rtl_dac_valid) #10;
+        // #100
+        // `flash_sig(run_pwl);
+        // #5000
+        // `flash_sig(halt_dac);
+        // #5000;
+        // `flash_sig(run_trig);
+        // #5000;
+        // `flash_sig(set_seeds);
+        // `flash_sig(send_dma_data);
+        // #5000;
+        // `flash_sig(run_pwl);
+        // #5000;
+        // `flash_sig(run_trig);
+        // #5000;
+        // `flash_sig(halt_dac);
         #5000;
         $finish;
     end 

@@ -5,11 +5,12 @@
 
 module intrp_test #(parameter IS_INTEGRATED = 0)();
 	localparam TIMEOUT = 1000;
-	localparam TEST_NUM = 5;
+	localparam TEST_NUM = 6;
 	localparam int CLK_RATE_MHZ = 150;
+    localparam MAN_SEED = 0;
+    
     logic clk; 
-    logic[`SAMPLE_WIDTH-1:0] x;
-    logic[(2*`SAMPLE_WIDTH)-1:0] slope; 
+    logic[(2*`SAMPLE_WIDTH)-1:0] x,slope; 
     logic[`BATCH_SAMPLES-1:0][`SAMPLE_WIDTH-1:0] intrp_batch;
     int total_errors = 0;
     int curr_err,seed;
@@ -22,7 +23,7 @@ module intrp_test #(parameter IS_INTEGRATED = 0)();
           .x(x), .slope(slope),
           .intrp_batch(intrp_batch));
 
-    intrp_tb #(.BATCH_SIZE(`BATCH_SAMPLES), .SAMPLE_WIDTH(`SAMPLE_WIDTH), .INTERPOLATER_DELAY(dut_i.INTERPOLATER_DELAY), .M(16), .N(16))
+    intrp_tb #(.BATCH_SIZE(`BATCH_SAMPLES), .SAMPLE_WIDTH(`SAMPLE_WIDTH), .INTERPOLATER_DELAY(`INTERPOLATER_DELAY), .M(16), .N(16))
     tb_i(.clk(clk),
         .slopet(dut_i.slopet),
         .xpslopet(dut_i.xpslopet),
@@ -51,8 +52,13 @@ module intrp_test #(parameter IS_INTEGRATED = 0)();
         clk = 0;
         repeat (5) @(posedge clk);        
         debug.displayc($sformatf("\n\n### TESTING %s ###\n\n",debug.get_test_name()));
-        seed = generate_rand_seed();
-        debug.displayc($sformatf("Using Seed Value %0d",seed),.msg_color(sim_util_pkg::BLUE),.msg_verbosity(sim_util_pkg::VERBOSE));
+        if (MAN_SEED > 0) begin
+            seed = MAN_SEED;
+            debug.displayc($sformatf("Using manually selected seed value %0d",seed),.msg_color(sim_util_pkg::BLUE),.msg_verbosity(sim_util_pkg::VERBOSE));
+        end else begin
+            seed = generate_rand_seed();
+            debug.displayc($sformatf("Using random seed value %0d",seed),.msg_color(sim_util_pkg::BLUE),.msg_verbosity(sim_util_pkg::VERBOSE));            
+        end
         $srandom(seed);
         debug.timeout_watcher(clk,TIMEOUT);
         tb_i.init();
@@ -62,35 +68,42 @@ module intrp_test #(parameter IS_INTEGRATED = 0)();
         // TEST 1
         debug.displayc($sformatf("%0d: Positive whole slope",debug.test_num), .msg_verbosity(sim_util_pkg::VERBOSE));
         curr_err = debug.get_error_count();
-        tb_i.check_intrped_batch(debug, $urandom_range(-100,100), 2);
+        tb_i.check_intrped_batch(debug, $urandom_range(-16'h7500,16'h7500), 2);
         debug.check_test(curr_err == debug.get_error_count(), .has_parts(1));
         reset_errors();
 
         // TEST 2
         debug.displayc($sformatf("%0d: Negative whole slope",debug.test_num), .msg_verbosity(sim_util_pkg::VERBOSE));
         curr_err = debug.get_error_count();
-        tb_i.check_intrped_batch(debug, $urandom_range(-100,100), -2);
+        tb_i.check_intrped_batch(debug, $urandom_range(-16'h7500,16'h7500), -2);
         debug.check_test(curr_err == debug.get_error_count(), .has_parts(1));
         reset_errors();
 
         // TEST 3
         debug.displayc($sformatf("%0d: Positive fractional slope",debug.test_num), .msg_verbosity(sim_util_pkg::VERBOSE));
         curr_err = debug.get_error_count();
-        tb_i.check_intrped_batch(debug, $urandom_range(-100,100), 0.5);
+        tb_i.check_intrped_batch(debug, $urandom_range(-16'h7500,16'h7500), 0.5);
         debug.check_test(curr_err == debug.get_error_count(), .has_parts(1));
         reset_errors();
 
         // TEST 4
         debug.displayc($sformatf("%0d: Negative fractional slope",debug.test_num), .msg_verbosity(sim_util_pkg::VERBOSE));
         curr_err = debug.get_error_count();
-        tb_i.check_intrped_batch(debug, $urandom_range(-100,100), -0.5);        
+        tb_i.check_intrped_batch(debug, $urandom_range(-16'h7500,16'h7500), -0.5);        
+        debug.check_test(curr_err == debug.get_error_count(), .has_parts(1));
+        
+
+        //TEST 5
+        debug.displayc($sformatf("%0d: 30 random slopes",debug.test_num), .msg_verbosity(sim_util_pkg::VERBOSE));
+        curr_err = debug.get_error_count();
+        repeat(30) tb_i.check_intrped_batch(debug, $urandom_range(-16'h7500,16'h7500), tb_i.gen_rand_real({-100,100}));
         debug.check_test(curr_err == debug.get_error_count(), .has_parts(1));
         reset_errors();
 
-        //TEST 5
-        debug.displayc($sformatf("%0d: 100 random slopes",debug.test_num), .msg_verbosity(sim_util_pkg::VERBOSE));
+        //TEST 6
+        debug.displayc($sformatf("%0d: Test 30 slope bursts",debug.test_num), .msg_verbosity(sim_util_pkg::VERBOSE));
         curr_err = debug.get_error_count();
-        repeat(20) tb_i.check_intrped_batch(debug, $urandom_range(-100,100), tb_i.gen_rand_real({-100,100}));
+        tb_i.check_slope_bursts(debug,30);
         combine_errors();        
         debug.check_test(curr_err == debug.get_error_count(), .has_parts(1));
 

@@ -58,7 +58,6 @@ module slave_tb #(parameter MEM_SIZE, parameter DATA_WIDTH, parameter ADDR_WIDTH
 				begin flash_signal(wd_if.send,clk2); end
 			join
 		end else begin
-			int k;
 			if (addr_first) flash_signal(wa_if.send,clk2);
 			else flash_signal(wd_if.send,clk2); 
 

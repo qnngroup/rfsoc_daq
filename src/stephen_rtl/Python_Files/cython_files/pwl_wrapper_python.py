@@ -230,6 +230,33 @@ def toDi(li):
         out.append(di)
     return out
 
+# def decode_pwl_cmds(pwl_cmds):
+#     wave = []
+#     batch = []
+#     coords = []
+#     abs_t = 0
+#     for x,slope,dt,_ in pwl_cmds:
+#         t = 0
+#         slope = create_slope_obj(slope)
+#         coords.append((x,abs_t))
+#         abs_t+=dt
+#         while dt > 0:
+#             batch.append(x+scale(slope,t))
+#             if len(batch) == batch_size: 
+#                 wave.append(batch)
+#                 batch = [] 
+#                 x = x + scale(slope, batch_size)
+#                 t = 0
+#                 dt-=1
+#                 continue 
+#             t+=1 
+#             dt-=1
+#     coords.append((wave[-1][-1],abs_t-1))
+#     if len(batch) != 0:
+#         print("UNEVEN WAVE CREATED")
+#         return None
+#     return wave,coords
+
 def decode_pwl_cmds(pwl_cmds):
     wave = []
     batch = []
@@ -239,13 +266,13 @@ def decode_pwl_cmds(pwl_cmds):
         t = 0
         slope = create_slope_obj(slope)
         coords.append((x,abs_t))
+        abs_t+=dt
         while t < dt:
             batch.append(x+scale(slope,t))
             if len(batch) == batch_size: 
                 wave.append(batch)
                 batch = [] 
             t+=1 
-        abs_t+=t
     coords.append((wave[-1][-1],abs_t-1))
     if len(batch) != 0:
         print("UNEVEN WAVE CREATED")
@@ -288,6 +315,8 @@ def fpga_to_pwl(fpga_cmds):
 # pwl = fpga_to_pwl(fpga_cmds)
 # print(pwl)
 
+# pc = [(0, 0.140625, 64, 1)]
+# print(decode_pwl_cmds(pc))
 
 
 

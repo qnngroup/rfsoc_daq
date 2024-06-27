@@ -2,6 +2,7 @@
 `default_nettype none
 import mem_layout_pkg::*;
 
+//For a given valid in, valid out sometimes goes high twice (see dac_intf_tb)
 module data_handshake #(parameter DATA_WIDTH = 32) 
 		       (input wire clk_src,clk_dst,rst_src,rst_dst,
 		        input wire[DATA_WIDTH-1:0] data_in,
@@ -63,6 +64,7 @@ module data_handshake #(parameter DATA_WIDTH = 32)
 				LAST: begin
 					srcState <= IDLE_SRC;
 					{data_src.valid,data_src.last} <= 0;
+					done <= 0; 
 				end 
     		endcase
     	end

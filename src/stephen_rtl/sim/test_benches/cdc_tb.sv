@@ -14,21 +14,18 @@ module cdc_tb #(parameter PS_CMD_WIDTH, parameter DAC_RSP_WIDTH)
 			   	output logic ps_cmd_valid_in,
 			   	output logic[DAC_RSP_WIDTH-1:0] dac_resp_in, 
 			   	output logic dac_resp_valid_in);
-	logic ps_clk2, dac_clk2;
-	assign ps_clk2 = ps_clk;
-	assign dac_clk2 = dac_clk; 
 
 	task automatic init();
 		{ps_cmd_in,ps_cmd_valid_in} <= 0;
 		{dac_resp_in,dac_resp_valid_in} <= 0; 
 		fork 
-			begin flash_signal(ps_rst,ps_clk2); end 
-			begin flash_signal(dac_rst, dac_clk2); end 
+			begin `flash_signal(ps_rst,ps_clk) end 
+			begin `flash_signal(dac_rst, dac_clk) end 
 		join 
 	endtask 
 
 	task automatic send_ps_cmds(inout sim_util_pkg::debug debug, input int cmds_to_send, input bit rand_wait = 0);
-		repeat(cmds_to_send) begin 
+		repeat(cmds_to_send) begin
 			while (~ps_cmd_transfer_rdy) @(posedge ps_clk);
 			for (int i = 0; i < PS_CMD_WIDTH; i+=32) ps_cmd_in[i+:32] <= $urandom();
 			`flash_signal(ps_cmd_valid_in,ps_clk); 
@@ -55,11 +52,11 @@ module cdc_tb #(parameter PS_CMD_WIDTH, parameter DAC_RSP_WIDTH)
 			fork 
 				begin
 					debug.disp_test_part(1,dac_resp_in != dac_resp_out,$sformatf("dac_resp should not have transferred yet: %h == %h",dac_resp_out, dac_resp_in)); 
-					while (~dac_resp_valid_out) @(posedge dac_clk); 
+					while (~dac_resp_valid_out) @(posedge ps_clk); 
 					debug.disp_test_part(2,dac_resp_in == dac_resp_out,$sformatf("Recieved dac_resp is incorrect: %h != %h",dac_resp_out, dac_resp_in)); 
 				end 
 				begin 
-					while (~dac_resp_transfer_done) @(posedge ps_clk); 
+					while (~dac_resp_transfer_done) @(posedge dac_clk); 
 					debug.disp_test_part(3,1'b1,"");
 				end 
 			join 

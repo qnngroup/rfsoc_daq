@@ -5,18 +5,18 @@ module pwl_generator #(parameter DMA_DATA_WIDTH, parameter SAMPLE_WIDTH, paramet
 			 		  (input wire clk,rst,
 			 		   input wire halt, 
 			 		   input wire run, 
-			 		   output logic rdy_to_run,
+			 		   output logic pwl_rdy,
 			 		   output logic[(2*`WD_DATA_WIDTH)-1:0] pwl_wave_period,
 			 		   output logic valid_pwl_wave_period, 
 			 		   output logic[BATCH_SIZE-1:0][SAMPLE_WIDTH-1:0] batch_out,
 			 		   output logic valid_batch_out,
 			 		   Axis_IF.stream_in dma);
 	localparam BATCH_WIDTH = BATCH_SIZE*SAMPLE_WIDTH;
-	localparam INTERPOLATER_DELAY = interpolater.INTERPOLATER_DELAY;
+	localparam INTERPOLATER_DELAY = `INTERPOLATER_DELAY;
 	localparam BRAM_DELAY = 3; 
 
-	logic[SAMPLE_WIDTH-1:0] curr_dma_x,curr_dma_dt,x,x_reg, dt,dt_reg, intrp_x, curr_dma_slope_whole; 
-	logic[(2*SAMPLE_WIDTH)-1:0] curr_dma_slope,slope,slope_reg,intrp_slope;  
+	logic[SAMPLE_WIDTH-1:0] curr_dma_x,curr_dma_dt,x,x_reg_whole, dt,dt_reg, curr_dma_slope_whole; 
+	logic[(2*SAMPLE_WIDTH)-1:0] curr_dma_slope,slope,slope_reg,intrp_slope,x_reg,scaled_x,intrp_x;  
 	logic curr_dma_sb, first_sb;
 	logic[1:0] nxt_dma_sb;
 	logic curr_dma_valid, nxt_dma_valid; 
@@ -53,7 +53,7 @@ module pwl_generator #(parameter DMA_DATA_WIDTH, parameter SAMPLE_WIDTH, paramet
 	logic[BATCH_WIDTH-1:0] dbatch_out;
 	logic which_bram; 
 	logic[1:0][DMA_DATA_WIDTH+1:0] dma_pipe;
-	logic curr_is_last, done;	               												 //    5                  6
+	logic curr_is_last, done;	               										             //5              6
 	enum logic[3:0] {IDLE,DENSE_INTRP_WAIT,STORE_DENSE_WAVE,STORE_SPARSE_WAVE,SETUP_GEN_MODE,SEND_DENSE_WAVE,SEND_SPARSE_WAVE,HOLD_SPARSE_CMD,HALT} pwlState;
 
 	bram_interface #(.DATA_WIDTH(DMA_DATA_WIDTH+1), .BRAM_DEPTH(SPARSE_BRAM_DEPTH), .BRAM_DELAY(BRAM_DELAY))
@@ -83,7 +83,7 @@ module pwl_generator #(parameter DMA_DATA_WIDTH, parameter SAMPLE_WIDTH, paramet
                    		     .intrp_batch(intrp_batch));
 	always_comb begin
 		brams_writes_ready = sbram_write_rdy && dbram_write_rdy;
-		brams_valid = valid_dense_batch && valid_sparse_line;		
+		brams_valid = (dense_bramint.lines_stored == 0 || valid_dense_batch) && (sparse_bramint.lines_stored == 0 || valid_sparse_line);		
 
 		{curr_is_last, curr_dma_valid, curr_dma_x, curr_dma_slope, curr_dma_dt[0+:SAMPLE_WIDTH-1],curr_dma_sb} = dma_pipe[1];
 		curr_dma_slope_whole = curr_dma_slope[SAMPLE_WIDTH+:SAMPLE_WIDTH];
@@ -106,10 +106,10 @@ module pwl_generator #(parameter DMA_DATA_WIDTH, parameter SAMPLE_WIDTH, paramet
 
 		
 		if (pwlState < SETUP_GEN_MODE) begin
-			intrp_x = curr_dma_x;
+			intrp_x = curr_dma_x<<SAMPLE_WIDTH;
 			intrp_slope = curr_dma_slope;
 		end else begin
-			intrp_x = (pwlState == HOLD_SPARSE_CMD)? x_reg : x;
+			intrp_x = (pwlState == HOLD_SPARSE_CMD)? x_reg : x<<SAMPLE_WIDTH;
 			intrp_slope = (pwlState == HOLD_SPARSE_CMD)? slope_reg : slope;
 		end
 
@@ -124,6 +124,9 @@ module pwl_generator #(parameter DMA_DATA_WIDTH, parameter SAMPLE_WIDTH, paramet
 		save_sparse_cmd_now = curr_dma_valid && (nxt_dma_valid || curr_is_last) && curr_dma_sb && dma.ready; 
 		dense_line_in = {dense_nxt_bram_bit,dense_batch_in};
 		reset_period = reset_period_pipe[INTERPOLATER_DELAY-1];
+
+		x_reg_whole = x_reg[SAMPLE_WIDTH+:SAMPLE_WIDTH];
+		scaled_x = x << SAMPLE_WIDTH; 
 	end
 
 	always_ff @(posedge clk) begin
@@ -141,7 +144,7 @@ module pwl_generator #(parameter DMA_DATA_WIDTH, parameter SAMPLE_WIDTH, paramet
 			{first_sb,curr_bram} <= 0; 
 			{which_bram_pipe[0],dbatch_pipe[0],reset_period_pipe[0],intrp_pipe[0],intrp_count} <= 0; 
 			{x_reg,slope_reg,dt_reg,nxt_bram_reg,batch_counter,pwl_wave_period,valid_pwl_wave_period} <= 0;
-			{gen_mode, rst_gen_mode, rdy_to_run} <= 0;
+			{gen_mode, rst_gen_mode, pwl_rdy} <= 1;
 			{dma_pipe,done} <= 0; 
 			pwlState <= IDLE; 
 		end else begin
@@ -188,14 +191,14 @@ module pwl_generator #(parameter DMA_DATA_WIDTH, parameter SAMPLE_WIDTH, paramet
 				IDLE: begin
 					if (run) begin
 						pwlState <= SETUP_GEN_MODE;
-						rdy_to_run <= 0;
+						pwl_rdy <= 0;
 					end else begin
 						if (dma.valid) gen_mode <= 0;
 						if (brams_writes_ready) begin 
 							if (curr_dma_valid) begin
 								{sbram_addr, dbram_addr} <= 0;
 								first_sb <= curr_dma_sb; 
-								rdy_to_run <= 0;
+								pwl_rdy <= 0;
 								if (save_sparse_cmd_now) begin 
 									{sbram_we, sbram_en} <= 3;
 									sparse_line_in <= {curr_dma_x,curr_dma_slope,curr_dma_dt,nxt_dma_sb[0]}; 
@@ -316,7 +319,7 @@ module pwl_generator #(parameter DMA_DATA_WIDTH, parameter SAMPLE_WIDTH, paramet
 								end
 							end 
 						end else begin
-							x_reg <= x + slope*BATCH_SIZE;
+							x_reg <= scaled_x + (slope*BATCH_SIZE);
 							slope_reg <= slope;
 							dt_reg <= dt - BATCH_SIZE;
 							nxt_bram_reg <= nxt_bram; 
@@ -331,7 +334,7 @@ module pwl_generator #(parameter DMA_DATA_WIDTH, parameter SAMPLE_WIDTH, paramet
 						rst_gen_mode <= 1;
 						pwlState <= HALT;
 					end else begin 
-						x_reg <= x_reg + slope_reg*BATCH_SIZE;
+						x_reg <= x_reg + (slope_reg*BATCH_SIZE);
 						which_bram_pipe[0] <= {1'b1,1'b1};
 						if (dt_reg == BATCH_SIZE) begin
 							if (regions_sent == regions_stored-1) begin
@@ -361,7 +364,7 @@ module pwl_generator #(parameter DMA_DATA_WIDTH, parameter SAMPLE_WIDTH, paramet
 
 				HALT: begin
 					rst_gen_mode <= 0; 
-					rdy_to_run <= 1;				
+					pwl_rdy <= 1;				
 					{sbram_next, dbram_next} <= 0;
 					{sbram_addr, dbram_addr} <= 0;
 					{dbram_we, dbram_en, sbram_we, sbram_en} <= 0;

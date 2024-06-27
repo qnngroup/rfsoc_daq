@@ -22,6 +22,7 @@ module cdc_test #(parameter IS_INTEGRATED = 0)();
     logic dac_resp_valid_in, dac_resp_valid_out, dac_resp_transfer_rdy, dac_resp_transfer_done;
     int total_errors = 0;
     int curr_err, seed; 
+    int test_num; 
 
     data_handshake #(.DATA_WIDTH(PS_CMD_WIDTH))
     ps_to_dac(.clk_src(ps_clk), .rst_src(ps_rst),
@@ -47,6 +48,8 @@ module cdc_test #(parameter IS_INTEGRATED = 0)();
 
 	always #(0.5s/(PS_CLK_RATE_MHZ*1_000_000)) ps_clk = ~ps_clk;
     always #(0.5s/(DAC_CLK_RATE_MHZ*1_000_000)) dac_clk = ~dac_clk;
+    always_ff @(posedge ps_clk) test_num <= debug.test_num;
+
     initial begin
         if (~IS_INTEGRATED) begin 
             $dumpfile("cdc_test.vcd");
@@ -69,11 +72,17 @@ module cdc_test #(parameter IS_INTEGRATED = 0)();
         {dac_clk,dac_rst} = 0;
         repeat (5) @(posedge ps_clk);        
         debug.displayc($sformatf("\n\n### TESTING %s ###\n\n",debug.get_test_name()));
-        seed = (MAN_SEED > 0)?  MAN_SEED : generate_rand_seed();
-        debug.displayc($sformatf("Using Seed Value %0d",seed),.msg_color(sim_util_pkg::BLUE),.msg_verbosity(sim_util_pkg::VERBOSE));
+        if (MAN_SEED > 0) begin
+            seed = MAN_SEED;
+            debug.displayc($sformatf("Using manually selected seed value %0d",seed),.msg_color(sim_util_pkg::BLUE),.msg_verbosity(sim_util_pkg::VERBOSE));
+        end else begin
+            seed = generate_rand_seed();
+            debug.displayc($sformatf("Using random seed value %0d",seed),.msg_color(sim_util_pkg::BLUE),.msg_verbosity(sim_util_pkg::VERBOSE));            
+        end
         $srandom(seed);
         debug.timeout_watcher(ps_clk,TIMEOUT);
         tb_i.init();
+        repeat (20) @(posedge ps_clk);
 
         // TEST 1
         debug.displayc($sformatf("%0d: Send 10 random commands to dac back to back",debug.test_num), .msg_verbosity(sim_util_pkg::VERBOSE));
@@ -100,8 +109,9 @@ module cdc_test #(parameter IS_INTEGRATED = 0)();
         debug.displayc($sformatf("%0d: Send 10 random replies to ps (with delays)",debug.test_num), .msg_verbosity(sim_util_pkg::VERBOSE));
         curr_err = debug.get_error_count();
         tb_i.send_dac_resp(debug, 10, .rand_wait(1));
+        combine_errors();
         debug.check_test(curr_err == debug.get_error_count(), .has_parts(1));
-        reset_errors();
+        
 
         if (~IS_INTEGRATED) debug.fatalc("### SHOULD NOT BE HERE. CHECK TEST NUMBER ###");
         else if (debug.test_num < TEST_NUM) debug.fatalc("### SHOULD NOT BE HERE. CHECK TEST NUMBER ###");
