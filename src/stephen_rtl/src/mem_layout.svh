@@ -63,7 +63,7 @@
         `define MEM_SIZE_ID           (`SDC_VALID_ID + 2)                // (READONLY)  stores the memory size. 
         `define MAPPED_ID_CEILING     (`MEM_SIZE_ID + 1)                 // Top of mapped memory IDs
         `define MEM_TEST_BASE_ID      (`MEM_SIZE - 55)                   // The next 50 addresses are reserved for memory testing 
-        `define MEM_TEST_END_ID       (`MEM_TEST_BASE_ID + 50)           // End of Memory testing
+        `define MEM_TEST_END_ID       (`MEM_TEST_BASE_ID + 50)           // (READONLY) End of Memory testing
         `define ABS_ID_CEILING        (`MEM_SIZE - 1)                    // (READONLY)  The highest entry in the mem-map, contains -2
 
         // Addresses for external mem_map usages
@@ -118,7 +118,7 @@
         is_PS_VALID => the valid signal for large regs of type PS_BIGREG
         is_RTL_VALID => the valid signal for large regs of type RTL_BIGREG
         */
-        `define is_READONLY(index)   (index == `MAX_DAC_BURST_SIZE_ID || index == `VERSION_ID || index == `MEM_SIZE_ID ||  (index >= `MAPPED_ID_CEILING && index < `MEM_TEST_BASE_ID) || (index >= `MEM_TEST_BASE_ID+50 && index < `ABS_ID_CEILING) || index == `ABS_ID_CEILING)
+        `define is_READONLY(index)   (index == `MAX_DAC_BURST_SIZE_ID || index == `VERSION_ID || index == `MEM_SIZE_ID ||  (index >= `MAPPED_ID_CEILING && index < `MEM_TEST_BASE_ID) || (index >= `MEM_TEST_END_ID && index < `ABS_ID_CEILING) || index == `ABS_ID_CEILING)
         `define is_RTLPOLL(index)    (index == `RST_ID || (index >= `PS_SEED_BASE_ID && index <= `PS_SEED_VALID_ID) || index == `TRIG_WAVE_ID || index == `DAC_HLT_ID ||index == `RUN_PWL_ID || index == `DAC_BURST_SIZE_ID || index == `SCALE_DAC_OUT_ID || index == `BUFF_CONFIG_ID || (index >= `CHAN_MUX_BASE_ID && index <= `CHAN_MUX_VALID_ID)  || (index >= `SDC_BASE_ID && index <= `SDC_VALID_ID))
         `define is_PS_BIGREG(index)  ((index >= `PS_SEED_BASE_ID && index <= `PS_SEED_VALID_ID) || (index >= `CHAN_MUX_BASE_ID && index <= `CHAN_MUX_VALID_ID)  || (index >= `SDC_BASE_ID && index <= `SDC_VALID_ID))
         `define is_RTL_BIGREG(index) ((index >= `BUFF_TIME_BASE_ID && index <= `BUFF_TIME_VALID_ID) || index == `PWL_PERIOD1_ID || index == `PWL_PERIOD0_ID) 

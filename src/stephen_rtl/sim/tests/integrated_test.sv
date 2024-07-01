@@ -18,9 +18,11 @@ module integrated_test();
 	cdc_test #(.IS_INTEGRATED(1'b1)) cdc_test();
 	adc_intf_test #(.IS_INTEGRATED(1'b1)) adc_intf_test();
 	pwl_test #(.IS_INTEGRATED(1'b1)) pwl_test();
+	top_test #(.IS_INTEGRATED(1'b1)) top_test();
 
 	`define any_timed_out at_test.debug.timed_out || ar_test.debug.timed_out || slave_test.debug.timed_out || dac_intf_test.debug.timed_out \
-						  || intrp_test.debug.timed_out || cdc_test.debug.timed_out || adc_intf_test.debug.timed_out || pwl_test.debug.timed_out
+						  || intrp_test.debug.timed_out || cdc_test.debug.timed_out || adc_intf_test.debug.timed_out || pwl_test.debug.timed_out\
+						  || top_test.debug.timed_out
 	initial begin
         $dumpfile("integrated_test.vcd");
         $dumpvars(0,integrated_test); 
@@ -53,6 +55,9 @@ module integrated_test();
 		       	total_errors+=adc_intf_test.debug.get_error_count();
 
 		       	pwl_test.run_tests();
+		       	total_errors+=pwl_test.debug.get_error_count();		
+
+		       	top_test.run_tests();
 		       	total_errors+=pwl_test.debug.get_error_count();		       		       
 		    end 
 		    begin
