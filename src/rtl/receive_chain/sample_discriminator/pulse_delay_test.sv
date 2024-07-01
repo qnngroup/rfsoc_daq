@@ -43,7 +43,7 @@ always @(posedge clk) begin
       expected_times[0]),
       sim_util_pkg::DEBUG
     );
-    if (expected_times[0] <= timer) begin
+    if (expected_times[0] < timer) begin
       expected_times.push_front(timer+delay+1);
     end else begin
       expected_times[0] = timer+delay+1;
