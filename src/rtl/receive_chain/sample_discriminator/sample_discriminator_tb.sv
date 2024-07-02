@@ -245,7 +245,7 @@ task automatic check_results (
   rx_pkg::batch_t expected_q [$];
   logic [buffer_pkg::TSTAMP_WIDTH-1:0] timestamp_q [$];
   int expected_locations [$];
-  int trigger_q_end;
+  int q_end;
   logic is_high;
   logic [buffer_pkg::SAMPLE_INDEX_WIDTH-1:0] index;
   logic [buffer_pkg::TSTAMP_WIDTH-1:0] time_init;
@@ -260,21 +260,23 @@ task automatic check_results (
     debug.display($sformatf("trigger source = %0d", source), sim_util_pkg::DEBUG);
     time_init = adc_timestamps_out_rx_i.data_q[channel][$] >> buffer_pkg::SAMPLE_INDEX_WIDTH;
     if (source >= rx_pkg::CHANNELS) begin
-      trigger_q = adc_data_in_tx_i.data_q[source - rx_pkg::CHANNELS];
-      trigger_q_end = trigger_q.size() - 1;
+      q_end = adc_data_in_tx_i.data_q[channel].size() - 1;
       // get expected_locations from trigger_times_q
       for (int i = 0; i < trigger_times_q[channel].size(); i++) begin
-        expected_locations.push_front(trigger_q_end - trigger_times_q[channel][i]);
+        expected_locations.push_front(q_end - trigger_times_q[channel][i]);
         // delay is not in samples, it's in clock periods at maximum sample rate
+        // pre-trigger samples
         for (int j = 1;
               (j*adc_send_samples_decimation <= start_delays[channel])
-              && (trigger_q_end - (trigger_times_q[channel][i] + j) < adc_data_in_tx_i.data_q[channel].size()); j++) begin
-          expected_locations.push_front(trigger_q_end - (trigger_times_q[channel][i] + j));
+              && (j <= trigger_times_q[channel][i]); j++) begin
+          expected_locations.push_front(q_end - trigger_times_q[channel][i] + j);
         end
-        for (int j = 1;
-              (j*adc_send_samples_decimation <= stop_delays[channel])
-              && (trigger_q_end - (trigger_times_q[channel][i] - j) >= 0); j++) begin
-          expected_locations.push_front(trigger_q_end - (trigger_times_q[channel][i] - j));
+        if (stop_delays[channel] > 0) begin
+          for (int j = 1;
+                (j*adc_send_samples_decimation <= stop_delays[channel] - 1)
+                && (j <= q_end - trigger_times_q[channel][i]); j++) begin
+            expected_locations.push_front(q_end - trigger_times_q[channel][i] - j);
+          end
         end
       end
     end else begin
@@ -304,6 +306,11 @@ task automatic check_results (
         end
       end
     end
+    debug.display($sformatf(
+      "expected_locations = %0p",
+      expected_locations),
+      sim_util_pkg::DEBUG
+    );
     expected_locations = expected_locations.unique();
     expected_locations.sort();
     debug.display($sformatf(

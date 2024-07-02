@@ -90,7 +90,7 @@ always_ff @(posedge adc_clk) begin
         // start + stop delay for total
         adc_total_delay[channel] <= adc_delays_sync.data[(3*channel+1)*TIMER_BITS+:TIMER_BITS]
                                     + adc_delays_sync.data[(3*channel)*TIMER_BITS+:TIMER_BITS];
-        adc_digital_delay[channel] <= adc_delays_sync.data[(3*channel+2)*TIMER_BITS+:TIMER_BITS] + 1;
+        adc_digital_delay[channel] <= adc_delays_sync.data[(3*channel+2)*TIMER_BITS+:TIMER_BITS];
       end
     end
   end
@@ -220,7 +220,7 @@ end
 always_ff @(posedge adc_clk) begin
   for (int channel = 0; channel < tx_pkg::CHANNELS; channel++) begin
     if (adc_digital_delay[channel] == 0) begin
-      adc_digital_trigger_in_d[channel] <= adc_digital_trigger_in;
+      adc_digital_trigger_in_d[channel] <= adc_digital_trigger_in[channel];
     end else begin
       adc_digital_trigger_in_d[channel] <= adc_digital_trigger_in_pipe[adc_digital_delay[channel] - 1][channel];
     end

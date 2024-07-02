@@ -82,6 +82,8 @@ logic [rx_pkg::CHANNELS-1:0][$clog2(rx_pkg::CHANNELS+tx_pkg::CHANNELS)-1:0] trig
 logic [TIMER_BITS-1:0] start_delay_nsamp, stop_delay_nsamp;
 rx_pkg::sample_t min_samp, max_samp;
 
+int initial_q_length;
+
 initial begin
   debug.display("### TESTING SAMPLE DISCRIMINATOR ###", sim_util_pkg::DEFAULT);
 
@@ -170,10 +172,15 @@ initial begin
       @(posedge adc_clk);
       // clear input data (but keep start_delays/decimation samples)
       for (int channel = 0; channel < tx_pkg::CHANNELS; channel++) begin
-        while (tb_i.adc_data_in_tx_i.data_q[channel].size() > (start_delays[channel] + digital_delays[channel])/decimation) begin
+        if (trigger_sources[channel] >= rx_pkg::CHANNELS) begin
+          initial_q_length = (start_delays[channel] + digital_delays[channel])/decimation;
+        end else begin
+          initial_q_length = start_delays[channel]/decimation;
+        end
+        while (tb_i.adc_data_in_tx_i.data_q[channel].size() > initial_q_length) begin 
           tb_i.adc_data_in_tx_i.data_q[channel].pop_back();
         end
-        if (tb_i.adc_data_in_tx_i.data_q[channel].size() != (start_delays[channel] + digital_delays[channel])/decimation) begin
+        if (tb_i.adc_data_in_tx_i.data_q[channel].size() != initial_q_length) begin
           debug.error($sformatf(
             "didn't get enough samples before start, needed at least %0d, got %0d",
             (start_delays[channel] + digital_delays[channel])/decimation,
