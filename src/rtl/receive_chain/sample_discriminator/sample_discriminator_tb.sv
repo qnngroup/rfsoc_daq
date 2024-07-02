@@ -19,7 +19,9 @@ module sample_discriminator_tb #(
   Axis_If.Master ps_thresholds,
   Axis_If.Master ps_delays,
   Axis_If.Master ps_trigger_select,
-  Axis_If.Master ps_disable_discriminator
+  Axis_If.Master ps_disable_discriminator,
+
+  input logic [rx_pkg::CHANNELS-1:0][$clog2(rx_pkg::CHANNELS+tx_pkg::CHANNELS)-1:0] trigger_sources
 );
 
 localparam int TIMER_BITS = $clog2(MAX_DELAY_CYCLES);
@@ -71,6 +73,17 @@ always @(posedge adc_clk) begin
   end
 end
 
+// save trigger times for digitally-supplied triggers
+always @(posedge adc_clk) begin
+  for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
+    if (trigger_sources[channel] >= rx_pkg::CHANNELS) begin
+      if (adc_digital_trigger_in[trigger_sources[channel] - rx_pkg::CHANNELS] === 1'b1) begin
+        trigger_times_q[channel].push_front(adc_data_in_tx_i.data_q[channel].size());
+      end
+    end
+  end
+end
+
 realtime_parallel_driver_constrained #(
   .DWIDTH(rx_pkg::DATA_WIDTH),
   .CHANNELS(rx_pkg::CHANNELS),
@@ -111,10 +124,17 @@ task automatic init ();
   adc_send_samples_counter <= 0;
 endtask
 
+task automatic clear_trigger_times_q ();
+  for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
+    while (trigger_times_q[channel].size() > 0) trigger_times_q[channel].pop_back();
+  end
+endtask
+
 task automatic clear_queues ();
   adc_data_in_tx_i.clear_queues();
   adc_data_out_rx_i.clear_queues();
   adc_timestamps_out_rx_i.clear_queues();
+  clear_trigger_times_q();
 endtask
 
 task automatic enable_send ();
@@ -221,63 +241,95 @@ task automatic check_results (
   input logic [rx_pkg::CHANNELS-1:0][TIMER_BITS-1:0] start_delays, stop_delays, digital_delays,
   input logic [rx_pkg::CHANNELS-1:0][$clog2(rx_pkg::CHANNELS+tx_pkg::CHANNELS)-1:0] trigger_sources
 );
-  rx_pkg::batch_t sent_q [$];
+  rx_pkg::batch_t trigger_q [$];
   rx_pkg::batch_t expected_q [$];
   logic [buffer_pkg::TSTAMP_WIDTH-1:0] timestamp_q [$];
   int expected_locations [$];
+  int trigger_q_end;
   logic is_high;
   logic [buffer_pkg::SAMPLE_INDEX_WIDTH-1:0] index;
   logic [buffer_pkg::TSTAMP_WIDTH-1:0] time_init;
-  logic is_digital;
   logic [$clog2(rx_pkg::CHANNELS+tx_pkg::CHANNELS)-1:0] source;
   for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
     source = trigger_sources[channel];
-    if (source >= rx_pkg::CHANNELS) begin
-      sent_q = adc_data_in_tx_i.data_q[source - rx_pkg::CHANNELS];
-      is_digital = 1'b1;
-    end else begin
-      sent_q = adc_data_in_tx_i.data_q[source];
-      is_digital = 1'b0;
-    end
-    debug.display($sformatf("checking received output for channel %0d", channel), sim_util_pkg::DEBUG);
+    debug.display($sformatf(
+      "checking received output for channel %0d",
+      channel),
+      sim_util_pkg::DEBUG
+    );
     debug.display($sformatf("trigger source = %0d", source), sim_util_pkg::DEBUG);
-    // generate expected_q data
-    is_high = 1'b0;
     time_init = adc_timestamps_out_rx_i.data_q[channel][$] >> buffer_pkg::SAMPLE_INDEX_WIDTH;
-    // start after start_delays[channel] because the data at the beginning
-    // has already passed through the sample discriminator while
-    // adc_reset_state was held high
-    for (int i = sent_q.size() - 1 - (start_delays[source]/adc_send_samples_decimation); i >= 0; i--) begin
-      if (any_above_threshold(sent_q[i], high_thresholds[source])) begin
-        is_high = 1'b1;
-      end
-      if (~any_above_threshold(sent_q[i], low_thresholds[source])) begin
-        is_high = 1'b0;
-      end
-      if (is_high) begin
-        expected_locations.push_front(i);
+    if (source >= rx_pkg::CHANNELS) begin
+      trigger_q = adc_data_in_tx_i.data_q[source - rx_pkg::CHANNELS];
+      trigger_q_end = trigger_q.size() - 1;
+      // get expected_locations from trigger_times_q
+      for (int i = 0; i < trigger_times_q[channel].size(); i++) begin
+        expected_locations.push_front(trigger_q_end - trigger_times_q[channel][i]);
         // delay is not in samples, it's in clock periods at maximum sample rate
-        for (int j = 1; (j*adc_send_samples_decimation <= start_delays[channel]) && (i + j < adc_data_in_tx_i.data_q[channel].size()); j++) begin
-          expected_locations.push_front(i+j);
+        for (int j = 1;
+              (j*adc_send_samples_decimation <= start_delays[channel])
+              && (trigger_q_end - (trigger_times_q[channel][i] + j) < adc_data_in_tx_i.data_q[channel].size()); j++) begin
+          expected_locations.push_front(trigger_q_end - (trigger_times_q[channel][i] + j));
         end
-        for (int j = 1; (j*adc_send_samples_decimation <= stop_delays[channel]) && (i - j >= 0); j++) begin
-          expected_locations.push_front(i-j);
+        for (int j = 1;
+              (j*adc_send_samples_decimation <= stop_delays[channel])
+              && (trigger_q_end - (trigger_times_q[channel][i] - j) >= 0); j++) begin
+          expected_locations.push_front(trigger_q_end - (trigger_times_q[channel][i] - j));
+        end
+      end
+    end else begin
+      trigger_q = adc_data_in_tx_i.data_q[source];
+      // get expected_locations by checking source queue
+      is_high = 1'b0;
+      // start after start_delays[channel] because the data at the beginning has already
+      // passed through the sample discriminator while adc_reset_state was held high
+      for (int i = trigger_q.size() - 1 - (start_delays[source]/adc_send_samples_decimation); i >= 0; i--) begin
+        if (any_above_threshold(trigger_q[i], high_thresholds[source])) begin
+          is_high = 1'b1;
+        end
+        if (~any_above_threshold(trigger_q[i], low_thresholds[source])) begin
+          is_high = 1'b0;
+        end
+        if (is_high) begin
+          expected_locations.push_front(i);
+          // delay is not in samples, it's in clock periods at maximum sample rate
+          for (int j = 1;
+                (j*adc_send_samples_decimation <= start_delays[channel])
+                && (i + j < adc_data_in_tx_i.data_q[channel].size()); j++) begin
+            expected_locations.push_front(i+j);
+          end
+          for (int j = 1; (j*adc_send_samples_decimation <= stop_delays[channel]) && (i - j >= 0); j++) begin
+            expected_locations.push_front(i-j);
+          end
         end
       end
     end
     expected_locations = expected_locations.unique();
     expected_locations.sort();
-    debug.display($sformatf("expected_locations.size() = %0d", expected_locations.size()), sim_util_pkg::DEBUG);
-    debug.display($sformatf("expected_locations = %0p", expected_locations), sim_util_pkg::DEBUG);
+    debug.display($sformatf(
+      "expected_locations.size() = %0d",
+      expected_locations.size()),
+      sim_util_pkg::DEBUG
+    );
+    debug.display($sformatf(
+      "expected_locations = %0p",
+      expected_locations),
+      sim_util_pkg::DEBUG
+    );
     // get timestamp_q
     for (int i = expected_locations.size() - 1; i >= 0; i--) begin
       index = expected_locations.size() - 1 - i;
       if ((expected_locations[i+1] - 1 > expected_locations[i]) || (i == expected_locations.size() - 1)) begin
-        timestamp_q.push_front({time_init + (expected_locations[$]-expected_locations[i])*adc_send_samples_decimation, index});
+        timestamp_q.push_front({
+          time_init + (expected_locations[$]-expected_locations[i])*adc_send_samples_decimation,
+          index
+        });
       end
     end
     debug.display($sformatf("expected_timestamps = %0p", timestamp_q), sim_util_pkg::DEBUG);
+    // generate expected_q data
     while (expected_locations.size() > 0) begin
+      debug.display($sformatf("expected location = %d, pushing value = %x", expected_locations[$], adc_data_in_tx_i.data_q[channel][expected_locations[$]]), sim_util_pkg::DEBUG);
       expected_q.push_front(adc_data_in_tx_i.data_q[channel][expected_locations.pop_back()]);
     end
     // check expected_q matches received

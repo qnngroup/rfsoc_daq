@@ -122,7 +122,7 @@ always_ff @(posedge adc_clk) begin
     if (adc_trigger_select_sync.ok) begin
       adc_trigger_source <= adc_trigger_select_sync.data;
       for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
-        adc_trigger_is_digital[channel] <= adc_trigger_select_sync.data[channel*TRIGGER_SELECT_WIDTH+:TRIGGER_SELECT_WIDTH] > rx_pkg::CHANNELS;
+        adc_trigger_is_digital[channel] <= adc_trigger_select_sync.data[channel*TRIGGER_SELECT_WIDTH+:TRIGGER_SELECT_WIDTH] >= rx_pkg::CHANNELS;
       end
     end
   end
@@ -217,9 +217,13 @@ always_ff @(posedge adc_clk) begin
     end
   end
 end
-always_comb begin
+always_ff @(posedge adc_clk) begin
   for (int channel = 0; channel < tx_pkg::CHANNELS; channel++) begin
-    adc_digital_trigger_in_d[channel] = adc_digital_trigger_in_pipe[adc_digital_delay[channel]][channel];
+    if (adc_digital_delay[channel] == 0) begin
+      adc_digital_trigger_in_d[channel] <= adc_digital_trigger_in;
+    end else begin
+      adc_digital_trigger_in_d[channel] <= adc_digital_trigger_in_pipe[adc_digital_delay[channel] - 1][channel];
+    end
   end
 end
 
