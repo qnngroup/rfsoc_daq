@@ -340,9 +340,42 @@ task automatic check_results (
       expected_q.push_front(adc_data_in_tx_i.data_q[channel][expected_locations.pop_back()]);
     end
     // check expected_q matches received
-    debug.display("checking data", sim_util_pkg::DEBUG);
-    batch_q_util.compare(debug, adc_data_out_rx_i.data_q[channel], expected_q);
-    while (expected_q.size() > 0) expected_q.pop_back();
+    if (source >= rx_pkg::CHANNELS) begin
+      // at most, we miss one sample per trigger event
+      if (expected_q.size() - adc_data_out_rx_i.data_q[channel].size() > timestamp_q.size()) begin
+        debug.error($sformatf("received_q.size() = %0d, expected_q.size() = %0d", adc_data_out_rx_i.data_q[channel].size(), expected_q.size()));
+      end
+      // process data 
+      while ((expected_q.size() > 0) && (adc_data_out_rx_i.data_q[channel].size() > 0)) begin
+        // process a single collection of samples (start_delays + stop_delays + 1)
+        // only process the first start_delays + stop_delays clock periods, since
+        // we could be missing one sample
+        for (int i = 0; i*adc_send_samples_decimation < stop_delays[channel] + start_delays[channel]; i++) begin
+          if ((expected_q.size() == 0) || (adc_data_out_rx_i.data_q[channel].size() == 0)) begin
+            break;
+          end
+          debug.display($sformatf("processing pair (%x, %x)", adc_data_out_rx_i.data_q[channel][$], expected_q[$]), sim_util_pkg::DEBUG);
+          if (expected_q[$] !== adc_data_out_rx_i.data_q[channel][$]) begin
+            debug.error($sformatf("mismatch, got %x expected %x", adc_data_out_rx_i.data_q[channel][$], expected_q[$]));
+          end
+          expected_q.pop_back();
+          adc_data_out_rx_i.data_q[channel].pop_back();
+        end
+        // if there's a mismatch, then the DUT didn't produce a sample, which is fine
+        if (expected_q[$] != adc_data_out_rx_i.data_q[channel][$]) begin
+          debug.display($sformatf("removing %x from expected_q", expected_q[$]), sim_util_pkg::DEBUG);
+          expected_q.pop_back();
+        end else begin
+          debug.display($sformatf("processing pair (%x, %x)", adc_data_out_rx_i.data_q[channel][$], expected_q[$]), sim_util_pkg::DEBUG);
+          expected_q.pop_back();
+          adc_data_out_rx_i.data_q[channel].pop_back();
+        end
+      end
+    end else begin
+      debug.display("checking data", sim_util_pkg::DEBUG);
+      batch_q_util.compare(debug, adc_data_out_rx_i.data_q[channel], expected_q);
+      while (expected_q.size() > 0) expected_q.pop_back();
+    end
     // check timestamp_q
     debug.display("checking timestamp_q", sim_util_pkg::DEBUG);
     tstamp_q_util.compare(debug, adc_timestamps_out_rx_i.data_q[channel], timestamp_q);

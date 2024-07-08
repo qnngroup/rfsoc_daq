@@ -88,8 +88,8 @@ initial begin
   debug.display("### TESTING SAMPLE DISCRIMINATOR ###", sim_util_pkg::DEFAULT);
 
   // TODO enum
-  for (int source_mode = 1; source_mode < 2; source_mode++) begin
-    for (int decimation = 1; decimation < 3; decimation++) begin
+  for (int source_mode = 0; source_mode < 1; source_mode++) begin
+    for (int decimation = 1; decimation < 5; decimation++) begin
       // mid-test reset
       tb_i.init();
       ps_reset <= 1'b1;
