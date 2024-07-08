@@ -156,7 +156,7 @@ end
 // track state of each channel
 // DISABLED: don't save samples
 // PRECAPTURE: save samples, ignore
-enum {DISABLED, PRECAPTURE, CAPTURE} adc_states [rx_pkg::CHANNELS];
+enum {DISABLED, PRECAPTURE, CAPTURE, POSTCAPTURE} adc_states [rx_pkg::CHANNELS];
 logic [rx_pkg::CHANNELS-1:0] adc_active, adc_active_d;
 always_comb begin
   for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
@@ -336,7 +336,7 @@ always_ff @(posedge adc_clk) begin
                     (|adc_total_delay[channel]) ? PRECAPTURE : CAPTURE;
         PRECAPTURE: begin
           if (adc_fsm_start_d[channel]) begin
-            adc_states[channel] <= adc_trigger_is_digital[channel] ? DISABLED : CAPTURE;
+            adc_states[channel] <= adc_trigger_is_digital[channel] ? POSTCAPTURE : CAPTURE;
           end
         end
         CAPTURE: begin
@@ -349,6 +349,9 @@ always_ff @(posedge adc_clk) begin
               if (adc_fsm_stop[channel]) adc_states[channel] <= DISABLED;
             end
           end
+        end
+        POSTCAPTURE: begin
+          adc_states[channel] <= DISABLED;
         end
       endcase
     end

@@ -273,7 +273,7 @@ task automatic check_results (
         end
         if (stop_delays[channel] > 0) begin
           for (int j = 1;
-                (j*adc_send_samples_decimation <= stop_delays[channel] - 1)
+                (j*adc_send_samples_decimation <= stop_delays[channel])
                 && (j <= q_end - trigger_times_q[channel][i]); j++) begin
             expected_locations.push_front(q_end - trigger_times_q[channel][i] - j);
           end
