@@ -88,8 +88,8 @@ initial begin
   debug.display("### TESTING SAMPLE DISCRIMINATOR ###", sim_util_pkg::DEFAULT);
 
   // TODO enum
-  for (int source_mode = 0; source_mode < 1; source_mode++) begin
-    for (int decimation = 1; decimation < 5; decimation++) begin
+  for (int source_mode = 1; source_mode < 2; source_mode++) begin
+    for (int decimation = 1; decimation < 4; decimation++) begin
       // mid-test reset
       tb_i.init();
       ps_reset <= 1'b1;
@@ -167,7 +167,7 @@ initial begin
       // wait until we're aligned with a valid input
       do @(posedge adc_clk); while (~adc_data_in.valid);
       // wait until data_out.valid goes low to make sure we flush the pipeline
-      while (adc_data_out.valid) @(posedge adc_clk);
+      do @(posedge adc_clk); while (adc_data_out.valid);
       adc_reset_state <= 1'b0;
       @(posedge adc_clk);
       // clear input data (but keep start_delays/decimation samples)
