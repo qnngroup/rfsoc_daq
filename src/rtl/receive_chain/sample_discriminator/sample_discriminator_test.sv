@@ -170,6 +170,7 @@ initial begin
       do @(posedge adc_clk); while (adc_data_out.valid);
       adc_reset_state <= 1'b0;
       @(posedge adc_clk);
+      tb_i.set_reference_time();
       // clear input data (but keep start_delays/decimation samples)
       for (int channel = 0; channel < tx_pkg::CHANNELS; channel++) begin
         if (trigger_sources[channel] >= rx_pkg::CHANNELS) begin
@@ -191,7 +192,7 @@ initial begin
       // clear any output data from the DUT
       tb_i.adc_timestamps_out_rx_i.clear_queues();
       tb_i.adc_data_out_rx_i.clear_queues();
-      tb_i.clear_trigger_times_q();
+      tb_i.clear_trigger_q();
 
       // send data and randomize input signal level
       repeat (4) begin
@@ -243,9 +244,9 @@ initial begin
       end
       for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
         debug.display($sformatf(
-          "trigger_times_q[%0d] = %0p",
+          "trigger_sample_count_q[%0d] = %0p",
           channel,
-          tb_i.trigger_times_q[channel]),
+          tb_i.trigger_sample_count_q[channel]),
           sim_util_pkg::DEBUG
         );
       end
