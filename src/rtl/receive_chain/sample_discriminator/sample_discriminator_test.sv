@@ -88,7 +88,7 @@ initial begin
   debug.display("### TESTING SAMPLE DISCRIMINATOR ###", sim_util_pkg::DEFAULT);
 
   // TODO enum
-  for (int source_mode = 1; source_mode < 2; source_mode++) begin
+  for (int source_mode = 0; source_mode < 2; source_mode++) begin
     for (int decimation = 1; decimation < 4; decimation++) begin
       // mid-test reset
       tb_i.init();
@@ -165,12 +165,13 @@ initial begin
       // any pre-trigger samples
       adc_reset_state <= 1'b1;
       // wait until we're aligned with a valid input
+      debug.display("waiting for adc_reset_state to take effect", sim_util_pkg::DEBUG);
       do @(posedge adc_clk); while (~adc_data_in.valid);
       // wait until data_out.valid goes low to make sure we flush the pipeline
       do @(posedge adc_clk); while (adc_data_out.valid);
       adc_reset_state <= 1'b0;
       @(posedge adc_clk);
-      tb_i.set_reference_time();
+      debug.display("clearing input data", sim_util_pkg::DEBUG);
       // clear input data (but keep start_delays/decimation samples)
       for (int channel = 0; channel < tx_pkg::CHANNELS; channel++) begin
         if (trigger_sources[channel] >= rx_pkg::CHANNELS) begin
@@ -193,6 +194,8 @@ initial begin
       tb_i.adc_timestamps_out_rx_i.clear_queues();
       tb_i.adc_data_out_rx_i.clear_queues();
       tb_i.clear_trigger_q();
+
+      debug.display("finished configuring DUT, sending data", sim_util_pkg::DEBUG);
 
       // send data and randomize input signal level
       repeat (4) begin

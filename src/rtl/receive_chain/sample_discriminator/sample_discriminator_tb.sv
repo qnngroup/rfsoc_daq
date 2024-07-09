@@ -30,8 +30,15 @@ sim_util_pkg::queue #(.T(rx_pkg::sample_t), .T2(rx_pkg::batch_t)) sample_q_util 
 sim_util_pkg::queue #(.T(rx_pkg::batch_t)) batch_q_util = new;
 sim_util_pkg::queue #(.T(logic [buffer_pkg::TSTAMP_WIDTH-1:0])) tstamp_q_util = new;
 
+// keep track of location of samples for which a trigger occurred
 int trigger_sample_count_q [rx_pkg::CHANNELS][$];
-bit trigger_in_valid [rx_pkg::CHANNELS][$];
+// keep track of relative delay between trigger and data_in_valid
+int trigger_delay_q [rx_pkg::CHANNELS][$];
+
+// timer
+localparam int LATENCY_TRIGGER_PIPELINE = 4;
+int timer;
+int trigger_time_q [rx_pkg::CHANNELS][$];
 
 axis_driver #(
   .DWIDTH(2*rx_pkg::CHANNELS*rx_pkg::SAMPLE_WIDTH)
@@ -64,21 +71,11 @@ axis_driver #(
 logic adc_send_samples, adc_driver_enabled;
 int adc_send_samples_decimation, adc_send_samples_counter;
 
+// decimate samples and save trigger times for digitally-supplied triggers
 always @(posedge adc_clk) begin
-  if (adc_send_samples_counter == adc_send_samples_decimation - 1) begin
-    adc_send_samples_counter <= 0;
-    adc_driver_enabled <= adc_send_samples;
-  end else begin
-    adc_send_samples_counter <= adc_send_samples_counter + 1;
-    adc_driver_enabled <= 1'b0;
-  end
-end
-
-// save trigger times for digitally-supplied triggers
-int timer, reference_time;
-always @(posedge adc_clk) begin
+  // save trigger times
   if (adc_reset) begin
-    timer <= 0;
+    timer <= LATENCY_TRIGGER_PIPELINE;
   end else begin
     timer <= timer + 1;
   end
@@ -86,15 +83,24 @@ always @(posedge adc_clk) begin
     if (trigger_sources[channel] >= rx_pkg::CHANNELS) begin
       if (adc_digital_trigger_in[trigger_sources[channel] - rx_pkg::CHANNELS] === 1'b1) begin
         trigger_sample_count_q[channel].push_front(adc_data_in_tx_i.data_q[channel].size());
-        trigger_in_valid[channel].push_front(adc_data_in.valid[channel]);
+        trigger_delay_q[channel].push_front((adc_send_samples_counter + adc_send_samples_decimation - 1) % adc_send_samples_decimation);
+        trigger_time_q[channel].push_front(timer);
       end
     end
   end
+  // decimation
+  if (adc_reset) begin
+    adc_send_samples_counter <= 0;
+  end else begin
+    if (adc_send_samples_counter == adc_send_samples_decimation - 1) begin
+      adc_send_samples_counter <= 0;
+      adc_driver_enabled <= adc_send_samples;
+    end else begin
+      adc_send_samples_counter <= adc_send_samples_counter + 1;
+      adc_driver_enabled <= 1'b0;
+    end
+  end
 end
-
-task automatic set_reference_time ();
-  reference_time = timer; 
-endtask
 
 realtime_parallel_driver_constrained #(
   .DWIDTH(rx_pkg::DATA_WIDTH),
@@ -139,9 +145,8 @@ endtask
 task automatic clear_trigger_q ();
   for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
     while (trigger_sample_count_q[channel].size() > 0) trigger_sample_count_q[channel].pop_back();
-  end
-  for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
-    while (trigger_in_valid[channel].size() > 0) trigger_in_valid[channel].pop_back();
+    while (trigger_delay_q[channel].size() > 0) trigger_delay_q[channel].pop_back();
+    while (trigger_time_q[channel].size() > 0) trigger_time_q[channel].pop_back();
   end
 endtask
 
@@ -261,6 +266,7 @@ task automatic check_results (
   logic [buffer_pkg::TSTAMP_WIDTH-1:0] timestamp_q [$];
   int expected_locations [$];
   int q_end;
+  logic missing_sample;
   int stop_delay;
   logic is_high;
   logic [buffer_pkg::SAMPLE_INDEX_WIDTH-1:0] index;
@@ -278,10 +284,20 @@ task automatic check_results (
     if (source >= rx_pkg::CHANNELS) begin
       q_end = adc_data_in_tx_i.data_q[channel].size() - 1;
       // get expected_locations from trigger_sample_count_q
-      // from trigger_in_valid
-      for (int i = 0; i < trigger_sample_count_q[channel].size(); i++) begin
-        //(trigger_in_valid[channel][i] - reference_time - 4)
-        expected_locations.push_front(q_end - trigger_sample_count_q[channel][i]);
+      // from trigger_delay_q
+      for (int i = trigger_sample_count_q[channel].size() - 1; i >= 0; i--) begin
+        debug.display($sformatf("trigger_delay_q[%0d][%0d] = %0d", channel, i, trigger_delay_q[channel][i]), sim_util_pkg::DEBUG);
+        debug.display($sformatf("stop_delay = %0d", stop_delay), sim_util_pkg::DEBUG);
+        missing_sample = trigger_delay_q[channel][i] != 0;
+        stop_delay = stop_delays[channel];
+        if (missing_sample) begin
+          stop_delay -= adc_send_samples_decimation;
+        end
+        // if stop_delays was set to zero and we're missing a sample, it'll be
+        // the main sample
+        if (stop_delay >= 0) begin
+          expected_locations.push_front(q_end - trigger_sample_count_q[channel][i]);
+        end
         // delay is not in samples, it's in clock periods at maximum sample rate
         // pre-trigger samples
         if (start_delays[channel] > 0) begin
@@ -291,10 +307,8 @@ task automatic check_results (
             expected_locations.push_front(q_end - trigger_sample_count_q[channel][i] + j);
           end
         end
-        stop_delay = stop_delays[channel];
-        if (~trigger_in_valid[channel][i]) begin
-          stop_delay -= adc_send_samples_decimation;
-        end
+        // post-trigger samples (might be missing one if trigger wasn't
+        // aligned with a input_valid signal)
         if (stop_delay > 0) begin
           for (int j = 1;
                 (j*adc_send_samples_decimation <= stop_delay)
@@ -351,10 +365,14 @@ task automatic check_results (
     for (int i = expected_locations.size() - 1; i >= 0; i--) begin
       index = expected_locations.size() - 1 - i;
       if ((expected_locations[i+1] - 1 > expected_locations[i]) || (i == expected_locations.size() - 1)) begin
-        timestamp_q.push_front({
-          time_init + (expected_locations[$]-expected_locations[i])*adc_send_samples_decimation,
-          index
-        });
+        if (source >= rx_pkg::CHANNELS) begin
+          timestamp_q.push_front({trigger_time_q[channel].pop_back(), index});
+        end else begin
+          timestamp_q.push_front({
+            time_init + (expected_locations[$]-expected_locations[i])*adc_send_samples_decimation,
+            index
+          });
+        end
       end
     end
     debug.display($sformatf("expected_timestamps = %0p", timestamp_q), sim_util_pkg::DEBUG);
