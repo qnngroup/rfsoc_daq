@@ -151,6 +151,16 @@ always_ff @(posedge adc_clk) begin
     end
   end
 end
+axis_config_reg_cdc #(
+  .DWIDTH(rx_pkg::CHANNELS)
+) disable_discriminator_cdc_i (
+  .src_clk(ps_clk),
+  .src_reset(ps_reset),
+  .src(ps_disable_discriminator),
+  .dest_clk(adc_clk),
+  .dest_reset(adc_reset),
+  .dest(adc_disable_discriminator_sync)
+);
 
 // main logic
 
