@@ -267,7 +267,8 @@ task automatic check_results (
   int expected_locations [$];
   int q_end;
   logic missing_sample;
-  int stop_delay;
+  int main_sample;
+  int stop_delay, start_delay;
   logic is_high;
   logic [buffer_pkg::SAMPLE_INDEX_WIDTH-1:0] index;
   logic [buffer_pkg::TSTAMP_WIDTH-1:0] time_init;
@@ -286,25 +287,31 @@ task automatic check_results (
       // get expected_locations from trigger_sample_count_q
       // from trigger_delay_q
       for (int i = trigger_sample_count_q[channel].size() - 1; i >= 0; i--) begin
-        debug.display($sformatf("trigger_delay_q[%0d][%0d] = %0d", channel, i, trigger_delay_q[channel][i]), sim_util_pkg::DEBUG);
-        debug.display($sformatf("stop_delay = %0d", stop_delay), sim_util_pkg::DEBUG);
+        main_sample = trigger_sample_count_q[channel][i] + digital_delays[channel]/adc_send_samples_decimation;
+        debug.display($sformatf("main_sample = %0d, trigger_sample_count_q[%0d][%0d] = %0d, digital_delays[%0d] = %0d", main_sample, channel, i, trigger_sample_count_q[channel][i], channel, digital_delays[channel]), sim_util_pkg::DEBUG);
         missing_sample = trigger_delay_q[channel][i] != 0;
         stop_delay = stop_delays[channel];
+        start_delay = start_delays[channel];
         if (missing_sample) begin
           stop_delay -= adc_send_samples_decimation;
         end
+        debug.display($sformatf("trigger_delay_q[%0d][%0d] = %0d", channel, i, trigger_delay_q[channel][i]), sim_util_pkg::DEBUG);
+        debug.display($sformatf("stop_delay = %0d", stop_delay), sim_util_pkg::DEBUG);
         // if stop_delays was set to zero and we're missing a sample, it'll be
         // the main sample
         if (stop_delay >= 0) begin
-          expected_locations.push_front(q_end - trigger_sample_count_q[channel][i]);
+          expected_locations.push_front(q_end - main_sample);
+        end else if (start_delay == 0) begin
+          expected_locations.push_front(q_end - main_sample);
+          //start_delay += adc_send_samples_decimation;
         end
         // delay is not in samples, it's in clock periods at maximum sample rate
         // pre-trigger samples
-        if (start_delays[channel] > 0) begin
+        if (start_delay > 0) begin
           for (int j = 1;
-                (j*adc_send_samples_decimation <= start_delays[channel])
-                && (j <= trigger_sample_count_q[channel][i]); j++) begin
-            expected_locations.push_front(q_end - trigger_sample_count_q[channel][i] + j);
+                (j*adc_send_samples_decimation <= start_delay)
+                && (j <= main_sample); j++) begin
+            expected_locations.push_front(q_end - main_sample + j);
           end
         end
         // post-trigger samples (might be missing one if trigger wasn't
@@ -312,8 +319,8 @@ task automatic check_results (
         if (stop_delay > 0) begin
           for (int j = 1;
                 (j*adc_send_samples_decimation <= stop_delay)
-                && (j <= q_end - trigger_sample_count_q[channel][i]); j++) begin
-            expected_locations.push_front(q_end - trigger_sample_count_q[channel][i] - j);
+                && (j <= q_end - main_sample); j++) begin
+            expected_locations.push_front(q_end - main_sample - j);
           end
         end
       end
@@ -366,7 +373,7 @@ task automatic check_results (
       index = expected_locations.size() - 1 - i;
       if ((expected_locations[i+1] - 1 > expected_locations[i]) || (i == expected_locations.size() - 1)) begin
         if (source >= rx_pkg::CHANNELS) begin
-          timestamp_q.push_front({trigger_time_q[channel].pop_back(), index});
+          timestamp_q.push_front({trigger_time_q[channel].pop_back() + digital_delays[channel], index});
         end else begin
           timestamp_q.push_front({
             time_init + (expected_locations[$]-expected_locations[i])*adc_send_samples_decimation,

@@ -118,6 +118,7 @@ always_ff @(posedge adc_clk) begin
       // assign each trigger to its respective analog trigger channel
       adc_trigger_source[channel] <= TRIGGER_SELECT_WIDTH'(channel);
     end
+    adc_trigger_is_digital <= '0;
   end else begin
     if (adc_trigger_select_sync.ok) begin
       adc_trigger_source <= adc_trigger_select_sync.data;
@@ -202,9 +203,8 @@ end
 
 // combine analog triggers and digital triggers
 // also apply delay to digital triggers
-logic [rx_pkg::CHANNELS+tx_pkg::CHANNELS-1:0] adc_start_triggers;
 logic [rx_pkg::CHANNELS+tx_pkg::CHANNELS-1:0] adc_stop_triggers;
-logic [tx_pkg::CHANNELS-1:0] adc_digital_trigger_in_d;
+logic [rx_pkg::CHANNELS-1:0] adc_digital_trigger_in_d;
 logic [MAX_DELAY_CYCLES+1-1:0][tx_pkg::CHANNELS-1:0] adc_digital_trigger_in_pipe;
 always_ff @(posedge adc_clk) begin
   if (adc_reset) begin
@@ -217,17 +217,21 @@ always_ff @(posedge adc_clk) begin
     end
   end
 end
+
 always_ff @(posedge adc_clk) begin
-  for (int channel = 0; channel < tx_pkg::CHANNELS; channel++) begin
-    if (adc_digital_delay[channel] == 0) begin
-      adc_digital_trigger_in_d[channel] <= adc_digital_trigger_in[channel];
+  for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
+    if (adc_trigger_is_digital[channel]) begin
+      if (adc_digital_delay[channel] == 0) begin
+        adc_digital_trigger_in_d[channel] <= adc_digital_trigger_in[adc_trigger_source[channel] - rx_pkg::CHANNELS];
+      end else begin
+        adc_digital_trigger_in_d[channel] <= adc_digital_trigger_in_pipe[adc_digital_delay[channel] - 1][adc_trigger_source[channel] - rx_pkg::CHANNELS];
+      end
     end else begin
-      adc_digital_trigger_in_d[channel] <= adc_digital_trigger_in_pipe[adc_digital_delay[channel] - 1][channel];
+      adc_digital_trigger_in_d[channel] <= 1'b0;
     end
   end
 end
 
-assign adc_start_triggers = {adc_digital_trigger_in_d, adc_data_any_above_high};
 assign adc_stop_triggers = {{tx_pkg::CHANNELS{1'b0}}, adc_data_all_below_low};
 logic [rx_pkg::CHANNELS-1:0] adc_fsm_start, adc_fsm_start_d, adc_fsm_stop, adc_fsm_stop_d;
 logic [2*MAX_DELAY_CYCLES-1:0][rx_pkg::CHANNELS-1:0] adc_fsm_stop_pipe;
@@ -238,7 +242,11 @@ always_ff @(posedge adc_clk) begin
   end else begin
     // mux triggers
     for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
-      adc_fsm_start[channel] <= adc_start_triggers[adc_trigger_source[channel]];
+      if (adc_trigger_is_digital[channel]) begin
+        adc_fsm_start[channel] <= adc_digital_trigger_in_d[channel];
+      end else begin
+        adc_fsm_start[channel] <= adc_data_any_above_high[adc_trigger_source[channel]];
+      end
       adc_fsm_stop[channel] <= adc_stop_triggers[adc_trigger_source[channel]];
     end
   end
@@ -331,6 +339,7 @@ always_ff @(posedge adc_clk) begin
     end
   end else begin
     for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
+      // problem if adc_total_delay == 0 and trigger is digital
       unique case (adc_states[channel])
         DISABLED: if (adc_fsm_start[channel]) adc_states[channel] <=
                     (|adc_total_delay[channel]) ? PRECAPTURE : CAPTURE;
@@ -346,6 +355,10 @@ always_ff @(posedge adc_clk) begin
             if (|adc_total_delay[channel]) begin
               if (adc_fsm_stop_d[channel]) adc_states[channel] <= DISABLED;
             end else begin
+              if (adc_trigger_is_digital[channel]) begin
+                // wait until data is valid
+                if (adc_valid_pipe[2][channel]) adc_states[channel] <= DISABLED;
+              end
               if (adc_fsm_stop[channel]) adc_states[channel] <= DISABLED;
             end
           end
