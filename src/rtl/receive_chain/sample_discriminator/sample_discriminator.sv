@@ -1,4 +1,4 @@
-// sample discriminator - Reed Foster
+// sample_discriminator.sv - Reed Foster
 // Starts saving samples when events of interest occur
 // Event can be specified by a digital trigger or analog trigger
 // Various event sources can be multiplexed to each capture channel
@@ -162,7 +162,9 @@ axis_config_reg_cdc #(
   .dest(adc_disable_discriminator_sync)
 );
 
+//////////////////////////////////
 // main logic
+//////////////////////////////////
 
 // track state of each channel
 // DISABLED: don't save samples
