@@ -1,39 +1,96 @@
 // sample_discriminator.sv - Reed Foster
-// Starts saving samples when events of interest occur
+// Filters samples to only pass samples surrounding events
 // Event can be specified by a digital trigger or analog trigger
 // Various event sources can be multiplexed to each capture channel
-// E.g. a digital trigger may be used across multiple capture channels,
-// or each capture channel could use its own analog trigger
+// E.g. a digital trigger may be used across multiple capture channels
+// simultaneously, or each capture channel could use its own analog trigger,
+// or some subset of channels could use the analog trigger of another channel
 //
-// Currently, the only supported trigger behavior is threshold-based
+// Currently, the only supported analog trigger behavior is threshold-based
 //
-// Once activated, a capture channel will save samples until either
-// a low trigger is tripped, or a stop delay timeout occurs
+// Once activated, a capture channel will assert the valid signal to allow
+// saving of samples of interest. The channel will remain active until a low
+// trigger is tripped, or a stop delay timeout occurs.
 //
 // An optional start delay can be used to create a delay between a trigger
-// event and when the capture channel goes active
+// event and when the capture channel goes active to allow capture of samples
+// prior to the trigger event.
+//
+// The digital triggers can also optionally be delayed by a digital trigger
+// delay, to assist with synchronization of cable delays and RFDC gearbox FIFO
+// latency.
+//
+// Start, stop, and digital trigger delays are all specified in clock cycles
+// at the ADC AXIS clock rate (512 MHz), so if the input data is discontinuous
+// (e.g. from a decimating filter output), then the number of samples captured
+// before/after the trigger will not be exactly equal to the trigger delays.
+// Although if the discontinuity is periodic, then the number of samples
+// captured is predictable. E.g. from a 2x decimating filter, the number of
+// samples captured will be half the delay time (plus or minus 1 sample if
+// a digital trigger is used, since the digital trigger need not be
+// synchronous with the input sample).
+//
+// Datastream interfaces
+// - adc_data_in: input stream (valid may be discontinuous)
+// - adc_data_out:
+//    - output, same as adc_data_in
+//    - valid is filtered to only select samples of interest.
+// - adc_timestamps_out:
+//    - output timestamps to allow for reconstruction of input signal
+//    - includes "absolute" time of arrival of first sample for event
+//    - also includes sample index, i.e. how many *saved* samples preceeded it
+//
+// Realtime I/O:
+// - adc_reset_state:
+//    - resets hysteresis tracking for threshold-based analog event generation
+//    - resets sample index counter to allow for a new capture to begin
+// - adc_digital_trigger_in:
+//    - digital triggers, one for each transmit channel
+//
+// Configuration registers:
+// - ps_thresholds:
+//    - {threshold_high, threshold_low} for each channel
+//    - when any sample in the channel's input stream exceeds threshold_high,
+//      trigger an event to start saving data (save start_delay samples prior
+//      to event)
+//    - while still saving data, as soon as all samples in the channel's input
+//      stream fall below threshold_low, stop saving data (save stop_delay
+//      samples after event)
+// - ps_delays:  
+//    - {digital_delay, stop_delay, start_delay} for each channel
+//    - $clog2(MAX_DELAY_CYCLES)-bit quantity
+// - ps_trigger_select:
+//    - {trigger_source} for each channel
+//    - $clog2(rx_pkg::CHANNELS+tx_pkg::CHANNELS)-bit quantity
+//    - 0 -> rx_pkg::CHANNELS-1 map to analog channels
+//    - rx_pkg::CHANNELS -> rx_pkg::CHANNELS + tx_pkg::CHANNELS map to digital
+//      channels
+// - ps_bypass_discriminator:
+//    - 1 bit per channel: 1 completely bypasses the discriminator and just
+//      sends all data through, 0 enables the discriminator
+//
 
 `timescale 1ns/1ps
 module sample_discriminator #(
   parameter int MAX_DELAY_CYCLES = 64 // capture up to 128 ns before event @ 512 MHz
 ) (
+  // ADC clock, reset (512 MHz)
   input logic adc_clk, adc_reset,
+  // data
   Realtime_Parallel_If.Slave adc_data_in,
   Realtime_Parallel_If.Master adc_data_out,
   Realtime_Parallel_If.Master adc_timestamps_out,
+  // realtime ports
   input logic adc_reset_state,
-
   input logic [tx_pkg::CHANNELS-1:0] adc_digital_trigger_in,
 
+  // Configuration (PS) clock, reset (100 MHz)
   input logic ps_clk, ps_reset,
-  // {threshold_high, threshold_low} for each channel
-  Axis_If.Slave ps_thresholds,
-  // {digital delay, stop delay, start delay} for each channel ($clog2(MAX_DELAY_CYCLES)-bit quantities)
-  Axis_If.Slave ps_delays,
-  // {trigger_source} for each channel, $clog2(rx_pkg::CHANNELS+tx_pkg::CHANNELS)-bit quantity (0 is first analog channel, rx_pkg::CHANNELS is first digital channel, etc.)
-  Axis_If.Slave ps_trigger_select,
-  // 1b for each channel, bypasses discriminator if high
-  Axis_If.Slave ps_disable_discriminator
+  // Configuration
+  Axis_If.Slave ps_thresholds, // per-channel analog thresholds {threshold_high, threshold_low}
+  Axis_If.Slave ps_delays, // per-channel delays {digital delay, stop delay, start delay}
+  Axis_If.Slave ps_trigger_select, // per-channel trigger source {trigger_source}
+  Axis_If.Slave ps_bypass_discriminator // per-channel discriminator bypass
 );
 
 //////////////////////////////////
@@ -140,30 +197,30 @@ axis_config_reg_cdc #(
 );
 
 logic [rx_pkg::CHANNELS-1:0] adc_active_mask;
-Axis_If #(.DWIDTH(rx_pkg::CHANNELS)) adc_disable_discriminator_sync ();
-assign adc_disable_discriminator_sync.ready = 1'b1; // always accept new config
+Axis_If #(.DWIDTH(rx_pkg::CHANNELS)) adc_bypass_discriminator_sync ();
+assign adc_bypass_discriminator_sync.ready = 1'b1; // always accept new config
 always_ff @(posedge adc_clk) begin
   if (adc_reset) begin
     adc_active_mask <= '0;
   end else begin
-    if (adc_disable_discriminator_sync.ok) begin
-      adc_active_mask <= adc_disable_discriminator_sync.data;
+    if (adc_bypass_discriminator_sync.ok) begin
+      adc_active_mask <= adc_bypass_discriminator_sync.data;
     end
   end
 end
 axis_config_reg_cdc #(
   .DWIDTH(rx_pkg::CHANNELS)
-) disable_discriminator_cdc_i (
+) bypass_discriminator_cdc_i (
   .src_clk(ps_clk),
   .src_reset(ps_reset),
-  .src(ps_disable_discriminator),
+  .src(ps_bypass_discriminator),
   .dest_clk(adc_clk),
   .dest_reset(adc_reset),
-  .dest(adc_disable_discriminator_sync)
+  .dest(adc_bypass_discriminator_sync)
 );
 
 //////////////////////////////////
-// main logic
+// Main logic
 //////////////////////////////////
 
 // track state of each channel

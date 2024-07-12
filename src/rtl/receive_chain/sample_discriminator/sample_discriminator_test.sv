@@ -34,7 +34,7 @@ typedef logic [TIMER_BITS-1:0] delay_t;
 Axis_If #(.DWIDTH(2*rx_pkg::CHANNELS*rx_pkg::SAMPLE_WIDTH)) ps_thresholds ();
 Axis_If #(.DWIDTH(3*rx_pkg::CHANNELS*TIMER_BITS)) ps_delays ();
 Axis_If #(.DWIDTH(rx_pkg::CHANNELS*$clog2(rx_pkg::CHANNELS+tx_pkg::CHANNELS))) ps_trigger_select ();
-Axis_If #(.DWIDTH(rx_pkg::CHANNELS)) ps_disable_discriminator ();
+Axis_If #(.DWIDTH(rx_pkg::CHANNELS)) ps_bypass_discriminator ();
 
 sample_discriminator_tb #(
   .MAX_DELAY_CYCLES(MAX_DELAY_CYCLES)
@@ -49,7 +49,7 @@ sample_discriminator_tb #(
   .ps_thresholds,
   .ps_delays,
   .ps_trigger_select,
-  .ps_disable_discriminator,
+  .ps_bypass_discriminator,
   .trigger_sources
 );
 
@@ -68,7 +68,7 @@ sample_discriminator #(
   .ps_thresholds,
   .ps_delays,
   .ps_trigger_select,
-  .ps_disable_discriminator
+  .ps_bypass_discriminator
 );
 
 logic [rx_pkg::CHANNELS-1:0][rx_pkg::SAMPLE_WIDTH-1:0] low_thresholds, high_thresholds;
@@ -82,14 +82,21 @@ logic [rx_pkg::CHANNELS-1:0] bypassed_channel_mask;
 
 int initial_q_length;
 
+enum {NO_BYPASS, ALL_BYPASS, MIX_BYPASS} bypass_mode;
+enum {ANALOG_ONLY, DIGITAL_ONLY, MIX_SOURCE} source_mode;
+enum {ZERO_DELAY, SHORT_DELAY, FULL_DELAY} delay_mode;
+
 initial begin
   debug.display("### TESTING SAMPLE DISCRIMINATOR ###", sim_util_pkg::DEFAULT);
 
-  // TODO enum
-  for (int bypass_mode = 0; bypass_mode < 3; bypass_mode++) begin
-    for (int source_mode = 0; source_mode < ((bypass_mode == 1) ? 1 : 3); source_mode++) begin
+  bypass_mode = bypass_mode.first;
+  source_mode = source_mode.first;
+  delay_mode = delay_mode.first;
+
+  do begin: bypass
+    do begin: source
       for (int decimation = 1; decimation < 8; decimation++) begin
-        for (int delay_mode = 0; delay_mode < ((bypass_mode == 1) ? 1 : 3); delay_mode++) begin
+        do begin: delay
           // mid-test reset
           tb_i.init();
           ps_reset <= 1'b1;
@@ -97,7 +104,7 @@ initial begin
           adc_reset_state <= 1'b0;
           tb_i.adc_send_samples_decimation <= decimation;
 
-          debug.display($sformatf("testing with bypass_mode = %0d, source_mode = %0d, decimation = %0d, delay_mode = %0d", bypass_mode, source_mode, decimation, delay_mode), sim_util_pkg::VERBOSE);
+          debug.display($sformatf("testing with bypass_mode = %0p, source_mode = %0p, decimation = %0d, delay_mode = %0p", bypass_mode, source_mode, decimation, delay_mode), sim_util_pkg::VERBOSE);
 
           // deassert reset
           repeat (10) @(posedge ps_clk);
@@ -117,9 +124,9 @@ initial begin
           // set which channels are bypassed
           for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
             case (bypass_mode)
-              0: bypassed_channel_mask[channel] = 1'b0;
-              1: bypassed_channel_mask[channel] = 1'b1;
-              2: bypassed_channel_mask[channel] = $urandom_range(0, 1);
+              NO_BYPASS: bypassed_channel_mask[channel] = 1'b0;
+              ALL_BYPASS: bypassed_channel_mask[channel] = 1'b1;
+              MIX_BYPASS: bypassed_channel_mask[channel] = $urandom_range(0, 1);
             endcase
           end
           tb_i.set_bypassed_channels(debug, bypassed_channel_mask);
@@ -139,9 +146,9 @@ initial begin
           // set delays
           for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
             case (delay_mode)
-              0: max_delay = 0;
-              1: max_delay = 4;
-              2: max_delay = MAX_DELAY_CYCLES/decimation - 1;
+              ZERO_DELAY: max_delay = 0;
+              SHORT_DELAY: max_delay = 4;
+              FULL_DELAY: max_delay = MAX_DELAY_CYCLES/decimation - 1;
             endcase
             if (max_delay >= MAX_DELAY_CYCLES/decimation) begin
               max_delay = MAX_DELAY_CYCLES/decimation - 1;
@@ -168,9 +175,9 @@ initial begin
           // set trigger sources
           for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
             case (source_mode)
-              0: trigger_sources[channel] = $urandom_range(0, rx_pkg::CHANNELS - 1);
-              1: trigger_sources[channel] = $urandom_range(rx_pkg::CHANNELS, rx_pkg::CHANNELS + tx_pkg::CHANNELS - 1);
-              2: trigger_sources[channel] = $urandom_range(0, rx_pkg::CHANNELS + tx_pkg::CHANNELS - 1);
+              ANALOG_ONLY: trigger_sources[channel] = $urandom_range(0, rx_pkg::CHANNELS - 1);
+              DIGITAL_ONLY: trigger_sources[channel] = $urandom_range(rx_pkg::CHANNELS, rx_pkg::CHANNELS + tx_pkg::CHANNELS - 1);
+              MIX_SOURCE: trigger_sources[channel] = $urandom_range(0, rx_pkg::CHANNELS + tx_pkg::CHANNELS - 1);
             endcase
           end
           tb_i.set_trigger_sources(debug, trigger_sources);
@@ -221,7 +228,7 @@ initial begin
             max_samp = $urandom_range(int'(rx_pkg::MIN_SAMP) + 1, int'(rx_pkg::MAX_SAMP));
             min_samp = $urandom_range(int'(rx_pkg::MIN_SAMP), int'(max_samp) - 1);
             tb_i.set_input_range(.min(min_samp), .max(max_samp));
-            if (source_mode > 0) begin
+            if (source_mode != ANALOG_ONLY) begin
               repeat ($urandom_range(0, 5*decimation)) @(posedge adc_clk);
               tb_i.send_digital_trigger($urandom_range(0, {tx_pkg::CHANNELS{1'b1}}));
               repeat (2+2*MAX_DELAY_CYCLES) @(posedge adc_clk);
@@ -279,10 +286,13 @@ initial begin
           );
 
           tb_i.clear_queues();
-        end
+          delay_mode = delay_mode.next;
+        end while (delay_mode != delay_mode.first);
       end
-    end
-  end
+      source_mode = source_mode.next;
+    end while (source_mode != source_mode.first);
+    bypass_mode = bypass_mode.next;
+  end while (bypass_mode != bypass_mode.first);
 
   debug.finish();
 end

@@ -19,7 +19,7 @@ module sample_discriminator_tb #(
   Axis_If.Master ps_thresholds,
   Axis_If.Master ps_delays,
   Axis_If.Master ps_trigger_select,
-  Axis_If.Master ps_disable_discriminator,
+  Axis_If.Master ps_bypass_discriminator,
 
   input logic [rx_pkg::CHANNELS-1:0][$clog2(rx_pkg::CHANNELS+tx_pkg::CHANNELS)-1:0] trigger_sources
 );
@@ -63,9 +63,9 @@ axis_driver #(
 
 axis_driver #(
   .DWIDTH(rx_pkg::CHANNELS)
-) ps_disable_discriminator_tx_i (
+) ps_bypass_discriminator_tx_i (
   .clk(ps_clk),
-  .intf(ps_disable_discriminator)
+  .intf(ps_bypass_discriminator)
 );
 
 logic adc_send_samples, adc_driver_enabled;
@@ -135,7 +135,7 @@ task automatic init ();
   ps_thresholds_tx_i.init();
   ps_delays_tx_i.init();
   ps_trigger_select_tx_i.init();
-  ps_disable_discriminator_tx_i.init();
+  ps_bypass_discriminator_tx_i.init();
   disable_send();
   adc_digital_trigger_in <= '0;
   adc_send_samples_decimation <= 1;
@@ -224,10 +224,10 @@ endtask
 
 task automatic set_bypassed_channels (
   inout sim_util_pkg::debug debug,
-  input logic [rx_pkg::CHANNELS-1:0] disabled_mask
+  input logic [rx_pkg::CHANNELS-1:0] bypassed_mask
 );
   logic success;
-  ps_disable_discriminator_tx_i.send_sample_with_timeout(10, disabled_mask, success);
+  ps_bypass_discriminator_tx_i.send_sample_with_timeout(10, bypassed_mask, success);
   if (~success) begin
     debug.error("failed to set disabled channels");
   end
