@@ -194,8 +194,8 @@ initial begin
             // wait a few cycles before doing readout
             repeat (20) @(posedge ps_clk);
             // first, check that write_depth only had a single transfer (for
-            // trigger_mode != 2)
-            // if trigger_mode == 2, then we don't expect any packets
+            // trigger_mode != HW_TRIGGER_NO_ARM)
+            // if trigger_mode == HW_TRIGGER_NO_ARM, then we don't expect any packets
             tb_i.check_write_depth_num_packets(debug, (trigger_mode == HW_TRIGGER_NO_ARM) ? 0 : 1);
             if (trigger_mode != HW_TRIGGER_NO_ARM) begin
               // if trigger_mode == 2, then we didn't actually save any data, so don't attempt to read out
