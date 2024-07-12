@@ -43,8 +43,8 @@
 
 `timescale 1ns/1ps
 module buffer #(
-  parameter int BUFFER_DEPTH = 256,
-  parameter int READ_LATENCY = 4
+  parameter int BUFFER_DEPTH,
+  parameter int READ_LATENCY // default 4 to permit UltraRAM inference
 ) (
   // ADC clock, reset (512 MHz)
   input wire adc_clk, adc_reset,
@@ -59,7 +59,7 @@ module buffer #(
   input wire ps_clk, ps_reset,
   Axis_If.Master ps_readout_data,
   // Configuration
-  Axis_If.Slave ps_capture_arm_start_stop, // controls capture {arm, sw_start, sw_stop}
+  Axis_If.Slave ps_capture_arm, // controls capture {arm, sw_start, sw_stop}
   Axis_If.Slave ps_capture_banking_mode, // controls capture (active_channels = 1 << banking_mode)
   Axis_If.Slave ps_capture_sw_reset, // ps clock domain; reset capture logic
   Axis_If.Slave ps_readout_sw_reset, // ps clock domain; reset readout logic
@@ -136,34 +136,27 @@ axis_config_reg_cdc #(
 ////////////////////////
 // arm, start, stop
 ////////////////////////
-logic adc_capture_arm, adc_capture_sw_start, adc_capture_sw_stop;
-Axis_If #(.DWIDTH(3)) adc_capture_arm_start_stop_sync ();
-assign adc_capture_arm_start_stop_sync.ready = (adc_capture_state != HOLD_SAMPLES);
-always_comb begin
-  if (adc_capture_arm_start_stop_sync.ok) begin
-    {adc_capture_arm, adc_capture_sw_start, adc_capture_sw_stop} = adc_capture_arm_start_stop_sync.data;
-  end else begin
-    {adc_capture_arm, adc_capture_sw_start, adc_capture_sw_stop} = '0;
-  end
-end
+logic adc_capture_arm;
+Axis_If #(.DWIDTH(1)) adc_capture_arm_sync ();
+assign adc_capture_arm_sync.ready = (adc_capture_state != HOLD_SAMPLES);
+assign adc_capture_arm = adc_capture_arm_sync.ok ? adc_capture_arm_sync.data : 1'b0;
 // CDC for capture arm/start/stop
 axis_config_reg_cdc #(
-  .DWIDTH(3)
-) capture_arm_start_stop_cdc_i (
+  .DWIDTH(1)
+) capture_arm_cdc_i (
   .src_clk(ps_clk),
   .src_reset(ps_reset),
-  .src(ps_capture_arm_start_stop),
+  .src(ps_capture_arm),
   .dest_clk(adc_clk),
   .dest_reset(adc_reset),
-  .dest(adc_capture_arm_start_stop_sync)
+  .dest(adc_capture_arm_sync)
 );
 // gate start/stop signals from hw_start/hw_stop and sw_start/sw_start based on the current capture state
 // arm is gated by the adc_capture_state FSM: adc_capture_state can only transition to
 // the TRIGGER_WAIT state from the CAPTURE_IDLE state when arm is applied
 logic adc_capture_start_pls, adc_capture_stop_pls;
-assign adc_capture_start_pls = ((adc_capture_state == TRIGGER_WAIT) & (adc_capture_hw_start | adc_capture_sw_start))
-                            | ((adc_capture_state == CAPTURE_IDLE) & adc_capture_sw_start);
-assign adc_capture_stop_pls = (adc_capture_hw_stop | adc_capture_sw_stop) & (adc_capture_state == SAVE_SAMPLES);
+assign adc_capture_start_pls = (adc_capture_state == TRIGGER_WAIT) & adc_capture_hw_start;
+assign adc_capture_stop_pls = adc_capture_hw_stop & (adc_capture_state == SAVE_SAMPLES);
 // register start so that we can detect rising edge
 
 // enable sample capture on rising edge of start, disable on rising edge of
@@ -390,11 +383,6 @@ always_ff @(posedge adc_clk) begin
           // if we get a sw_start signal, go to SAVE_SAMPLES
           if (adc_capture_arm) begin
             adc_capture_state <= TRIGGER_WAIT;
-          end else if (adc_capture_start_pls) begin
-            // for capture_state == CAPTURE_IDLE, capture_start can
-            // only be asserted from sw_start, since hw_start is
-            // gated by capture_state == TRIGGER_WAIT
-            adc_capture_state <= SAVE_SAMPLES;
           end
         end
         TRIGGER_WAIT:

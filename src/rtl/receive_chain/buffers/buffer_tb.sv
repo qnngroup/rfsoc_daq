@@ -12,7 +12,7 @@ module buffer_tb #(
   Realtime_Parallel_If.Master adc_data,
 
   input logic ps_clk,
-  Axis_If.Master ps_capture_arm_start_stop,
+  Axis_If.Master ps_capture_arm,
   Axis_If.Master ps_capture_banking_mode,
   Axis_If.Master ps_capture_sw_reset,
   Axis_If.Master ps_readout_sw_reset,
@@ -22,10 +22,10 @@ module buffer_tb #(
 );
 
 axis_driver #(
-  .DWIDTH(3)
-) ps_capture_arm_start_stop_tx_i (
+  .DWIDTH(1)
+) ps_capture_arm_tx_i (
   .clk(ps_clk),
-  .intf(ps_capture_arm_start_stop)
+  .intf(ps_capture_arm)
 );
 
 axis_driver #(
@@ -90,7 +90,7 @@ realtime_parallel_driver #(
 /////////////////////////////////////////////////////////////////
 
 task automatic init();
-  ps_capture_arm_start_stop_tx_i.init();
+  ps_capture_arm_tx_i.init();
   ps_capture_banking_mode_tx_i.init();
   ps_capture_sw_reset_tx_i.init();
   ps_readout_sw_reset_tx_i.init();
@@ -109,23 +109,15 @@ task automatic clear_received_data();
   ps_readout_data_rx_i.clear_queues();
 endtask
 
-task automatic capture_arm_start_stop(
+task automatic capture_arm(
   inout sim_util_pkg::debug debug,
-  input logic [2:0] bits
+  input logic arm
 );
   logic success;
-  case (bits)
-    1: debug.display("sending stop to capture", sim_util_pkg::DEBUG);
-    2: debug.display("sending sw_start to capture", sim_util_pkg::DEBUG);
-    4: debug.display("sending arm to capture", sim_util_pkg::DEBUG);
-    default: begin
-      debug.error($sformatf("invalid arm_start_stop value %0d", bits));
-      return;
-    end
-  endcase
-  ps_capture_arm_start_stop_tx_i.send_sample_with_timeout(10, bits, success);
+  debug.display("sending arm to capture", sim_util_pkg::DEBUG);
+  ps_capture_arm_tx_i.send_sample_with_timeout(10, arm, success);
   if (~success) begin
-    debug.error("failed to write to arm/start/stop register");
+    debug.error("failed to write to arm register");
   end
 endtask
 
