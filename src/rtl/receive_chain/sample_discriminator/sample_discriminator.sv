@@ -65,7 +65,7 @@
 //    - 0 -> rx_pkg::CHANNELS-1 map to analog channels
 //    - rx_pkg::CHANNELS -> rx_pkg::CHANNELS + tx_pkg::CHANNELS map to digital
 //      channels
-// - ps_bypass_discriminator:
+// - ps_bypass:
 //    - 1 bit per channel: 1 completely bypasses the discriminator and just
 //      sends all data through, 0 enables the discriminator
 //
@@ -76,11 +76,11 @@ module sample_discriminator #(
 ) (
   // ADC clock, reset (512 MHz)
   input logic adc_clk, adc_reset,
-  // data
+  // Data
   Realtime_Parallel_If.Slave adc_data_in,
   Realtime_Parallel_If.Master adc_data_out,
   Realtime_Parallel_If.Master adc_timestamps_out,
-  // realtime ports
+  // Realtime ports
   input logic adc_reset_state,
   input logic [tx_pkg::CHANNELS-1:0] adc_digital_trigger_in,
 
@@ -90,7 +90,7 @@ module sample_discriminator #(
   Axis_If.Slave ps_thresholds, // per-channel analog thresholds {threshold_high, threshold_low}
   Axis_If.Slave ps_delays, // per-channel delays {digital delay, stop delay, start delay}
   Axis_If.Slave ps_trigger_select, // per-channel trigger source {trigger_source}
-  Axis_If.Slave ps_bypass_discriminator // per-channel discriminator bypass
+  Axis_If.Slave ps_bypass // per-channel discriminator bypass
 );
 
 //////////////////////////////////
@@ -197,26 +197,26 @@ axis_config_reg_cdc #(
 );
 
 logic [rx_pkg::CHANNELS-1:0] adc_active_mask;
-Axis_If #(.DWIDTH(rx_pkg::CHANNELS)) adc_bypass_discriminator_sync ();
-assign adc_bypass_discriminator_sync.ready = 1'b1; // always accept new config
+Axis_If #(.DWIDTH(rx_pkg::CHANNELS)) adc_bypass_sync ();
+assign adc_bypass_sync.ready = 1'b1; // always accept new config
 always_ff @(posedge adc_clk) begin
   if (adc_reset) begin
     adc_active_mask <= '0;
   end else begin
-    if (adc_bypass_discriminator_sync.ok) begin
-      adc_active_mask <= adc_bypass_discriminator_sync.data;
+    if (adc_bypass_sync.ok) begin
+      adc_active_mask <= adc_bypass_sync.data;
     end
   end
 end
 axis_config_reg_cdc #(
   .DWIDTH(rx_pkg::CHANNELS)
-) bypass_discriminator_cdc_i (
+) bypass_cdc_i (
   .src_clk(ps_clk),
   .src_reset(ps_reset),
-  .src(ps_bypass_discriminator),
+  .src(ps_bypass),
   .dest_clk(adc_clk),
   .dest_reset(adc_reset),
-  .dest(adc_bypass_discriminator_sync)
+  .dest(adc_bypass_sync)
 );
 
 //////////////////////////////////

@@ -34,7 +34,7 @@ typedef logic [TIMER_BITS-1:0] delay_t;
 Axis_If #(.DWIDTH(2*rx_pkg::CHANNELS*rx_pkg::SAMPLE_WIDTH)) ps_thresholds ();
 Axis_If #(.DWIDTH(3*rx_pkg::CHANNELS*TIMER_BITS)) ps_delays ();
 Axis_If #(.DWIDTH(rx_pkg::CHANNELS*$clog2(rx_pkg::CHANNELS+tx_pkg::CHANNELS))) ps_trigger_select ();
-Axis_If #(.DWIDTH(rx_pkg::CHANNELS)) ps_bypass_discriminator ();
+Axis_If #(.DWIDTH(rx_pkg::CHANNELS)) ps_bypass ();
 
 sample_discriminator_tb #(
   .MAX_DELAY_CYCLES(MAX_DELAY_CYCLES)
@@ -49,7 +49,7 @@ sample_discriminator_tb #(
   .ps_thresholds,
   .ps_delays,
   .ps_trigger_select,
-  .ps_bypass_discriminator,
+  .ps_bypass,
   .trigger_sources
 );
 
@@ -68,7 +68,7 @@ sample_discriminator #(
   .ps_thresholds,
   .ps_delays,
   .ps_trigger_select,
-  .ps_bypass_discriminator
+  .ps_bypass
 );
 
 logic [rx_pkg::CHANNELS-1:0][rx_pkg::SAMPLE_WIDTH-1:0] low_thresholds, high_thresholds;
