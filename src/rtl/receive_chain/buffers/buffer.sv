@@ -17,10 +17,8 @@
 // - adc_capture_full: output, goes high when buffer fills up
 //
 // Configuration registers:
-// - arm/start/stop:
+// - arm:
 //    - arm the buffer for hardware-triggered capture
-//    - start capture (software-triggered capture)
-//    - stop capture
 // - banking_mode:
 //    - select how many channels are active
 //    - enables deeper storage of sample data when fewer channels are active
@@ -28,6 +26,9 @@
 // - capture/readout sw_reset:
 //    - reset state machine and counters for capture and readout logic
 //    - capture sw_reset can be asserted at any time
+//        - capture reset will require re-arming of the buffer (performed
+//          automatically by writing to the ps_capture_start register in the
+//          segmented_buffer module)
 //    - readout sw_reset can only be asserted when the readout hardware is in
 //      the DMA_ACTIVE state (this allows for re-trying failed DMA transfers)
 //      and only resets to DMA_READY so that capture cannot be triggered again
