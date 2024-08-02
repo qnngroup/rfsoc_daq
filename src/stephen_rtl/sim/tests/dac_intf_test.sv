@@ -1,34 +1,30 @@
 `default_nettype none
 `timescale 1ns / 1ps
-// import mem_layout_pkg::*;
-`include "mem_layout.svh"
 
-module dac_intf_test #(parameter IS_INTEGRATED = 0)();
+module dac_intf_test #(parameter IS_INTEGRATED = 0, parameter VERBOSE=sim_util_pkg::DEBUG)();
 	localparam TIMEOUT = 1500;
 	localparam TEST_NUM = 10;
 	localparam int PS_CLK_RATE_MHZ = 150;
 	localparam int DAC_CLK_RATE_MHZ = 384;
 	localparam MAN_SEED = 0;
-	localparam DATA_WIDTH = `WD_DATA_WIDTH;
-	localparam BATCH_SIZE = `BATCH_WIDTH/DATA_WIDTH; 
 
-	sim_util_pkg::debug debug = new(sim_util_pkg::DEBUG,TEST_NUM,"DAC_INTERFACE",IS_INTEGRATED); 
+	sim_util_pkg::debug debug = new(VERBOSE,TEST_NUM,"DAC_INTERFACE",IS_INTEGRATED); 
 
 	logic ps_clk, ps_rst, dac_clk, dac_rst; 
 	logic halt, dac0_rdy,valid_dac_batch; 
-	logic[$clog2(DATA_WIDTH)-1:0] scale_factor_in;
-	logic[$clog2(`MAX_DAC_BURST_SIZE):0] dac_bs_in;
-	logic[`BATCH_WIDTH-1:0] dac_batch; 
+	logic[$clog2(axi_params_pkg::DATAW)-1:0] scale_factor_in;
+	logic[$clog2(daq_params_pkg::MAX_DAC_BURST_SIZE):0] dac_bs_in;
+	logic[(daq_params_pkg::BATCH_WIDTH)-1:0] dac_batch; 
 	
-	logic[`MEM_SIZE-1:0] fresh_bits; 
-	logic[`MEM_SIZE-1:0][DATA_WIDTH-1:0] read_resps; 
+	logic[(mem_layout_pkg::MEM_SIZE)-1:0] fresh_bits; 
+	logic[(mem_layout_pkg::MEM_SIZE)-1:0][(axi_params_pkg::DATAW)-1:0] read_resps; 
 	int total_errors = 0;
 	int curr_err,test_num, seed, halts_seen;
 	int intLi [$];
 	bit done_sending;
-	Axis_IF #(`DMA_DATA_WIDTH) pwl_dma_if();
+	Axis_IF #(daq_params_pkg::DMA_DATA_WIDTH) pwl_dma_if();
 
-	dac_intf_tb #(.MEM_SIZE(`MEM_SIZE), .DATA_WIDTH(DATA_WIDTH), .BATCH_SIZE(BATCH_SIZE), .DMA_DATA_WIDTH(`DMA_DATA_WIDTH), .MAX_DAC_BURST_SIZE(`MAX_DAC_BURST_SIZE))
+	dac_intf_tb #(.MEM_SIZE(mem_layout_pkg::MEM_SIZE), .DATA_WIDTH(axi_params_pkg::DATAW), .BATCH_SIZE(daq_params_pkg::BATCH_SIZE), .DMA_DATA_WIDTH(daq_params_pkg::DMA_DATA_WIDTH), .MAX_DAC_BURST_SIZE(daq_params_pkg::MAX_DAC_BURST_SIZE))
 	tb_i(.ps_clk(ps_clk), .ps_rst(ps_rst),
 	     .dac_clk(dac_clk), .dac_rst(dac_rst),
 	     .dac_batch(dac_batch), .valid_dac_batch(valid_dac_batch),
@@ -39,7 +35,7 @@ module dac_intf_test #(parameter IS_INTEGRATED = 0)();
 	     .halt(halt),
 	     .dma(pwl_dma_if));
 
-	DAC_Interface
+	DAC_Interface #(.DATAW(axi_params_pkg::DATAW), .SAMPLEW(daq_params_pkg::SAMPLE_WIDTH), .BS_WIDTH(daq_params_pkg::BS_WIDTH), .BATCH_WIDTH(daq_params_pkg::BATCH_WIDTH), .BATCH_SIZE(daq_params_pkg::BATCH_SIZE))
 	dut_i(.ps_clk(ps_clk), .ps_rst(ps_rst),
 	      .dac_clk(dac_clk), .dac_rst(dac_rst),
 	      .fresh_bits(fresh_bits), .read_resps(read_resps),
@@ -77,7 +73,7 @@ module dac_intf_test #(parameter IS_INTEGRATED = 0)();
             seed = MAN_SEED;
             debug.displayc($sformatf("Using manually selected seed value %0d",seed),.msg_color(sim_util_pkg::BLUE),.msg_verbosity(sim_util_pkg::VERBOSE));
         end else begin
-            seed = generate_rand_seed();
+            seed = sim_util_pkg::generate_rand_seed();
             debug.displayc($sformatf("Using random seed value %0d",seed),.msg_color(sim_util_pkg::BLUE),.msg_verbosity(sim_util_pkg::VERBOSE));            
         end
         $srandom(seed);
@@ -90,6 +86,7 @@ module dac_intf_test #(parameter IS_INTEGRATED = 0)();
         curr_err = debug.get_error_count();
        	tb_i.send_rand_samples(debug); 
        	debug.check_test(curr_err == debug.get_error_count(), .has_parts(1));
+       	reset_errors();
 
         // TEST 2
         debug.displayc($sformatf("%0d: Halt, check for valid drop. Then count 30 halt signal transfers",debug.test_num), .msg_verbosity(sim_util_pkg::VERBOSE));
@@ -117,6 +114,7 @@ module dac_intf_test #(parameter IS_INTEGRATED = 0)();
 		    end
 		join 		
         debug.check_test(halts_seen == 30, .has_parts(1), .fail_msg($sformatf("Expected 30 halts, dac saw %0d",halts_seen)));
+        reset_errors();
 
         // TEST 3
         debug.displayc($sformatf("%0d: Run triangle wave, and check outputs (halt in middle)",debug.test_num), .msg_verbosity(sim_util_pkg::VERBOSE));
@@ -191,4 +189,3 @@ module dac_intf_test #(parameter IS_INTEGRATED = 0)();
 endmodule 
 
 `default_nettype wire
-

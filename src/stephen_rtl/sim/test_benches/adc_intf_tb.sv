@@ -1,8 +1,5 @@
 `default_nettype none
 `timescale 1ns / 1ps
-// import mem_layout_pkg::*;
-`include "mem_layout.svh"
-// import mem_layout_pkg::flash_signal;
 
 module adc_intf_tb #(parameter MEM_SIZE, parameter DATA_WIDTH)
 					(input wire clk, adc_rdy,
@@ -21,7 +18,7 @@ module adc_intf_tb #(parameter MEM_SIZE, parameter DATA_WIDTH)
 		{sdc.ready, cmc.ready, buffc.ready} <= 0;
 		{bufft.valid, bufft.data, bufft.last} <= 0; 
 		{fresh_bits,read_resps} <= 0;
-		`flash_signal(rst,clk) 
+		sim_util_pkg::flash_signal(rst,clk2);
 	endtask
 
 	task automatic populate_wd_list(input int size);

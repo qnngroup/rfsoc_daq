@@ -1,11 +1,13 @@
 `timescale 1ns / 1ps
 `default_nettype none
-import mem_layout_pkg::*;
 
+import mem_layout_pkg::MEM_SIZE;
+import mem_layout_pkg::MAPPED_ID_CEILING;
+import axi_params_pkg::WD_DATA_WIDTH;
 module sys(input wire ps_clk,ps_rst,dac_clk,dac_rst,
            //DAC Inputs/Outputs
            input wire dac0_rdy,
-           output logic[`BATCH_SAMPLES-1:0][`SAMPLE_WIDTH-1:0] dac_batch, 
+           output logic[(daq_params_pkg::BATCH_SIZE)-1:0][(daq_params_pkg::SAMPLE_WIDTH)-1:0] dac_batch, 
            output logic valid_dac_batch, 
            output logic pl_rstn, 
            //PS Inputs/Outputs 
@@ -21,12 +23,14 @@ module sys(input wire ps_clk,ps_rst,dac_clk,dac_rst,
            Axis_IF cmc_if,     //Channel Mux Config axi-stream
            Axis_IF sdc_if);    //Sample Discriminator Config axi-stream
 
-    logic [`MEM_SIZE-1:0] fresh_bits,rtl_read_reqs,rtl_write_reqs, rtl_rdy;
-    logic[`MEM_SIZE-1:0][`WD_DATA_WIDTH-1:0] rtl_wd_in, rtl_rd_out;
-    logic[$clog2(`MAX_DAC_BURST_SIZE):0] dac_burst_size; 
+    localparam BS_WIDTH = $clog2(daq_params_pkg::MAX_DAC_BURST_SIZE); 
+
+    logic [MEM_SIZE-1:0] fresh_bits,rtl_read_reqs,rtl_write_reqs, rtl_rdy;
+    logic[MEM_SIZE-1:0][WD_DATA_WIDTH-1:0] rtl_wd_in, rtl_rd_out;
+    logic[BS_WIDTH-1:0] dac_burst_size; 
     logic rst_cmd = 1;
     logic rst,hlt_cmd, bufft_valid_clear;
-    logic[$clog2(`SAMPLE_WIDTH):0] scale_factor; 
+    logic[$clog2(daq_params_pkg::SAMPLE_WIDTH):0] scale_factor; 
 
     enum logic[1:0] {IDLE_R, RESP_WAIT, RESET} rstState; 
     enum logic {IDLE_DB, CHANGE_BURST_SIZE} dacBurstState;
@@ -39,44 +43,44 @@ module sys(input wire ps_clk,ps_rst,dac_clk,dac_rst,
 
     // Maps which parts of the system are responssible for writing to which parts of the memory map
     always_comb begin
-        for (int i=0; i<`MAPPED_ID_CEILING; i++) begin
+        for (int i=0; i< MAPPED_ID_CEILING; i++) begin
             case(i)
-                `RST_ID:            rtl_rdy[i] = rstState == IDLE_R; 
-                `DAC_HLT_ID:        rtl_rdy[i] = hltState == IDLE_H; 
-                `DAC_BURST_SIZE_ID: rtl_rdy[i] = dacBurstState == IDLE_DB; 
-                `SCALE_DAC_OUT_ID:  rtl_rdy[i] = scaleParamState == IDLE_S; 
-                `TRIG_WAVE_ID:      rtl_rdy[i] = dac_intf.state_rdy;
-                `RUN_PWL_ID:        rtl_rdy[i] = dac_intf.state_rdy;
-                `BUFF_CONFIG_ID:    rtl_rdy[i] = adc_intf.state_rdy; 
+                mem_layout_pkg::RST_ID:            rtl_rdy[i] = rstState == IDLE_R; 
+                mem_layout_pkg::DAC_HLT_ID:        rtl_rdy[i] = hltState == IDLE_H; 
+                mem_layout_pkg::DAC_BURST_SIZE_ID: rtl_rdy[i] = dacBurstState == IDLE_DB; 
+                mem_layout_pkg::SCALE_DAC_OUT_ID:  rtl_rdy[i] = scaleParamState == IDLE_S; 
+                mem_layout_pkg::TRIG_WAVE_ID:      rtl_rdy[i] = dac_intf.state_rdy;
+                mem_layout_pkg::RUN_PWL_ID:        rtl_rdy[i] = dac_intf.state_rdy;
+                mem_layout_pkg::BUFF_CONFIG_ID:    rtl_rdy[i] = adc_intf.state_rdy; 
                 default: begin
-                    if (i inside {[`PS_SEED_BASE_ID:`PS_SEED_VALID_ID]}) rtl_rdy[i] = dac_intf.state_rdy;
-                    else if (i inside {[`CHAN_MUX_BASE_ID:`SDC_VALID_ID]}) rtl_rdy[i] = adc_intf.state_rdy; 
+                    if (i inside {[mem_layout_pkg::PS_SEED_BASE_ID : mem_layout_pkg::PS_SEED_VALID_ID]}) rtl_rdy[i] = dac_intf.state_rdy;
+                    else if (i inside {[mem_layout_pkg::CHAN_MUX_BASE_ID : mem_layout_pkg::SDC_VALID_ID]}) rtl_rdy[i] = adc_intf.state_rdy; 
                     else rtl_rdy[i] = 1; 
                 end 
             endcase 
-            if ((`is_RTLPOLL(i)) || (`is_READONLY(i))) {rtl_read_reqs[i], rtl_write_reqs[i], rtl_wd_in[i]} = 0; //If rtl polls, no writing or reading. If it's readonly, just use the package definition
-            else if (i >= `BUFF_TIME_BASE_ID && i <= `BUFF_TIME_VALID_ID) begin
-               if (i == `BUFF_TIME_VALID_ID) rtl_read_reqs[i] = (bufftState == BUFFT_CLR_FB); 
+            if ((mem_layout_pkg::is_RTLPOLL(i)) || (mem_layout_pkg::is_READONLY(i))) {rtl_read_reqs[i], rtl_write_reqs[i], rtl_wd_in[i]} = 0; //If rtl polls, no writing or reading. If it's readonly, just use the package definition
+            else if (i >= mem_layout_pkg::BUFF_TIME_BASE_ID && i <= mem_layout_pkg::BUFF_TIME_VALID_ID) begin
+               if (i == mem_layout_pkg::BUFF_TIME_VALID_ID) rtl_read_reqs[i] = (bufftState == BUFFT_CLR_FB); 
                else rtl_read_reqs[i] = 0; 
                 if (bufft_valid_clear) begin
-                    if (i == `BUFF_TIME_VALID_ID) {rtl_wd_in[i], rtl_write_reqs[i]} = 1; 
+                    if (i == mem_layout_pkg::BUFF_TIME_VALID_ID) {rtl_wd_in[i], rtl_write_reqs[i]} = 1; 
                     else {rtl_write_reqs[i], rtl_wd_in[i]} = 0;
                 end else begin
                     rtl_write_reqs[i] = adc_intf.buff_timestamp_writereq; 
-                    if (i == `BUFF_TIME_VALID_ID) rtl_wd_in[i] = 1; 
-                    else rtl_wd_in[i] = adc_intf.buff_timestamp_reg[(i-`BUFF_TIME_BASE_ID)]; 
+                    if (i == mem_layout_pkg::BUFF_TIME_VALID_ID) rtl_wd_in[i] = 1; 
+                    else rtl_wd_in[i] = adc_intf.buff_timestamp_reg[(i-mem_layout_pkg::BUFF_TIME_BASE_ID)]; 
                 end 
-            end else if (i == `PWL_PERIOD0_ID || i == `PWL_PERIOD1_ID) begin
+            end else if (i == mem_layout_pkg::PWL_PERIOD0_ID || i == mem_layout_pkg::PWL_PERIOD1_ID) begin
                 rtl_write_reqs[i] = dac_intf.save_pwl_wave_period;
-                rtl_wd_in[i] = (i == `PWL_PERIOD1_ID)? dac_intf.pwl_wave_period[1] : dac_intf.pwl_wave_period[0]; 
+                rtl_wd_in[i] = (i == mem_layout_pkg::PWL_PERIOD1_ID)? dac_intf.pwl_wave_period[1] : dac_intf.pwl_wave_period[0]; 
                 rtl_read_reqs[i] = 0;
             end
             else {rtl_read_reqs[i], rtl_write_reqs[i], rtl_wd_in[i]} = 0;
         end
-        rtl_rdy[`MAPPED_ID_CEILING+:(`MEM_SIZE-`MAPPED_ID_CEILING)] = -1;
-        rtl_read_reqs[`MAPPED_ID_CEILING+:(`MEM_SIZE-`MAPPED_ID_CEILING)] = 0;
-        rtl_write_reqs[`MAPPED_ID_CEILING+:(`MEM_SIZE-`MAPPED_ID_CEILING)] = 0;
-        rtl_wd_in[`MAPPED_ID_CEILING+:(`MEM_SIZE-`MAPPED_ID_CEILING)] = 0;
+        rtl_rdy[MAPPED_ID_CEILING+:(MEM_SIZE-MAPPED_ID_CEILING)] = -1;
+        rtl_read_reqs[MAPPED_ID_CEILING+:(MEM_SIZE-MAPPED_ID_CEILING)] = 0;
+        rtl_write_reqs[MAPPED_ID_CEILING+:(MEM_SIZE-MAPPED_ID_CEILING)] = 0;
+        rtl_wd_in[MAPPED_ID_CEILING+:(MEM_SIZE-MAPPED_ID_CEILING)] = 0;
     end
 
    // Overall system state machine (for resets, halts, parameter changes)
@@ -95,9 +99,9 @@ module sys(input wire ps_clk,ps_rst,dac_clk,dac_rst,
         else begin 
             case (rstState) 
                 IDLE_R: begin
-                    if (fresh_bits[`RST_ID]) rstState <= RESP_WAIT; 
+                    if (fresh_bits[mem_layout_pkg::RST_ID]) rstState <= RESP_WAIT; 
                 end 
-                RESP_WAIT: begin 
+                RESP_WAIT: begin
                     if (wr_if.got_pack) rstState <= RESET; 
                 end 
                 RESET: begin
@@ -108,7 +112,7 @@ module sys(input wire ps_clk,ps_rst,dac_clk,dac_rst,
  
             case(hltState)
                 IDLE_H: begin
-                    if (fresh_bits[`DAC_HLT_ID]) begin 
+                    if (fresh_bits[mem_layout_pkg::DAC_HLT_ID]) begin 
                         hlt_cmd <= 1;
                         hltState <= HALT_DAC; 
                     end 
@@ -121,33 +125,33 @@ module sys(input wire ps_clk,ps_rst,dac_clk,dac_rst,
  
             case(scaleParamState)
                 IDLE_S: begin
-                    if (fresh_bits[`SCALE_DAC_OUT_ID]) scaleParamState <= CHANGE_SCALE;
+                    if (fresh_bits[mem_layout_pkg::SCALE_DAC_OUT_ID]) scaleParamState <= CHANGE_SCALE;
                 end 
  
                 CHANGE_SCALE: begin
-                    scale_factor <= rtl_rd_out[`SCALE_DAC_OUT_ID];
+                    scale_factor <= rtl_rd_out[mem_layout_pkg::SCALE_DAC_OUT_ID];
                     scaleParamState <= IDLE_S; 
                 end 
             endcase 
  
             case(dacBurstState)
                 IDLE_DB: begin 
-                    if (fresh_bits[`DAC_BURST_SIZE_ID]) dacBurstState <= CHANGE_BURST_SIZE; 
+                    if (fresh_bits[mem_layout_pkg::DAC_BURST_SIZE_ID]) dacBurstState <= CHANGE_BURST_SIZE; 
                 end 
                 CHANGE_BURST_SIZE: begin
-                    dac_burst_size <= rtl_rd_out[`DAC_BURST_SIZE_ID]; 
+                    dac_burst_size <= rtl_rd_out[mem_layout_pkg::DAC_BURST_SIZE_ID]; 
                     dacBurstState <= IDLE_DB; 
                 end 
             endcase 
  
             case(bufftState)
                 IDLE_B: begin
-                    if (fresh_bits[`BUFF_TIME_VALID_ID]) begin  // External module just wrote to the bufft register, wait for the processor to pull it if ever. 
+                    if (fresh_bits[mem_layout_pkg::BUFF_TIME_VALID_ID]) begin  // External module just wrote to the bufft register, wait for the processor to pull it if ever. 
                         bufftState <= BUFFT_POLL_WAIT; 
                     end
                 end 
                 BUFFT_POLL_WAIT: begin
-                    if (~fresh_bits[`BUFF_TIME_VALID_ID]) begin // processor is about to pull bufft reg, clear the valid addr
+                    if (~fresh_bits[mem_layout_pkg::BUFF_TIME_VALID_ID]) begin // processor is about to pull bufft reg, clear the valid addr
                         if (bufft_valid_clear) bufftState <= BUFFT_CLR_FB; 
                         else bufft_valid_clear <= 1; 
                     end 
@@ -161,7 +165,7 @@ module sys(input wire ps_clk,ps_rst,dac_clk,dac_rst,
         end
     end
 
-    axi_slave #(.A_BUS_WIDTH(`A_BUS_WIDTH), .A_DATA_WIDTH(`A_DATA_WIDTH), .WD_BUS_WIDTH(`WD_BUS_WIDTH), .WD_DATA_WIDTH(`WD_DATA_WIDTH))
+    axi_slave 
     slave(.clk(ps_clk), .rst(rst),
           .waddr_if(wa_if),
           .wdata_if(wd_if),
@@ -177,22 +181,24 @@ module sys(input wire ps_clk,ps_rst,dac_clk,dac_rst,
           .fresh_bits(fresh_bits));
 
 
-    DAC_Interface dac_intf(.ps_clk(ps_clk),.ps_rst(rst),
-                           .dac_clk(dac_clk),.dac_rst(dac_rst),
-                           .fresh_bits(fresh_bits), .read_resps(rtl_rd_out),
-                           .scale_factor_in(scale_factor), .dac_bs_in(dac_burst_size),
-                           .halt(hlt_cmd), .dac0_rdy(dac0_rdy), //in
-                           .dac_batch(dac_batch), //out 
-                           .valid_dac_batch(valid_dac_batch),
-                           .pwl_dma_if(pwl_dma_if));
+    DAC_Interface #(.DATAW(WD_DATA_WIDTH), .SAMPLEW(daq_params_pkg::SAMPLE_WIDTH), .BS_WIDTH(BS_WIDTH), .BATCH_WIDTH(daq_params_pkg::BATCH_WIDTH), .BATCH_SIZE(daq_params_pkg::BATCH_SIZE))
+    dac_intf(.ps_clk(ps_clk),.ps_rst(rst),
+             .dac_clk(dac_clk),.dac_rst(dac_rst),
+             .fresh_bits(fresh_bits), .read_resps(rtl_rd_out),
+             .scale_factor_in(scale_factor), .dac_bs_in(dac_burst_size),
+             .halt(hlt_cmd), .dac0_rdy(dac0_rdy), //in
+             .dac_batch(dac_batch), //out 
+             .valid_dac_batch(valid_dac_batch),
+             .pwl_dma_if(pwl_dma_if));
 
-    ADC_Interface adc_intf(.clk(ps_clk), .rst(rst),
-                           .fresh_bits(fresh_bits),
-                           .read_resps(rtl_rd_out),
-                           .bufft(bufft_if.stream_in),
-                           .buffc(buffc_if.stream_out),
-                           .cmc(cmc_if.stream_out),
-                           .sdc(sdc_if.stream_out));
+    ADC_Interface #(.DATAW(WD_DATA_WIDTH), .SDC_SAMPLES(daq_params_pkg::SDC_SAMPLES), .BUFF_CONFIG_WIDTH(daq_params_pkg::BUFF_CONFIG_WIDTH), .CHAN_SAMPLES(daq_params_pkg::CHAN_SAMPLES), .BUFF_SAMPLES(daq_params_pkg::BUFF_SAMPLES)) 
+    adc_intf(.clk(ps_clk), .rst(rst),
+             .fresh_bits(fresh_bits),
+             .read_resps(rtl_rd_out),
+             .bufft(bufft_if.stream_in),
+             .buffc(buffc_if.stream_out),
+             .cmc(cmc_if.stream_out),
+             .sdc(sdc_if.stream_out));
 endmodule 
 
 `default_nettype wire

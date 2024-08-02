@@ -1,29 +1,27 @@
 `default_nettype none
 `timescale 1ns / 1ps
-// import mem_layout_pkg::*;
-`include "mem_layout.svh"
 
-module intrp_test #(parameter IS_INTEGRATED = 0)();
+module intrp_test #(parameter IS_INTEGRATED = 0, parameter VERBOSE=sim_util_pkg::DEBUG)();
 	localparam TIMEOUT = 1000;
 	localparam TEST_NUM = 6;
 	localparam int CLK_RATE_MHZ = 150;
     localparam MAN_SEED = 0;
     
     logic clk; 
-    logic[(2*`SAMPLE_WIDTH)-1:0] x,slope; 
-    logic[`BATCH_SAMPLES-1:0][`SAMPLE_WIDTH-1:0] intrp_batch;
+    logic[(2*(daq_params_pkg::SAMPLE_WIDTH))-1:0] x,slope; 
+    logic[(daq_params_pkg::BATCH_SIZE)-1:0][(daq_params_pkg::SAMPLE_WIDTH)-1:0] intrp_batch;
     int total_errors = 0;
     int curr_err,seed;
     real float;
     
-    sim_util_pkg::debug debug = new(sim_util_pkg::DEBUG,TEST_NUM,"INTERPOLATER", IS_INTEGRATED); 
+    sim_util_pkg::debug debug = new(VERBOSE,TEST_NUM,"INTERPOLATER", IS_INTEGRATED); 
 
-    interpolater #(.SAMPLE_WIDTH(`SAMPLE_WIDTH), .BATCH_SIZE(`BATCH_SAMPLES))
+    interpolater #(.SAMPLE_WIDTH(daq_params_pkg::SAMPLE_WIDTH), .BATCH_SIZE(daq_params_pkg::BATCH_SIZE))
     dut_i(.clk(clk),
           .x(x), .slope(slope),
           .intrp_batch(intrp_batch));
 
-    intrp_tb #(.BATCH_SIZE(`BATCH_SAMPLES), .SAMPLE_WIDTH(`SAMPLE_WIDTH), .INTERPOLATER_DELAY(`INTERPOLATER_DELAY), .M(16), .N(16))
+    intrp_tb #(.BATCH_SIZE(daq_params_pkg::BATCH_SIZE), .SAMPLE_WIDTH(daq_params_pkg::SAMPLE_WIDTH), .INTERPOLATER_DELAY(daq_params_pkg::INTERPOLATER_DELAY), .M(daq_params_pkg::SAMPLE_WIDTH), .N(daq_params_pkg::SAMPLE_WIDTH))
     tb_i(.clk(clk),
         .slopet(dut_i.slopet),
         .xpslopet(dut_i.xpslopet),
@@ -56,7 +54,7 @@ module intrp_test #(parameter IS_INTEGRATED = 0)();
             seed = MAN_SEED;
             debug.displayc($sformatf("Using manually selected seed value %0d",seed),.msg_color(sim_util_pkg::BLUE),.msg_verbosity(sim_util_pkg::VERBOSE));
         end else begin
-            seed = generate_rand_seed();
+            seed = sim_util_pkg::generate_rand_seed();
             debug.displayc($sformatf("Using random seed value %0d",seed),.msg_color(sim_util_pkg::BLUE),.msg_verbosity(sim_util_pkg::VERBOSE));            
         end
         $srandom(seed);

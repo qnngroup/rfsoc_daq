@@ -1,38 +1,42 @@
 `default_nettype none
 `timescale 1ns / 1ps
-// import mem_layout_pkg::*;
-`include "mem_layout.svh"
 
-//Cannot perform bufft test here, write signals are propogated to system level. 
-module adc_intf_test #(parameter IS_INTEGRATED = 0)();
+import daq_params_pkg::SDC_DATA_WIDTH;
+import daq_params_pkg::SDC_SAMPLES;
+import daq_params_pkg::BUFF_CONFIG_WIDTH;
+import daq_params_pkg::CHANNEL_MUX_WIDTH;
+import daq_params_pkg::CHAN_SAMPLES;
+import daq_params_pkg::BUFF_TIMESTAMP_WIDTH;
+module adc_intf_test #(parameter IS_INTEGRATED = 0, parameter VERBOSE=sim_util_pkg::DEBUG)();
 	localparam TIMEOUT = 1500;
 	localparam TEST_NUM = 8;
 	localparam int CLK_RATE_MHZ = 150;
     localparam MAN_SEED = 0;
 
-    sim_util_pkg::debug debug = new(sim_util_pkg::DEBUG,TEST_NUM,"ADC_INTERFACE", IS_INTEGRATED); 
+    sim_util_pkg::debug debug = new(VERBOSE,TEST_NUM,"ADC_INTERFACE", IS_INTEGRATED); 
 
     logic clk, rst; 
-    logic[`MEM_SIZE-1:0] fresh_bits; 
-    logic[`MEM_SIZE-1:0][`WD_DATA_WIDTH-1:0] mem_map, read_resps; 
-    logic[`CHAN_SAMPLES-1:0][`WD_DATA_WIDTH-1:0] exp_cmc_data; 
-    logic[`SDC_SAMPLES-1:0][`WD_DATA_WIDTH-1:0] exp_sdc_data; 
+    logic[(mem_layout_pkg::MEM_SIZE)-1:0] fresh_bits; 
+    logic[(mem_layout_pkg::MEM_SIZE)-1:0][(axi_params_pkg::DATAW)-1:0] mem_map, read_resps; 
+    logic[CHAN_SAMPLES-1:0][(axi_params_pkg::DATAW)-1:0] exp_cmc_data; 
+    logic[SDC_SAMPLES-1:0][(axi_params_pkg::DATAW)-1:0] exp_sdc_data; 
     int total_errors = 0;
     int curr_err, seed, test_num; 
-    Axis_IF #(`BUFF_TIMESTAMP_WIDTH) bufft(); 
-    Axis_IF #(`BUFF_CONFIG_WIDTH) buffc();
-    Axis_IF #(`CHANNEL_MUX_WIDTH) cmc();
-    Axis_IF #(`SDC_DATA_WIDTH) sdc(); 
+    Axis_IF #(BUFF_TIMESTAMP_WIDTH) bufft(); 
+    Axis_IF #(BUFF_CONFIG_WIDTH) buffc();
+    Axis_IF #(CHANNEL_MUX_WIDTH) cmc();
+    Axis_IF #(SDC_DATA_WIDTH) sdc(); 
 
-    ADC_Interface dut_i(.clk(clk), .rst(rst),
-                        .fresh_bits(fresh_bits),
-                        .read_resps(read_resps),
-                        .bufft(bufft.stream_in),
-                        .buffc(buffc.stream_out),
-                        .cmc(cmc.stream_out),
-                        .sdc(sdc.stream_out));
+    ADC_Interface #(.DATAW(axi_params_pkg::DATAW), .SDC_SAMPLES(daq_params_pkg::SDC_SAMPLES), .BUFF_CONFIG_WIDTH(BUFF_CONFIG_WIDTH), .CHAN_SAMPLES(CHAN_SAMPLES), .BUFF_SAMPLES(BUFF_SAMPLES))
+    dut_i(.clk(clk), .rst(rst),
+          .fresh_bits(fresh_bits),
+          .read_resps(read_resps),
+          .bufft(bufft.stream_in),
+          .buffc(buffc.stream_out),
+          .cmc(cmc.stream_out),
+          .sdc(sdc.stream_out));
     
-    adc_intf_tb #(.MEM_SIZE(`MEM_SIZE), .DATA_WIDTH(`WD_DATA_WIDTH))
+    adc_intf_tb #(.MEM_SIZE(mem_layout_pkg::MEM_SIZE), .DATA_WIDTH(axi_params_pkg::DATAW))
     tb_i(.clk(clk), .adc_rdy(dut_i.state_rdy),
          .rst(rst),
          .fresh_bits(fresh_bits), .read_resps(read_resps),
@@ -58,37 +62,37 @@ module adc_intf_test #(parameter IS_INTEGRATED = 0)();
     endtask 
 
     task automatic cmc_test(inout sim_util_pkg::debug debug, input bit write_all = 1, input bit signal_rdy = 1);
-        tb_i.populate_wd_list(`CHAN_SAMPLES+1); 
-        tb_i.write_addr(`CHAN_MUX_BASE_ID, .write_all(write_all));
-        delay(clk, $urandom_range(2,100));
+        tb_i.populate_wd_list(CHAN_SAMPLES+1); 
+        tb_i.write_addr(mem_layout_pkg::CHAN_MUX_BASE_ID, .write_all(write_all));
+        sim_util_pkg::delay(clk, $urandom_range(2,100));
         debug.disp_test_part(1, cmc.valid == 1, "Valid should be high"); 
-        debug.disp_test_part(2,cmc.data == read_resps[`CHAN_MUX_BASE_ID+:`CHAN_SAMPLES],$sformatf("Expected %h, got %h",cmc.data, read_resps[`CHAN_MUX_BASE_ID+:`CHAN_SAMPLES])); 
+        debug.disp_test_part(2,cmc.data == read_resps[mem_layout_pkg::CHAN_MUX_BASE_ID+:CHAN_SAMPLES],$sformatf("Expected %h, got %h",cmc.data, read_resps[mem_layout_pkg::CHAN_MUX_BASE_ID+:CHAN_SAMPLES])); 
         if (signal_rdy) begin 
-            `flash_signal(cmc.ready,clk);
+            sim_util_pkg::flash_signal(cmc.ready,clk);
             @(posedge clk); 
             debug.disp_test_part(3, cmc.valid == 0, "Valid should have fallen");
         end 
     endtask 
     task automatic buffc_test(inout sim_util_pkg::debug debug, input bit write_all = 1, input bit signal_rdy = 1);
         tb_i.populate_wd_list(1); 
-        tb_i.write_addr(`BUFF_CONFIG_ID, .write_all(write_all));
-        delay(clk, $urandom_range(2,100));
+        tb_i.write_addr(mem_layout_pkg::BUFF_CONFIG_ID, .write_all(write_all));
+        sim_util_pkg::delay(clk, $urandom_range(2,100));
         debug.disp_test_part(1, buffc.valid == 1, "Valid should be high"); 
-        debug.disp_test_part(2,buffc.data == read_resps[`BUFF_CONFIG_ID][0+:`BUFF_CONFIG_WIDTH],$sformatf("Expected %h, got %h",buffc.data,read_resps[`BUFF_CONFIG_ID][0+:`BUFF_CONFIG_WIDTH])); 
+        debug.disp_test_part(2,buffc.data == read_resps[mem_layout_pkg::BUFF_CONFIG_ID][0+:BUFF_CONFIG_WIDTH],$sformatf("Expected %h, got %h",buffc.data,read_resps[mem_layout_pkg::BUFF_CONFIG_ID][0+:BUFF_CONFIG_WIDTH])); 
         if (signal_rdy) begin 
-            `flash_signal(buffc.ready,clk);
+            sim_util_pkg::flash_signal(buffc.ready,clk);
             @(posedge clk); 
             debug.disp_test_part(3, buffc.valid == 0, "Valid should have fallen");
         end 
     endtask 
     task automatic sdc_test(inout sim_util_pkg::debug debug, input bit write_all = 1, input bit signal_rdy = 1);
-        tb_i.populate_wd_list(`SDC_SAMPLES+1); 
-        tb_i.write_addr(`SDC_BASE_ID, .write_all(write_all));
-        delay(clk, $urandom_range(2,100));
+        tb_i.populate_wd_list(SDC_SAMPLES+1); 
+        tb_i.write_addr(mem_layout_pkg::SDC_BASE_ID, .write_all(write_all));
+        sim_util_pkg::delay(clk, $urandom_range(2,100));
         debug.disp_test_part(1, sdc.valid == 1, "Valid should be high"); 
-        debug.disp_test_part(2,sdc.data == read_resps[`SDC_BASE_ID+:`SDC_SAMPLES],$sformatf("Expected %h, got %h",sdc.data, read_resps[`SDC_BASE_ID+:`SDC_SAMPLES])); 
+        debug.disp_test_part(2,sdc.data == read_resps[mem_layout_pkg::SDC_BASE_ID+:SDC_SAMPLES],$sformatf("Expected %h, got %h",sdc.data, read_resps[mem_layout_pkg::SDC_BASE_ID+:SDC_SAMPLES])); 
         if (signal_rdy) begin 
-            `flash_signal(sdc.ready,clk); 
+            sim_util_pkg::flash_signal(sdc.ready,clk); 
             @(posedge clk);
             debug.disp_test_part(3, sdc.valid == 0, "Valid should have fallen");
         end 
@@ -102,7 +106,7 @@ module adc_intf_test #(parameter IS_INTEGRATED = 0)();
             seed = MAN_SEED;
             debug.displayc($sformatf("Using manually selected seed value %0d",seed),.msg_color(sim_util_pkg::BLUE),.msg_verbosity(sim_util_pkg::VERBOSE));
         end else begin
-            seed = generate_rand_seed();
+            seed = sim_util_pkg::generate_rand_seed();
             debug.displayc($sformatf("Using random seed value %0d",seed),.msg_color(sim_util_pkg::BLUE),.msg_verbosity(sim_util_pkg::VERBOSE));            
         end
         $srandom(seed);
@@ -157,12 +161,12 @@ module adc_intf_test #(parameter IS_INTEGRATED = 0)();
         sdc_test(debug,.write_all(0),.signal_rdy(0)); 
         buffc_test(debug,.write_all(0),.signal_rdy(0));
         cmc_test(debug,.write_all(0),.signal_rdy(0));
-        delay(clk, $urandom_range(100,500)); 
+        sim_util_pkg::delay(clk, $urandom_range(100,500)); 
         debug.disp_test_part(3, cmc.valid && sdc.valid && buffc.valid, "All valids should still be high");
         fork 
-            begin `flash_signal(cmc.ready,clk) end 
-            begin `flash_signal(sdc.ready,clk) end 
-            begin `flash_signal(buffc.ready,clk) end 
+            begin sim_util_pkg::flash_signal(cmc.ready,clk); end 
+            begin sim_util_pkg::flash_signal(sdc.ready,clk); end 
+            begin sim_util_pkg::flash_signal(buffc.ready,clk); end 
         join
         @(posedge clk);
         debug.disp_test_part(4, ~cmc.valid && ~sdc.valid && ~buffc.valid, "All valids should have fallen");         
@@ -175,17 +179,17 @@ module adc_intf_test #(parameter IS_INTEGRATED = 0)();
         sdc_test(debug,.write_all(0),.signal_rdy(0)); 
         buffc_test(debug,.write_all(0),.signal_rdy(0));
         cmc_test(debug,.write_all(0),.signal_rdy(0));
-        delay(clk, $urandom_range(100,500)); 
+        sim_util_pkg::delay(clk, $urandom_range(100,500)); 
         debug.disp_test_part(3, cmc.valid && sdc.valid && buffc.valid, "All valids should still be high");
-        `flash_signal(cmc.ready,clk)
+        sim_util_pkg::flash_signal(cmc.ready,clk);
         @(posedge clk);
         debug.disp_test_part(4, ~cmc.valid && sdc.valid && buffc.valid, "Only cmc valid should have fallen");
-        delay(clk, $urandom_range(10,30)); 
-        `flash_signal(sdc.ready,clk)
+        sim_util_pkg::delay(clk, $urandom_range(10,30)); 
+        sim_util_pkg::flash_signal(sdc.ready,clk);
         @(posedge clk);
         debug.disp_test_part(5, ~cmc.valid && ~sdc.valid && buffc.valid, "sdc and cmc valids should have fallen");
-        delay(clk, $urandom_range(10,30));
-        `flash_signal(buffc.ready,clk)
+        sim_util_pkg::delay(clk, $urandom_range(10,30));
+        sim_util_pkg::flash_signal(buffc.ready,clk);
         @(posedge clk);
         debug.disp_test_part(6, ~cmc.valid && ~sdc.valid && ~buffc.valid, "All valids should have fallen");
         combine_errors();

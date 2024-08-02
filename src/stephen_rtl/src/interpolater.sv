@@ -1,6 +1,6 @@
 `timescale 1ns / 1ps
 `default_nettype none
-import mem_layout_pkg::*;
+
 
 module interpolater#(parameter SAMPLE_WIDTH = 16, parameter BATCH_SIZE = 16)
                     (input wire clk,

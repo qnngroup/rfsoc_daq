@@ -1,9 +1,7 @@
 `default_nettype none
 `timescale 1ns / 1ps
-// import mem_layout_pkg::*;
-`include "mem_layout.svh"
 
-module pwl_test #(parameter IS_INTEGRATED = 0)();
+module pwl_test #(parameter IS_INTEGRATED = 0, parameter VERBOSE=sim_util_pkg::DEBUG)();
 	localparam TIMEOUT = 10000;
 	localparam TEST_NUM = 42;
 	localparam int CLK_RATE_HZ = 100_000_000;
@@ -11,9 +9,9 @@ module pwl_test #(parameter IS_INTEGRATED = 0)();
     
     logic clk, rst; 
     logic halt, run_pwl, pwl_rdy;
-    logic[(2*`WD_DATA_WIDTH)-1:0] pwl_wave_period;
+    logic[(2*axi_params_pkg::DATAW)-1:0] pwl_wave_period;
     logic valid_pwl_wave_period;
-    logic[`BATCH_SAMPLES-1:0][`SAMPLE_WIDTH-1:0] batch_out;
+    logic[(daq_params_pkg::BATCH_SIZE)-1:0][(daq_params_pkg::SAMPLE_WIDTH)-1:0] batch_out;
     logic valid_batch_out;
     int curr_err, test_num, seed; 
     int total_errors = 0;
@@ -21,18 +19,18 @@ module pwl_test #(parameter IS_INTEGRATED = 0)();
     bit is_fract,is_neg,long_wave,osc_valid;
     int osc_delay_range [2]; 
 
-    Axis_IF #(`DMA_DATA_WIDTH) pwl_dma(); 
+    Axis_IF #(daq_params_pkg::DMA_DATA_WIDTH) pwl_dma(); 
 
-    sim_util_pkg::debug debug = new(sim_util_pkg::DEBUG,TEST_NUM,"PWL", IS_INTEGRATED); 
+    sim_util_pkg::debug debug = new(VERBOSE,TEST_NUM,"PWL", IS_INTEGRATED); 
 
-    pwl_generator #(.DMA_DATA_WIDTH(`DMA_DATA_WIDTH), .SAMPLE_WIDTH(`SAMPLE_WIDTH), .BATCH_SIZE(`BATCH_SAMPLES), .SPARSE_BRAM_DEPTH(`SPARSE_BRAM_DEPTH), .DENSE_BRAM_DEPTH(`DENSE_BRAM_DEPTH))
+    pwl_generator #(.DMA_DATA_WIDTH(daq_params_pkg::DMA_DATA_WIDTH), .SAMPLE_WIDTH(daq_params_pkg::SAMPLE_WIDTH), .BATCH_SIZE(daq_params_pkg::BATCH_SIZE), .SPARSE_BRAM_DEPTH(daq_params_pkg::SPARSE_BRAM_DEPTH), .DENSE_BRAM_DEPTH(daq_params_pkg::DENSE_BRAM_DEPTH))
     dut_i(.clk(clk), .rst(rst),
           .halt(halt), .run(run_pwl), .pwl_rdy(pwl_rdy),
           .pwl_wave_period(pwl_wave_period), .valid_pwl_wave_period(valid_pwl_wave_period),
           .batch_out(batch_out), .valid_batch_out(valid_batch_out),
           .dma(pwl_dma));
 
-    pwl_tb #(.SAMPLE_WIDTH(`SAMPLE_WIDTH), .DMA_DATA_WIDTH(`DMA_DATA_WIDTH), .BATCH_SIZE(`BATCH_SAMPLES))
+    pwl_tb #(.SAMPLE_WIDTH(daq_params_pkg::SAMPLE_WIDTH), .DMA_DATA_WIDTH(daq_params_pkg::DMA_DATA_WIDTH), .BATCH_SIZE(daq_params_pkg::BATCH_SIZE))
     tb_i(.clk(clk), .rst(rst),
          .pwl_rdy(pwl_rdy),
          .valid_batch(valid_batch_out), .batch(batch_out),
@@ -66,7 +64,7 @@ module pwl_test #(parameter IS_INTEGRATED = 0)();
             seed = MAN_SEED;
             debug.displayc($sformatf("Using manually selected seed value %0d",seed),.msg_color(sim_util_pkg::BLUE),.msg_verbosity(sim_util_pkg::VERBOSE));
         end else begin
-            seed = generate_rand_seed();
+            seed = sim_util_pkg::generate_rand_seed();
             debug.displayc($sformatf("Using random seed value %0d",seed),.msg_color(sim_util_pkg::BLUE),.msg_verbosity(sim_util_pkg::VERBOSE));            
         end
         $srandom(seed);

@@ -1,14 +1,15 @@
 `default_nettype none
 `timescale 1ns / 1ps
-import mem_layout_pkg::*;
 
-module sys_probe_tb();
+import mem_layout_pkg::*;
+import axi_params_pkg::*;
+import daq_params_pkg::*;
+module ps_intf_probe();
     localparam BUFF_LEN = 14;
-    
     logic ps_clk,ps_rst,ps_rstn;
     logic dac_clk,dac_rst,dac_rstn;
-    logic[`A_BUS_WIDTH-1:0] raddr_packet, waddr_packet;
-    logic[`WD_BUS_WIDTH-1:0] rdata_packet, wdata_packet;
+    logic[A_BUS_WIDTH-1:0] raddr_packet, waddr_packet;
+    logic[WD_BUS_WIDTH-1:0] rdata_packet, wdata_packet;
     logic[2:0] ps_axi_arprot,ps_axi_awprot;
     logic[3:0] ps_axi_wstrb;
     logic[63:0] pwl_data;
@@ -18,16 +19,16 @@ module sys_probe_tb();
     logic raddr_valid_packet, waddr_valid_packet, wdata_valid_packet, rdata_valid_out, wresp_valid_out;
     logic ps_wresp_rdy,ps_read_rdy, ps_write_rdy,ps_awrite_rdy,ps_aread_rdy; 
     logic[1:0] wresp_out, rresp_out; 
-    logic[`BATCH_WIDTH-1:0] dac_batch;
+    logic[BATCH_WIDTH-1:0] dac_batch;
     logic valid_dac_batch, rtl_dac_valid, dac0_rdy;
     logic pl_rstn;
     logic[12:0] testReg; 
-    logic[BUFF_LEN-1:0][`DMA_DATA_WIDTH-1:0] dma_buff, dma_buff2;
+    logic[BUFF_LEN-1:0][DMA_DATA_WIDTH-1:0] dma_buff, dma_buff2;
     logic[13:0][6:0] delays = {7'd1, 7'd44, 7'd121, 7'd109, 7'd86, 7'd100, 7'd112, 7'd28, 7'd73, 7'd20, 7'd76, 7'd141, 7'd42, 7'd64}; 
     logic[$clog2(BUFF_LEN)-1:0] dma_i; 
     logic send_dma_data,set_seeds,run_pwl,halt_dac,run_trig;
     logic first_sent, which_period; 
-    logic[`WD_DATA_WIDTH-1:0] pwl_period0, pwl_period1; 
+    logic[WD_DATA_WIDTH-1:0] pwl_period0, pwl_period1; 
     enum logic[1:0] {IDLE_D, SEND_DMA_DATA,HOLD_CMD,DMA_WAIT} dmaState;
     enum logic[1:0] {IDLE_T, SET_SEEDS,WRESP,ERROR} dacTestState;
     enum logic {SEND_ADDR, GET_DATA} readState;
@@ -49,10 +50,10 @@ module sys_probe_tb();
     //                           .ps_axi_bresp(wresp_out),.ps_axi_bvalid(wresp_valid_out),.ps_axi_bready(ps_wresp_rdy),
     //                           .pwl_tdata(pwl_data),.pwl_tkeep(pwl_tkeep),.pwl_tlast(pwl_last),.pwl_tvalid(pwl_valid),.pwl_tready(pwl_ready));
 
-    logic[`SAMPLE_WIDTH-1:0] x;
-    logic[(2*`SAMPLE_WIDTH)-1:0] slope; 
-    logic[`BATCH_SAMPLES-1:0][`SAMPLE_WIDTH-1:0] intrp_batch;
-    interpolater #(.SAMPLE_WIDTH(`SAMPLE_WIDTH), .BATCH_SIZE(`BATCH_SAMPLES))
+    logic[(daq_params_pkg::SAMPLE_WIDTH)-1:0] x;
+    logic[(2*(daq_params_pkg::SAMPLE_WIDTH))-1:0] slope; 
+    logic[(daq_params_pkg::BATCH_SIZE)-1:0][(daq_params_pkg::SAMPLE_WIDTH)-1:0] intrp_batch;
+    interpolater #(.SAMPLE_WIDTH(daq_params_pkg::SAMPLE_WIDTH), .BATCH_SIZE(daq_params_pkg::BATCH_SIZE))
     dut_i(.clk(dac_clk),
           .x(x), .slope(slope),
           .intrp_batch(intrp_batch));
@@ -70,7 +71,7 @@ module sys_probe_tb();
         end else begin
             case(readState)
                 SEND_ADDR: begin 
-                    raddr_packet <= (which_period)? `PWL_PERIOD0_ADDR : `PWL_PERIOD1_ADDR;
+                    raddr_packet <= (which_period)? PWL_PERIOD0_ADDR : PWL_PERIOD1_ADDR;
                     raddr_valid_packet <= 1; 
                     which_period <= ~which_period; 
                     readState <= GET_DATA;
@@ -87,25 +88,25 @@ module sys_probe_tb();
             case(dacTestState)
                 IDLE_T: begin
                     if (set_seeds) begin
-                        waddr_packet <= `PS_SEED_BASE_ADDR;
+                        waddr_packet <= PS_SEED_BASE_ADDR;
                         wdata_packet <= 16'hBEEF;
                         {waddr_valid_packet, wdata_valid_packet} <= 3;
                         dacTestState <= WRESP;
                     end 
                     if (run_pwl) begin
-                        waddr_packet <= `RUN_PWL_ADDR;
+                        waddr_packet <= RUN_PWL_ADDR;
                         wdata_packet <= 1;
                         {waddr_valid_packet, wdata_valid_packet} <= 3;
                         dacTestState <= WRESP;
                     end
                     if (run_trig) begin
-                        waddr_packet <= `TRIG_WAVE_ADDR;
+                        waddr_packet <= TRIG_WAVE_ADDR;
                         wdata_packet <= 1;
                         {waddr_valid_packet, wdata_valid_packet} <= 3;
                         dacTestState <= WRESP;
                     end
                     if (halt_dac) begin
-                        waddr_packet <= `DAC_HLT_ADDR;
+                        waddr_packet <= DAC_HLT_ADDR;
                         wdata_packet <= 1;
                         {waddr_valid_packet, wdata_valid_packet} <= 3;
                         dacTestState <= WRESP;
@@ -120,9 +121,9 @@ module sys_probe_tb();
                 WRESP: begin
                     {waddr_valid_packet, wdata_valid_packet} <= 0;
                     if (wresp_valid_out && ps_wresp_rdy) begin
-                        if (wresp_out != `OKAY) dacTestState <= ERROR;
+                        if (wresp_out != OKAY) dacTestState <= ERROR;
                         else begin 
-                            if (waddr_packet >= `PS_SEED_BASE_ADDR && waddr_packet <= `PS_SEED_VALID_ADDR) dacTestState <= (waddr_packet == `PS_SEED_VALID_ADDR)? IDLE_T : SET_SEEDS; 
+                            if (waddr_packet >= PS_SEED_BASE_ADDR && waddr_packet <= PS_SEED_VALID_ADDR) dacTestState <= (waddr_packet == PS_SEED_VALID_ADDR)? IDLE_T : SET_SEEDS; 
                             else dacTestState <= IDLE_T;
                         end 
                     end
@@ -178,8 +179,8 @@ module sys_probe_tb();
     end
 
     initial begin
-        $dumpfile("sys_probe_tb.vcd");
-        $dumpvars(0,sys_probe_tb); 
+        $dumpfile("ps_intf_probe.vcd");
+        $dumpvars(0,ps_intf_probe); 
         ps_clk = 0;
         dac_clk = 0;
         ps_rst = 0;
@@ -188,35 +189,35 @@ module sys_probe_tb();
         {set_seeds,run_pwl,halt_dac,run_trig} = 0; 
         #10;
         fork 
-            begin `flash_signal(dac_rst,dac_clk); end 
-            begin `flash_signal(ps_rst,ps_clk); end 
+            begin sim_util_pkg::flash_signal(dac_rst,dac_clk); end 
+            begin sim_util_pkg::flash_signal(ps_rst,ps_clk); end 
         join 
         // #1000;
-        // `flash_sig(send_dma_data);
+        // flash_sig(send_dma_data);
         // #100;
-        // `flash_sig(set_seeds);
+        // flash_sig(set_seeds);
         // while (~rtl_dac_valid) #10;
         // #500;
-        // `flash_sig(halt_dac);
+        // flash_sig(halt_dac);
         // while (rtl_dac_valid) #10;
         // #500;
-        // `flash_sig(set_seeds);
+        // flash_sig(set_seeds);
         // while (~rtl_dac_valid) #10;
         // #100
-        // `flash_sig(run_pwl);
+        // flash_sig(run_pwl);
         // #5000
-        // `flash_sig(halt_dac);
+        // flash_sig(halt_dac);
         // #5000;
-        // `flash_sig(run_trig);
+        // flash_sig(run_trig);
         // #5000;
-        // `flash_sig(set_seeds);
-        // `flash_sig(send_dma_data);
+        // flash_sig(set_seeds);
+        // flash_sig(send_dma_data);
         // #5000;
-        // `flash_sig(run_pwl);
+        // flash_sig(run_pwl);
         // #5000;
-        // `flash_sig(run_trig);
+        // flash_sig(run_trig);
         // #5000;
-        // `flash_sig(halt_dac);
+        // flash_sig(halt_dac);
         #5000;
         $finish;
     end 

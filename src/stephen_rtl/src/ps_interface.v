@@ -40,7 +40,7 @@ module ps_interface(
                     (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 ps_axi RDATA" *)
                     output wire[31:0] ps_axi_rdata,
                     (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 ps_axi RRESP" *)
-                    output wire[1:0]       ps_axi_rresp,
+                    output wire[1:0]  ps_axi_rresp,
                     (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 ps_axi RVALID" *)
                     output wire       ps_axi_rvalid,  
                     (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 ps_axi RREADY" *)
@@ -68,7 +68,7 @@ module ps_interface(
                     (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 ps_axi BREADY" *)
                     input  wire      ps_axi_bready,
 
-                    // ps_axiPWL DMA INTERFACE
+                    //PWL DMA INTERFACE
                     (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 pwl TDATA" *)
                     input wire[63:0] pwl_tdata,
                     (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 pwl TKEEP" *)

@@ -1,9 +1,8 @@
 `timescale 1ns / 1ps
 `default_nettype none
-import mem_layout_pkg::*;
 
-module sample_generator #(parameter FULL_CMD_WIDTH, parameter CMD_WIDTH, parameter RESP_WIDTH,  parameter BS_WIDTH, parameter SAMPLE_WIDTH, 
-						  parameter BATCH_WIDTH, parameter DMA_DATA_WIDTH, parameter DENSE_BRAM_DEPTH, parameter SPARSE_BRAM_DEPTH)
+
+module sample_generator #(parameter FULL_CMD_WIDTH, CMD_WIDTH, RESP_WIDTH,  BS_WIDTH, SAMPLE_WIDTH, BATCH_WIDTH, BATCH_SIZE, DMA_DATA_WIDTH, DENSE_BRAM_DEPTH, SPARSE_BRAM_DEPTH)
 						 (input wire clk, rst,
 					  	  input wire[FULL_CMD_WIDTH-1:0] ps_cmd, 
 					  	  input wire valid_ps_cmd,
@@ -15,7 +14,6 @@ module sample_generator #(parameter FULL_CMD_WIDTH, parameter CMD_WIDTH, paramet
 					  	  output logic[BATCH_WIDTH-1:0] dac_batch,
 					  	  output logic valid_dac_batch,
 					  	  Axis_IF pwl_dma_if);
-	localparam BATCH_SIZE = BATCH_WIDTH/SAMPLE_WIDTH;
 	localparam DAC_STAGES = 5; 	
 						 	
 	logic halt, ps_halt_cmd; 
@@ -24,7 +22,7 @@ module sample_generator #(parameter FULL_CMD_WIDTH, parameter CMD_WIDTH, paramet
 	logic[DAC_STAGES-1:0][BATCH_WIDTH:0] batch_pipe; 
 	logic set_seeds,run_shift_regs,run_trig_wav,run_pwl;
 	logic pwl_rdy, valid_pwl_batch;
-	logic[(2*`WD_DATA_WIDTH)-1:0] pwl_wave_period;
+	logic[(2*(axi_params_pkg::WD_DATA_WIDTH))-1:0] pwl_wave_period;
 	logic valid_pwl_wave_period; 
 	logic active_out;
 	logic[RESP_WIDTH-1:0] curr_dac_cmd; 
@@ -45,7 +43,7 @@ module sample_generator #(parameter FULL_CMD_WIDTH, parameter CMD_WIDTH, paramet
 		end
 	endgenerate
 	// For the DAC Triangle Wave Generator 
-	trig_wave_gen #(.SAMPLE_WIDTH (SAMPLE_WIDTH), .BATCH_WIDTH (BATCH_WIDTH))
+	trig_wave_gen #(.SAMPLE_WIDTH (SAMPLE_WIDTH), .BATCH_WIDTH (BATCH_WIDTH), .BATCH_SIZE(BATCH_SIZE))
   	twg(.clk(clk), .rst(rst || halt),
       .run(run_trig_wav && dac0_rdy),
       .batch_out_comb(trig_out));

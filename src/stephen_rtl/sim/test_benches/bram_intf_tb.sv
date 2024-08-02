@@ -1,8 +1,8 @@
 `default_nettype none
 `timescale 1ns / 1ps
-// import mem_layout_pkg::*;
-`include "mem_layout.svh"
-// import mem_layout_pkg::flash_signal;
+
+
+
 module bram_intf_tb #(parameter DATA_WIDTH, parameter BRAM_DEPTH)
 					 (input wire clk,
 					  input wire[DATA_WIDTH-1:0] line_out,
@@ -22,7 +22,7 @@ module bram_intf_tb #(parameter DATA_WIDTH, parameter BRAM_DEPTH)
 	task automatic init();
 		clear_expc();
 		{addr,line_in,we,en,generator_mode,rst_gen_mode,next} <= 0;
-		flash_signal(rst,clk2);
+		sim_util_pkg::flash_signal(rst,clk2);
 	endtask 
 
 	function void clear_expc();

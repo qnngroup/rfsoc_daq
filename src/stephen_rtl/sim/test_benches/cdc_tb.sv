@@ -1,7 +1,5 @@
 `default_nettype none
 `timescale 1ns / 1ps
-// import mem_layout_pkg::*;
-`include "mem_layout.svh"
 
 module cdc_tb #(parameter PS_CMD_WIDTH, parameter DAC_RSP_WIDTH)
 			   (input  wire ps_clk, dac_clk, 
@@ -14,13 +12,15 @@ module cdc_tb #(parameter PS_CMD_WIDTH, parameter DAC_RSP_WIDTH)
 			   	output logic ps_cmd_valid_in,
 			   	output logic[DAC_RSP_WIDTH-1:0] dac_resp_in, 
 			   	output logic dac_resp_valid_in);
-
+	logic ps_clk2,dac_clk2;
+	assign ps_clk2 = ps_clk;	
+	assign dac_clk2 = dac_clk;		   
 	task automatic init();
 		{ps_cmd_in,ps_cmd_valid_in} <= 0;
 		{dac_resp_in,dac_resp_valid_in} <= 0; 
 		fork 
-			begin `flash_signal(ps_rst,ps_clk) end 
-			begin `flash_signal(dac_rst, dac_clk) end 
+			begin sim_util_pkg::flash_signal(ps_rst,ps_clk2); end 
+			begin sim_util_pkg::flash_signal(dac_rst, dac_clk2); end 
 		join 
 	endtask 
 
@@ -28,7 +28,7 @@ module cdc_tb #(parameter PS_CMD_WIDTH, parameter DAC_RSP_WIDTH)
 		repeat(cmds_to_send) begin
 			while (~ps_cmd_transfer_rdy) @(posedge ps_clk);
 			for (int i = 0; i < PS_CMD_WIDTH; i+=32) ps_cmd_in[i+:32] <= $urandom();
-			`flash_signal(ps_cmd_valid_in,ps_clk); 
+			sim_util_pkg::flash_signal(ps_cmd_valid_in,ps_clk2); 
 			fork 
 				begin
 					debug.disp_test_part(1,ps_cmd_in != ps_cmd_out,$sformatf("ps_cmd should not have transferred yet: %h == %h",ps_cmd_in, ps_cmd_out)); 
@@ -48,7 +48,7 @@ module cdc_tb #(parameter PS_CMD_WIDTH, parameter DAC_RSP_WIDTH)
 		repeat(cmds_to_send) begin 
 			while (~dac_resp_transfer_rdy) @(posedge dac_clk);
 			for (int i = 0; i < DAC_RSP_WIDTH; i+=32) dac_resp_in[i+:32] <= $urandom();
-			`flash_signal(dac_resp_valid_in, dac_clk); 
+			sim_util_pkg::flash_signal(dac_resp_valid_in, dac_clk2); 
 			fork 
 				begin
 					debug.disp_test_part(1,dac_resp_in != dac_resp_out,$sformatf("dac_resp should not have transferred yet: %h == %h",dac_resp_out, dac_resp_in)); 

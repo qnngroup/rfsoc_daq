@@ -1,8 +1,8 @@
 `default_nettype none
 `timescale 1ns / 1ps
-// import mem_layout_pkg::*;
-`include "mem_layout.svh"
-// import mem_layout_pkg::flash_signal;
+
+
+
 module axi_transmit_tb #(parameter BUS_WIDTH, parameter DATA_WIDTH)
 					   (input wire clk, rst,
 					    Recieve_Transmit_IF intf);
@@ -60,7 +60,7 @@ module axi_transmit_tb #(parameter BUS_WIDTH, parameter DATA_WIDTH)
 		if (do_oscillate_rdy) oscillate_rdy(halt_osc);
 		for (int i = samples_to_send-1; i >= 0; i--) begin
 			intf.data_to_send <= data_in[i]; 
-			flash_signal(intf.send,clk2); 
+			sim_util_pkg::flash_signal(intf.send,clk2); 
 			while (~intf.valid_data) @(posedge clk);
 			debug.reset_timeout(clk2);			
 		end 

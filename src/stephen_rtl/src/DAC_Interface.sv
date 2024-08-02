@@ -1,26 +1,24 @@
 `timescale 1ns / 1ps
 `default_nettype none
-`include "mem_layout.svh"
-// import mem_layout_pkg::*;
 
-module DAC_Interface (input wire ps_clk,dac_clk,ps_rst, dac_rst,
-					  input wire[`MEM_SIZE-1:0] fresh_bits,
-					  input wire[`MEM_SIZE-1:0][`WD_DATA_WIDTH-1:0] read_resps,
-					  input wire[$clog2(`SAMPLE_WIDTH)-1:0] scale_factor_in,
-					  input wire[$clog2(`MAX_DAC_BURST_SIZE):0] dac_bs_in,
-					  input wire halt,
-					  input wire dac0_rdy, 
-					  output logic[`BATCH_SAMPLES-1:0][`SAMPLE_WIDTH-1:0] dac_batch,
-					  output logic valid_dac_batch,
-					  Axis_IF pwl_dma_if);
+module DAC_Interface #(parameter DATAW, SAMPLEW, BS_WIDTH, BATCH_WIDTH, BATCH_SIZE)
+					  (input wire ps_clk,dac_clk,ps_rst, dac_rst,
+					   input wire[(mem_layout_pkg::MEM_SIZE)-1:0] fresh_bits,
+					   input wire[(mem_layout_pkg::MEM_SIZE)-1:0][DATAW-1:0] read_resps,
+					   input wire[$clog2(SAMPLEW)-1:0] scale_factor_in,
+					   input wire[BS_WIDTH-1:0] dac_bs_in,
+					   input wire halt,
+					   input wire dac0_rdy, 
+					   output logic[BATCH_SIZE-1:0][SAMPLEW-1:0] dac_batch,
+					   output logic valid_dac_batch,
+					   Axis_IF pwl_dma_if);
 	localparam CMD_WIDTH = 4;
-	localparam RESP_WIDTH = (2*`WD_DATA_WIDTH) + 1;
-	localparam SCALE_WIDTH = $clog2(`SAMPLE_WIDTH); 
-	localparam BS_WIDTH = $clog2(`MAX_DAC_BURST_SIZE)+1;
-	localparam FULL_CMD_WIDTH = BS_WIDTH+SCALE_WIDTH+`BATCH_WIDTH+CMD_WIDTH;
+	localparam RESP_WIDTH = 2*DATAW + 1;
+	localparam SCALE_WIDTH = $clog2(SAMPLEW); 
+	localparam FULL_CMD_WIDTH = BS_WIDTH+SCALE_WIDTH+BATCH_WIDTH+CMD_WIDTH;
 
 	enum logic[1:0] {IDLE,SEND_CMD,RUN_PWL_DELAY,HALT_DAC} dacConfigState;
-	logic[`BATCH_SAMPLES-1:0][`SAMPLE_WIDTH-1:0] seed_set, dac_batch_out; 
+	logic[BATCH_SIZE-1:0][SAMPLEW-1:0] seed_set, dac_batch_out; 
 	logic[SCALE_WIDTH-1:0] scale_factor_out;
 	logic [BS_WIDTH-1:0] dac_bs_out; 
 	logic[1:0] scale_edge, dac_bs_edge; 
@@ -32,21 +30,21 @@ module DAC_Interface (input wire ps_clk,dac_clk,ps_rst, dac_rst,
 	logic[RESP_WIDTH-1:0] dac_cmd_in, dac_cmd_out;
 	logic dac_cmd_in_valid, dac_cmd_out_valid; 
 	logic dac_cmd_transfer_rdy, dac_cmd_transfer_done;
-	logic[1:0][`WD_DATA_WIDTH-1:0] pwl_wave_period;
+	logic[1:0][DATAW-1:0] pwl_wave_period;
 	logic[1:0] wave_period_edge; 
 	logic save_pwl_wave_period;
 	logic pwl_rdy;
 
-	assign ps_cmd_in[CMD_WIDTH+:`BATCH_WIDTH] = seed_set;
-	assign ps_cmd_in[(CMD_WIDTH+`BATCH_WIDTH)+:SCALE_WIDTH] = scale_factor_in;
-	assign ps_cmd_in[(CMD_WIDTH+`BATCH_WIDTH+SCALE_WIDTH)+:BS_WIDTH] = dac_bs_in;
+	assign ps_cmd_in[CMD_WIDTH+:BATCH_WIDTH] = seed_set;
+	assign ps_cmd_in[(CMD_WIDTH+BATCH_WIDTH)+:SCALE_WIDTH] = scale_factor_in;
+	assign ps_cmd_in[(CMD_WIDTH+BATCH_WIDTH+SCALE_WIDTH)+:BS_WIDTH] = dac_bs_in;
 
-	assign scale_factor_out = ps_cmd_out[(CMD_WIDTH+`BATCH_WIDTH)+:SCALE_WIDTH]; 
-	assign dac_bs_out = ps_cmd_out[(CMD_WIDTH+`BATCH_WIDTH+SCALE_WIDTH)+:BS_WIDTH]; 
+	assign scale_factor_out = ps_cmd_out[(CMD_WIDTH+BATCH_WIDTH)+:SCALE_WIDTH]; 
+	assign dac_bs_out = ps_cmd_out[(CMD_WIDTH+BATCH_WIDTH+SCALE_WIDTH)+:BS_WIDTH]; 
 	assign save_pwl_wave_period = wave_period_edge != 0;
 
 	always_comb begin
-        for (int i = 0; i < `BATCH_SAMPLES; i++) begin
+        for (int i = 0; i < BATCH_SIZE; i++) begin
             dac_batch[i] = dac_batch_out[i] >> scale_factor_out;
         end 
     end
@@ -59,7 +57,7 @@ module DAC_Interface (input wire ps_clk,dac_clk,ps_rst, dac_rst,
 	dac_bs_ed(.clk(ps_clk), .rst(ps_rst),
 			 .val(dac_bs_in),
 			 .comb_posedge_out(dac_bs_edge)); 
-	edetect #(.DATA_WIDTH(2*`WD_DATA_WIDTH))
+	edetect #(.DATA_WIDTH(2*DATAW))
 	wave_period_ed(.clk(ps_clk), .rst(ps_rst),
 	               .val(pwl_wave_period),
 	               .comb_posedge_out(wave_period_edge));
@@ -84,7 +82,7 @@ module DAC_Interface (input wire ps_clk,dac_clk,ps_rst, dac_rst,
 	                 	.valid_out(dac_cmd_out_valid),
 	                 	.rdy(dac_cmd_transfer_rdy),
 	                 	.done(dac_cmd_transfer_done));
-	sample_generator #(.FULL_CMD_WIDTH(FULL_CMD_WIDTH), .CMD_WIDTH(CMD_WIDTH), .RESP_WIDTH(RESP_WIDTH), .SAMPLE_WIDTH(`SAMPLE_WIDTH), .BATCH_WIDTH(`BATCH_WIDTH), .DMA_DATA_WIDTH(`DMA_DATA_WIDTH), .DENSE_BRAM_DEPTH(`DENSE_BRAM_DEPTH), .SPARSE_BRAM_DEPTH(`SPARSE_BRAM_DEPTH), .BS_WIDTH(BS_WIDTH))
+	sample_generator #(.FULL_CMD_WIDTH(FULL_CMD_WIDTH), .CMD_WIDTH(CMD_WIDTH), .RESP_WIDTH(RESP_WIDTH), .SAMPLE_WIDTH(SAMPLEW), .BATCH_WIDTH(BATCH_WIDTH), .BATCH_SIZE(BATCH_SIZE), .DMA_DATA_WIDTH(daq_params_pkg::DMA_DATA_WIDTH), .DENSE_BRAM_DEPTH(daq_params_pkg::DENSE_BRAM_DEPTH), .SPARSE_BRAM_DEPTH(daq_params_pkg::SPARSE_BRAM_DEPTH), .BS_WIDTH(BS_WIDTH))
 	sample_gen(.clk(dac_clk),.rst(dac_rst),
 	           .ps_cmd(ps_cmd_out),.valid_ps_cmd(ps_cmd_out_valid),
 	           .dac0_rdy(dac0_rdy), .dac_bs(dac_bs_out),
@@ -108,26 +106,26 @@ module DAC_Interface (input wire ps_clk,dac_clk,ps_rst, dac_rst,
 		end else begin
 			if (dac_cmd_out_valid) begin
 				pwl_rdy <= dac_cmd_out[0];
-				pwl_wave_period <= dac_cmd_out[1+:(2*`WD_DATA_WIDTH)];
+				pwl_wave_period <= dac_cmd_out[1+:(2*DATAW)];
 			end 
 			if (scale_edge != 0 && scale_changed == 0) scale_changed <= 1;
 			if (dac_bs_edge != 0 && dac_bs_changed == 0) dac_bs_changed <= 1; 
 			case (dacConfigState) 
 				IDLE: begin
-					if (fresh_bits[`RUN_PWL_ID]) begin
+					if (fresh_bits[mem_layout_pkg::RUN_PWL_ID]) begin
 						ps_cmd_in[0+:CMD_WIDTH] <= 1; //run_pwl command 
 						if (~pwl_rdy) begin
 							dacConfigState <= RUN_PWL_DELAY;
 						end else ps_cmd_in_valid <= 1; 
 						state_rdy <= 0;
 					end else 
-					if (fresh_bits[`PS_SEED_VALID_ID]) begin
+					if (fresh_bits[mem_layout_pkg::PS_SEED_VALID_ID]) begin
 						ps_cmd_in[0+:CMD_WIDTH] <= 1<<2; //run_shift_regs command
-						for (int i = 0; i < `BATCH_SAMPLES; i++) seed_set[i] <= read_resps[`PS_SEED_BASE_ID+i];
+						for (int i = 0; i < BATCH_SIZE; i++) seed_set[i] <= read_resps[(mem_layout_pkg::PS_SEED_BASE_ID)+i];
 						ps_cmd_in_valid <= 1;
 						state_rdy <= 0;
 					end else 
-					if (fresh_bits[`TRIG_WAVE_ID]) begin
+					if (fresh_bits[mem_layout_pkg::TRIG_WAVE_ID]) begin
 						ps_cmd_in[0+:CMD_WIDTH] <= 1<<1; //run_trig_wave command
 						ps_cmd_in_valid <= 1; 
 						state_rdy <= 0;

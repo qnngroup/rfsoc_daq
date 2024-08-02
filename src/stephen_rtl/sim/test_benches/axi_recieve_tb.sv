@@ -1,8 +1,7 @@
 `default_nettype none
 `timescale 1ns / 1ps
-import mem_layout_pkg::*;
 
-module axi_recieve_tb #(parameter BUS_WIDTH, parameter DATA_WIDTH)
+module axi_recieve_tb #(parameter BUS_WIDTH, DATA_WIDTH)
 					   (input wire clk, rst,
 					    Recieve_Transmit_IF intf);
 	
@@ -35,8 +34,8 @@ module axi_recieve_tb #(parameter BUS_WIDTH, parameter DATA_WIDTH)
 	endtask
 
 	task automatic prepare_addr_samples();
-		samples_to_send = `ADDR_NUM;
-		for (int i = 0; i < samples_to_send; i++) data_in.push_front(addrs[i]);
+		samples_to_send = mem_layout_pkg::ADDR_NUM;
+		for (int i = 0; i < samples_to_send; i++) data_in.push_front(mem_layout_pkg::addrs[i]);
 	endtask
 
 	task automatic send_samples();
@@ -45,7 +44,7 @@ module axi_recieve_tb #(parameter BUS_WIDTH, parameter DATA_WIDTH)
 		@(posedge clk);
 		for (int i = samples_to_send-1; i >= 0; i--) begin
 			intf.data_to_send <= data_in[i]; 
-			flash_signal(intf.send,clk2);
+			sim_util_pkg::flash_signal(intf.send,clk2);
 			while (~intf.valid_data) @(posedge clk);
 		end
 		repeat(5) @(posedge clk);
@@ -56,7 +55,7 @@ module axi_recieve_tb #(parameter BUS_WIDTH, parameter DATA_WIDTH)
 		if (~debug.disp_test_part(1,samples_recieved != 0,"No samples recieved")) return 0;
 		if (~debug.disp_test_part(2,samples_recieved == samples_to_send,"Sample mismatch")) return 0;
 		for (int i = 0; i < samples_to_send; i++) begin
-			if (is_addr) debug.disp_test_part(3+i,`ADDR2ID(data_in[i]) == data_out[i],$sformatf("Sample #%0d incorrect. 0x%0x != 0x%0x", i, data_in[i], data_out[i]));
+			if (is_addr) debug.disp_test_part(3+i,mem_layout_pkg::ADDR2ID(data_in[i]) == data_out[i],$sformatf("Sample #%0d incorrect. 0x%0x != 0x%0x", i, data_in[i], data_out[i]));
 			else debug.disp_test_part(3+i,data_in[i] == data_out[i],$sformatf("Sample #%0d incorrect. 0x%0x != 0x%0x", i, data_in[i], data_out[i]));
 		end
 		clear_queues();

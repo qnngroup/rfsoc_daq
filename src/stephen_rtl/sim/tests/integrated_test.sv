@@ -1,24 +1,23 @@
 `default_nettype none
 `timescale 1ns / 1ps
-// import mem_layout_pkg::*;
-`include "mem_layout.svh"
 
 module integrated_test();
 	localparam TIMEOUT = 1000;
+	localparam VERBOSE = sim_util_pkg::VERBOSE;
 	int total_errors = 0; 
 
-	sim_util_pkg::debug debug = new(sim_util_pkg::DEBUG,1,"INTEGRATED_TEST"); 
+	sim_util_pkg::debug debug = new(VERBOSE,1,"INTEGRATED_TEST"); 
 
-	axi_transmit_test #(.IS_INTEGRATED(1'b1)) at_test();
-	axi_recieve_test #(.IS_INTEGRATED(1'b1)) ar_test();
-	slave_test #(.IS_INTEGRATED(1'b1)) slave_test();
-	dac_intf_test #(.IS_INTEGRATED(1'b1)) dac_intf_test();
-	intrp_test #(.IS_INTEGRATED(1'b1)) intrp_test();
-	bram_intf_test #(.IS_INTEGRATED(1'b1)) bram_intf_test();
-	cdc_test #(.IS_INTEGRATED(1'b1)) cdc_test();
-	adc_intf_test #(.IS_INTEGRATED(1'b1)) adc_intf_test();
-	pwl_test #(.IS_INTEGRATED(1'b1)) pwl_test();
-	top_test #(.IS_INTEGRATED(1'b1)) top_test();
+	axi_transmit_test #(.IS_INTEGRATED(1'b1),  .VERBOSE(VERBOSE)) at_test();
+	axi_recieve_test  #(.IS_INTEGRATED(1'b1),  .VERBOSE(VERBOSE)) ar_test();
+	slave_test     	  #(.IS_INTEGRATED(1'b1),  .VERBOSE(VERBOSE)) slave_test();
+	dac_intf_test  	  #(.IS_INTEGRATED(1'b1),  .VERBOSE(VERBOSE)) dac_intf_test();
+	intrp_test     	  #(.IS_INTEGRATED(1'b1),  .VERBOSE(VERBOSE)) intrp_test();
+	bram_intf_test 	  #(.IS_INTEGRATED(1'b1),  .VERBOSE(VERBOSE)) bram_intf_test();
+	cdc_test       	  #(.IS_INTEGRATED(1'b1),  .VERBOSE(VERBOSE)) cdc_test();
+	adc_intf_test  	  #(.IS_INTEGRATED(1'b1),  .VERBOSE(VERBOSE)) adc_intf_test();
+	pwl_test       	  #(.IS_INTEGRATED(1'b1),  .VERBOSE(VERBOSE)) pwl_test();
+	top_test       	  #(.IS_INTEGRATED(1'b1),  .VERBOSE(VERBOSE)) top_test();
 
 	`define any_timed_out at_test.debug.timed_out || ar_test.debug.timed_out || slave_test.debug.timed_out || dac_intf_test.debug.timed_out \
 						  || intrp_test.debug.timed_out || cdc_test.debug.timed_out || adc_intf_test.debug.timed_out || pwl_test.debug.timed_out\
@@ -58,7 +57,7 @@ module integrated_test();
 		       	total_errors+=pwl_test.debug.get_error_count();		
 
 		       	top_test.run_tests();
-		       	total_errors+=pwl_test.debug.get_error_count();		       		       
+		       	total_errors+=top_test.debug.get_error_count();		       		       
 		    end 
 		    begin
 		    	while (1) begin

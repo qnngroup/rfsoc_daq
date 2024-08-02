@@ -52,6 +52,7 @@ package sim_util_pkg;
       timeout_reset <= 0;
       @(posedge clk); 
     endtask 
+    
     task automatic timeout_watcher(ref logic clk, input int TIMEOUT);
       fork   
         begin : timeout_thread 
@@ -240,5 +241,34 @@ package sim_util_pkg;
     endtask
 
   endclass
+
+  task automatic flash_signal(ref logic sig, ref logic clk);
+    @(posedge clk); 
+    sig = 1;
+    @(posedge clk);
+    sig = 0;
+  endtask 
+
+  function automatic int generate_rand_seed();
+    int file;
+    int rand_seed;
+    //Why doesn't $RANDOM work...?
+    $system("date > tmp_date.txt ; cat tmp_date.txt | grep -o '[0-9]' | paste -sd+ | bc > ans.txt ; rm tmp_date.txt");
+    file = $fopen("ans.txt", "r");
+    if (file != 0) begin
+        string line;
+        while ($fgets(line, file)) rand_seed = line.atoi(); 
+        $fclose(file);
+    end else begin
+        $display("Error opening temp file for reading.");
+        return $time; 
+    end
+    $system("rm ans.txt");
+    return rand_seed+$time;
+  endfunction
+
+  task automatic delay(ref logic clk,input int nclks=100); 
+    repeat(nclks) @(posedge clk);
+  endtask
 
 endpackage

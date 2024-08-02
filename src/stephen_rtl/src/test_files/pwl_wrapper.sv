@@ -3,9 +3,8 @@ module pwl_wrapper #(DMA_DATA_WIDTH = 48, SAMPLE_WIDTH = 16, BATCH_WIDTH = 256, 
                     (input clk, rstn, 
                      output valid_batch_out,
                      output[SAMPLE_WIDTH-1:0][SAMPLE_WIDTH-1:0] batch_out);
-    localparam BATCH_SAMPLES = BATCH_WIDTH/SAMPLE_WIDTH;
     localparam BUFF_LEN = 6;
-  
+
     logic rst,halt,run,start;
     logic dac0_rdy;
     logic[BUFF_LEN-1:0][DMA_DATA_WIDTH-1:0] dma_buff;

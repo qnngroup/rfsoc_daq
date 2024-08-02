@@ -1,9 +1,9 @@
 `timescale 1ns / 1ps
 `default_nettype none
-import mem_layout_pkg::*;
 
 module axi_transmit #(parameter BUS_WIDTH = 32, parameter DATA_WIDTH = 32)
 					 (input wire clk, rst, Recieve_Transmit_IF.transmit_bus bus);
+					 
 	localparam LAST_EVEN_CUT = (BUS_WIDTH < DATA_WIDTH && DATA_WIDTH%BUS_WIDTH != 0)? (DATA_WIDTH-(DATA_WIDTH%BUS_WIDTH)) : 0;
 	enum logic {IDLE, TRANSMITTING} axiT_state;
 	logic[DATA_WIDTH-1:0] data_to_send_buff; 
@@ -39,11 +39,7 @@ module axi_transmit #(parameter BUS_WIDTH = 32, parameter DATA_WIDTH = 32)
 				IDLE: begin
 					if (transmit) begin
 						trans_ptr <= BUS_WIDTH;
-						if (BUS_WIDTH >= DATA_WIDTH) bus.packet <= (bus.send)? bus.data_to_send[DATA_WIDTH-1:0] : data_to_send_buff[DATA_WIDTH-1:0];
-						else begin
-							bus.packet <= (bus.send)? bus.data_to_send[0+:BUS_WIDTH] : data_to_send_buff[0+:BUS_WIDTH];
-							axiT_state <= TRANSMITTING;
-						end 
+						if (BUS_WIDTH < DATA_WIDTH) axiT_state <= TRANSMITTING;
 					end 
 				end 
 

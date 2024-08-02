@@ -1,8 +1,6 @@
 `default_nettype none
 `timescale 1ns / 1ps
-// import mem_layout_pkg::*;
-`include "mem_layout.svh"
-// import mem_layout_pkg::flash_signal;
+
 module pwl_tb #(parameter SAMPLE_WIDTH, parameter DMA_DATA_WIDTH, parameter BATCH_SIZE)
 					   (input wire clk,
 					   	input wire valid_batch, 
@@ -18,7 +16,7 @@ module pwl_tb #(parameter SAMPLE_WIDTH, parameter DMA_DATA_WIDTH, parameter BATC
 	task automatic init();
 		{halt, run_pwl} <= 0;
 		{dma.data,dma.valid,dma.last} <= 0;
-		`flash_signal(rst,clk2);
+		sim_util_pkg::flash_signal(rst,clk2);
 	endtask 
 
 	function void clear_wave();
@@ -34,7 +32,7 @@ module pwl_tb #(parameter SAMPLE_WIDTH, parameter DMA_DATA_WIDTH, parameter BATC
 
 	task automatic halt_pwl();
 		run_pwl <= 0;
-		`flash_signal(halt,clk2);
+		sim_util_pkg::flash_signal(halt,clk2);
 	endtask
 
 	task automatic send_buff(input logic[DMA_DATA_WIDTH-1:0] dma_buff [$], input bit osc_valid = 0, input int osc_delay_range[1:0] = {0,5});

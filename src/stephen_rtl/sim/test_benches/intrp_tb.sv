@@ -1,8 +1,8 @@
 `default_nettype none
 `timescale 1ns / 1ps
-// import mem_layout_pkg::*;
-`include "mem_layout.svh"
-// import mem_layout_pkg::flash_signal;
+
+
+
 module intrp_tb #(parameter BATCH_SIZE, parameter SAMPLE_WIDTH, parameter INTERPOLATER_DELAY, parameter M, parameter N)
 					   (input wire clk,
 	                    input wire[BATCH_SIZE-1:0][SAMPLE_WIDTH-1:0] intrp_batch,
@@ -52,7 +52,7 @@ module intrp_tb #(parameter BATCH_SIZE, parameter SAMPLE_WIDTH, parameter INTERP
     	slope <= float_to_fixed(slope_in); 
     	x <= x_in; 
         @(posedge clk);
-    	`flash_signal(intrp_pipe[0],clk);
+    	sim_util_pkg::flash_signal(intrp_pipe[0],clk);
     	while (~intrp_batch_valid) @(posedge clk); 
     	for (int i = 0; i < BATCH_SIZE; i++) begin
     		expc_sample = expc_batch.pop_back(); 

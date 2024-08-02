@@ -1,8 +1,10 @@
 `timescale 1ns / 1ps
 `default_nettype none
-import mem_layout_pkg::*;
 
-module axi_receive #(parameter BUS_WIDTH = 32, parameter DATA_WIDTH = 16)
+import mem_layout_pkg::ABS_ADDR_CEILING;
+import mem_layout_pkg::ABS_ID_CEILING;
+import mem_layout_pkg::ADDR2ID;
+module axi_receive #(parameter BUS_WIDTH, DATA_WIDTH)
 					(input wire clk, rst,
 					 input wire is_addr,
 					 Recieve_Transmit_IF.receive_bus bus);
@@ -10,8 +12,8 @@ module axi_receive #(parameter BUS_WIDTH = 32, parameter DATA_WIDTH = 16)
 	logic[$clog2((BUS_WIDTH > DATA_WIDTH)? BUS_WIDTH : DATA_WIDTH):0] buff_ptr;
 
 	always_comb begin 
-		if (BUS_WIDTH > DATA_WIDTH) mem_id = (buff <= `ABS_ADDR_CEILING)? `ADDR2ID(buff) : `ABS_ID_CEILING; 
-		else mem_id = (buff <= `ABS_ADDR_CEILING)? `ADDR2ID(buff) : `ABS_ID_CEILING; 
+		if (BUS_WIDTH > DATA_WIDTH) mem_id = (buff <= ABS_ADDR_CEILING)? ADDR2ID(buff) : ABS_ID_CEILING; 
+		else mem_id = (buff <= ABS_ADDR_CEILING)? ADDR2ID(buff) : ABS_ID_CEILING; 
 
 		bus.valid_data = buff_ptr >= DATA_WIDTH; 
 		if (bus.valid_data) bus.data = (is_addr)? mem_id : buff;

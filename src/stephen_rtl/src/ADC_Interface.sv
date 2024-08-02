@@ -1,20 +1,19 @@
 `timescale 1ns / 1ps
 `default_nettype none
-`include "mem_layout.svh"
-// import mem_layout_pkg::*;
 
-module ADC_Interface (input wire clk,rst,
-					  input wire[`MEM_SIZE-1:0] fresh_bits,
-					  input wire[`MEM_SIZE-1:0][`WD_DATA_WIDTH-1:0] read_resps,
-					  Axis_IF.stream_in bufft, 
-					  Axis_IF.stream_out buffc, 
-					  Axis_IF.stream_out cmc, 
-					  Axis_IF.stream_out sdc);
+module ADC_Interface #(parameter DATAW, SDC_SAMPLES, BUFF_CONFIG_WIDTH, CHAN_SAMPLES, BUFF_SAMPLES)
+					  (input wire clk,rst,
+					   input wire[(mem_layout_pkg::MEM_SIZE)-1:0] fresh_bits,
+					   input wire[(mem_layout_pkg::MEM_SIZE)-1:0][DATAW-1:0] read_resps,
+					   Axis_IF.stream_in bufft,
+					   Axis_IF.stream_out buffc, 
+					   Axis_IF.stream_out cmc, 
+					   Axis_IF.stream_out sdc);
 
-	logic[`SDC_SAMPLES-1:0][`WD_DATA_WIDTH-1:0] sdc_reg; 
-	logic[`BUFF_CONFIG_WIDTH-1:0] buff_config_reg; 
-	logic[`CHAN_SAMPLES-1:0][`WD_DATA_WIDTH-1:0] channel_mux_reg; 
-	logic[`BUFF_SAMPLES-1:0][`WD_DATA_WIDTH-1:0] buff_timestamp_reg; 
+	logic[SDC_SAMPLES-1:0][DATAW-1:0] sdc_reg; 
+	logic[BUFF_CONFIG_WIDTH-1:0] buff_config_reg; 
+	logic[CHAN_SAMPLES-1:0][DATAW-1:0] channel_mux_reg; 
+	logic[BUFF_SAMPLES-1:0][DATAW-1:0] buff_timestamp_reg; 
 	logic buff_timestamp_writereq;
 	logic state_rdy;
 
@@ -44,19 +43,19 @@ module ADC_Interface (input wire clk,rst,
 			if (cmc.valid && cmc.ready) cmc.valid <= 0;
 			case(adcState)
 				IDLE: begin
-					if (fresh_bits[`SDC_VALID_ID]) begin
+					if (fresh_bits[mem_layout_pkg::SDC_VALID_ID]) begin
 						if (state_rdy) begin
 							state_rdy <= 0;
 							adcState <= SEND_SDC; 
 						end else state_rdy <= 1; 
 					end else 
-					if (fresh_bits[`BUFF_CONFIG_ID]) begin
+					if (fresh_bits[mem_layout_pkg::BUFF_CONFIG_ID]) begin
 						if (state_rdy) begin
 							state_rdy <= 0;
 							adcState <= SEND_BUFFC; 
 						end else state_rdy <= 1; 
 					end else 
-					if (fresh_bits[`CHAN_MUX_VALID_ID]) begin
+					if (fresh_bits[mem_layout_pkg::CHAN_MUX_VALID_ID]) begin
 						if (state_rdy) begin
 							state_rdy <= 0;
 							adcState <= SEND_CHAN; 
@@ -64,17 +63,17 @@ module ADC_Interface (input wire clk,rst,
 					end
 				end
 				SEND_SDC: begin
-					for (int i = 0; i < `SDC_SAMPLES; i++) sdc_reg[i] <= read_resps[`SDC_BASE_ID+i]; 
+					for (int i = 0; i < SDC_SAMPLES; i++) sdc_reg[i] <= read_resps[(mem_layout_pkg::SDC_BASE_ID)+i]; 
 					sdc.valid <= 1; 
 					adcState <= IDLE; 
 				end 
 				SEND_BUFFC: begin
-					buff_config_reg <= read_resps[`BUFF_CONFIG_ID]; 
+					buff_config_reg <= read_resps[mem_layout_pkg::BUFF_CONFIG_ID]; 
 					buffc.valid <= 1; 
 					adcState <= IDLE; 
 				end 
 				SEND_CHAN: begin
-					for (int i = 0; i < `CHAN_SAMPLES; i++) channel_mux_reg[i] <= read_resps[`CHAN_MUX_BASE_ID+i]; 
+					for (int i = 0; i < CHAN_SAMPLES; i++) channel_mux_reg[i] <= read_resps[(mem_layout_pkg::CHAN_MUX_BASE_ID)+i]; 
 					cmc.valid <= 1;
 					adcState <= IDLE;
 				end 

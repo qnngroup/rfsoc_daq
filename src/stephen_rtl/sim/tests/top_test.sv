@@ -1,36 +1,34 @@
 `default_nettype none
 `timescale 1ns / 1ps
-// import mem_layout_pkg::*;
-`include "mem_layout.svh"
 
-module top_test #(parameter IS_INTEGRATED = 0)();
+module top_test #(parameter IS_INTEGRATED = 0, parameter VERBOSE=sim_util_pkg::DEBUG)();
 	localparam TIMEOUT = 8000;
 	localparam TEST_NUM = 10;
 	localparam int PS_CLK_RATE_MHZ = 150;
     localparam int DAC_CLK_RATE_MHZ = 384;
     localparam MAN_SEED = 0;
-    localparam SKIP_LONG_TEST = 0;
+    localparam SKIP_LONG_TEST = 1;
 
-    sim_util_pkg::debug debug = new(sim_util_pkg::DEBUG,TEST_NUM,"TOP", IS_INTEGRATED); 
+    sim_util_pkg::debug debug = new(VERBOSE,TEST_NUM,"TOP", IS_INTEGRATED); 
 
-    logic ps_clk, ps_rst; 
+    logic ps_clk, ps_rst;
     logic dac_clk, dac_rst; 
-    logic[`A_BUS_WIDTH-1:0] raddr_packet, waddr_packet;
-    logic[`WD_BUS_WIDTH-1:0] rdata_packet, wdata_packet;
+    logic[(axi_params_pkg::A_BUS_WIDTH)-1:0] raddr_packet, waddr_packet;
+    logic[(axi_params_pkg::WD_BUS_WIDTH)-1:0] rdata_packet, wdata_packet;
     logic[1:0] wresp_out, rresp_out; 
     logic raddr_valid_packet, waddr_valid_packet, wdata_valid_packet, rdata_valid_out, wresp_valid_out, rresp_valid_out, ps_wresp_rdy, ps_read_rdy; 
-    logic[`DMA_DATA_WIDTH-1:0] pwl_tdata;
-    logic[(`DMA_DATA_WIDTH/8)-1:0] pwl_tkeep;
+    logic[(daq_params_pkg::DMA_DATA_WIDTH)-1:0] pwl_tdata;
+    logic[((daq_params_pkg::DMA_DATA_WIDTH)/8)-1:0] pwl_tkeep;
     logic pwl_tlast, pwl_tready, pwl_tvalid; 
-    logic[`BATCH_WIDTH-1:0] dac_batch;
+    logic[(daq_params_pkg::BATCH_WIDTH)-1:0] dac_batch;
     logic valid_dac_batch, dac0_rdy;
     logic pl_rstn;
-    logic[`SDC_DATA_WIDTH-1:0] sdc_data_out;
-    logic[`CHANNEL_MUX_WIDTH-1:0] cmc_data_out;
-    logic[`BUFF_CONFIG_WIDTH-1:0] buffc_data_out;
+    logic[(daq_params_pkg::SDC_DATA_WIDTH)-1:0] sdc_data_out;
+    logic[(daq_params_pkg::CHANNEL_MUX_WIDTH)-1:0] cmc_data_out;
+    logic[(daq_params_pkg::BUFF_CONFIG_WIDTH)-1:0] buffc_data_out;
     logic sdc_valid_out, cmc_valid_out, buffc_valid_out;
     logic sdc_rdy_in, cmc_rdy_in, buffc_rdy_in;
-    logic[`BUFF_TIMESTAMP_WIDTH-1:0] bufft_data_in;
+    logic[(daq_params_pkg::BUFF_TIMESTAMP_WIDTH)-1:0] bufft_data_in;
     logic bufft_valid_in;
     logic bufft_rdy_out;
     int total_errors = 0;
@@ -57,7 +55,7 @@ module top_test #(parameter IS_INTEGRATED = 0)();
           .bufft_rdy_out(bufft_rdy_out),
           .pwl_tdata(pwl_tdata), .pwl_tkeep(pwl_tkeep), .pwl_tlast(pwl_tlast), .pwl_tvalid(pwl_tvalid), .pwl_tready(pwl_tready));
 
-    top_tb #(.BATCH_SIZE(`BATCH_SAMPLES), .A_BUS_WIDTH(`A_BUS_WIDTH), .WD_BUS_WIDTH(`WD_BUS_WIDTH), .DMA_DATA_WIDTH(`DMA_DATA_WIDTH), .WD_WIDTH(`WD_DATA_WIDTH), .SDC_DATA_WIDTH(`SDC_DATA_WIDTH), .BUFF_CONFIG_WIDTH(`BUFF_CONFIG_WIDTH), .CHANNEL_MUX_WIDTH(`CHANNEL_MUX_WIDTH), .BUFF_TIMESTAMP_WIDTH(`BUFF_TIMESTAMP_WIDTH))
+    top_tb 
     tb_i(.ps_clk(ps_clk), .ps_rst(ps_rst), .pl_rstn(pl_rstn),
          .dac_clk(dac_clk), .dac_rst(dac_rst),
          .dac0_rdy(dac0_rdy), .dac_batch(dac_batch), .valid_dac_batch(valid_dac_batch),
@@ -108,7 +106,7 @@ module top_test #(parameter IS_INTEGRATED = 0)();
             seed = MAN_SEED;
             debug.displayc($sformatf("Using manually selected seed value %0d",seed),.msg_color(sim_util_pkg::RED),.msg_verbosity(sim_util_pkg::VERBOSE));
         end else begin
-            seed = generate_rand_seed();
+            seed = sim_util_pkg::generate_rand_seed();
             debug.displayc($sformatf("Using random seed value %0d",seed),.msg_color(sim_util_pkg::BLUE),.msg_verbosity(sim_util_pkg::VERBOSE));            
         end
         $srandom(seed);
@@ -194,4 +192,15 @@ module top_test #(parameter IS_INTEGRATED = 0)();
 endmodule 
 
 `default_nettype wire
+
+/*
+    Trying to explain to myself why I made these changes, and what they are
+    1. Talking about the skeleton for a general test
+    2. Talking about the general probes I'm making in my system at a high level
+    3. Explaining why what I was doing before wasnt working 
+    4. Readability modularity and refactorability.
+
+    1. GPIB for Linux driver, use pynq board to connect to a SRS 
+    2. System wide changes
+*/
 

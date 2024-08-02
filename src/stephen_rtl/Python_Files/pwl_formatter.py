@@ -90,7 +90,7 @@ def mk_expected_out(path, plot = True, display_in_ns = True):
 		plt.scatter(x,y)
 
 	buff_len = len(batches)
-	temp = f"logic[`PWL_BRAM_DEPTH-1:0][`BATCH_SAMPLES-1:0][`SAMPLE_WIDTH-1:0] expected_batches;\nassign expected_batches = {{0,"
+	temp = f"logic[PWL_BRAM_DEPTH-1:0][BATCH_SIZE-1:0][SAMPLE_WIDTH-1:0] expected_batches;\nassign expected_batches = {{0,"
 	batches_codes,batches_samples = temp,temp
 	b_r = batches[:]
 	b_r.reverse()

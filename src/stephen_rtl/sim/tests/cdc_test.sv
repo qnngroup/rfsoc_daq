@@ -1,9 +1,9 @@
 `default_nettype none
 `timescale 1ns / 1ps
-// import mem_layout_pkg::*;
-`include "mem_layout.svh"
 
-module cdc_test #(parameter IS_INTEGRATED = 0)();
+
+
+module cdc_test #(parameter IS_INTEGRATED = 0, parameter VERBOSE=sim_util_pkg::DEBUG)();
 	localparam TIMEOUT = 1000;
 	localparam TEST_NUM = 4; 
 	localparam int PS_CLK_RATE_MHZ = 150;
@@ -12,7 +12,7 @@ module cdc_test #(parameter IS_INTEGRATED = 0)();
     localparam PS_CMD_WIDTH = 271;
     localparam DAC_RSP_WIDTH = 65;
 
-    sim_util_pkg::debug debug = new(sim_util_pkg::DEBUG,TEST_NUM,"CDC_DATA_HANDSHAKE", IS_INTEGRATED); 
+    sim_util_pkg::debug debug = new(VERBOSE,TEST_NUM,"CDC_DATA_HANDSHAKE", IS_INTEGRATED); 
     
     logic ps_clk, ps_rst; 
     logic dac_clk, dac_rst;
@@ -76,7 +76,7 @@ module cdc_test #(parameter IS_INTEGRATED = 0)();
             seed = MAN_SEED;
             debug.displayc($sformatf("Using manually selected seed value %0d",seed),.msg_color(sim_util_pkg::BLUE),.msg_verbosity(sim_util_pkg::VERBOSE));
         end else begin
-            seed = generate_rand_seed();
+            seed = sim_util_pkg::generate_rand_seed();
             debug.displayc($sformatf("Using random seed value %0d",seed),.msg_color(sim_util_pkg::BLUE),.msg_verbosity(sim_util_pkg::VERBOSE));            
         end
         $srandom(seed);

@@ -1,19 +1,18 @@
 `timescale 1ns / 1ps
 `default_nettype none
 
-module trig_wave_gen #(parameter SAMPLE_WIDTH = 16, parameter BATCH_WIDTH = 1024) 
+module trig_wave_gen #(parameter SAMPLE_WIDTH, BATCH_WIDTH, BATCH_SIZE) 
 			 		  (input wire clk,rst,
 			 		   input wire run,
 			 		   output logic[BATCH_WIDTH-1:0] batch_out,batch_out_comb);
-	localparam BATCH_SAMPLES = BATCH_WIDTH/SAMPLE_WIDTH; 	
 	logic[SAMPLE_WIDTH-1:0] batch_start, max_val; 
-	logic[BATCH_SAMPLES-1:0][SAMPLE_WIDTH-1:0] batch, batch_comb; 
+	logic[BATCH_SIZE-1:0][SAMPLE_WIDTH-1:0] batch, batch_comb; 
 	enum logic {RISE,FALL} trigGenState;
 
 	assign batch_out = (run)? batch : 0;
 	assign batch_out_comb = (run)? batch_comb : 0;
 	assign max_val = -1 & ~(1'b1 << SAMPLE_WIDTH-1); 
-	logic signed[BATCH_SAMPLES-1:0][SAMPLE_WIDTH-1:0] nxt_batch; 
+	logic signed[BATCH_SIZE-1:0][SAMPLE_WIDTH-1:0] nxt_batch; 
 	logic signed[SAMPLE_WIDTH-1:0] nxt_batch_start; 
 
 	always_comb begin
@@ -21,8 +20,8 @@ module trig_wave_gen #(parameter SAMPLE_WIDTH = 16, parameter BATCH_WIDTH = 1024
 		else begin
 			case(trigGenState)
 				RISE: begin
-	    			nxt_batch_start = $signed(batch_start) + $signed(BATCH_SAMPLES);
-					for (int i = 0; i < BATCH_SAMPLES; i++) begin 
+	    			nxt_batch_start = $signed(batch_start) + $signed(BATCH_SIZE);
+					for (int i = 0; i < BATCH_SIZE; i++) begin 
 						nxt_batch[i] = $signed(batch_start) + $signed(i);
 		    			if (nxt_batch[i] < 0) batch_comb[i] = max_val; 
 		    			else batch_comb[i] = nxt_batch[i];
@@ -30,8 +29,8 @@ module trig_wave_gen #(parameter SAMPLE_WIDTH = 16, parameter BATCH_WIDTH = 1024
 				end 
 
 				FALL: begin
-					nxt_batch_start = $signed(batch_start) - $signed(BATCH_SAMPLES);
-					for (int i = 0; i < BATCH_SAMPLES; i++) begin 
+					nxt_batch_start = $signed(batch_start) - $signed(BATCH_SIZE);
+					for (int i = 0; i < BATCH_SIZE; i++) begin 
 						nxt_batch[i] = $signed(batch_start) - $signed(i);
 		    			if (nxt_batch[i] < 0) batch_comb[i] = 0; 
 		    			else batch_comb[i] = nxt_batch[i];
@@ -54,7 +53,7 @@ module trig_wave_gen #(parameter SAMPLE_WIDTH = 16, parameter BATCH_WIDTH = 1024
 	    					batch_start <= max_val; 
 	    					trigGenState <= FALL;	 
 	    				end
-	    				else batch_start <= batch_start + BATCH_SAMPLES; 
+	    				else batch_start <= batch_start + BATCH_SIZE; 
 	    				batch <= batch_comb;
 			    	end 
 
@@ -63,7 +62,7 @@ module trig_wave_gen #(parameter SAMPLE_WIDTH = 16, parameter BATCH_WIDTH = 1024
 	    					batch_start <= 0; 
 	    					trigGenState <= RISE;	 
 	    				end
-	    				else batch_start <= batch_start - BATCH_SAMPLES; 
+	    				else batch_start <= batch_start - BATCH_SIZE; 
 	    				batch <= batch_comb; 
 			    	end 
 			    endcase

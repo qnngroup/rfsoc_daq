@@ -1,33 +1,31 @@
 `default_nettype none
 `timescale 1ns / 1ps
-// import mem_layout_pkg::*;
-`include "mem_layout.svh"
 
-module bram_intf_test #(parameter IS_INTEGRATED = 0)();
+module bram_intf_test #(parameter IS_INTEGRATED = 0, parameter VERBOSE=sim_util_pkg::DEBUG)();
 	localparam TIMEOUT = 5000;
 	localparam TEST_NUM = 7;
 	localparam int CLK_RATE_MHZ = 150;
     localparam MAN_SEED = 0; 
     localparam BRAM_DEPTH = 100; 
     localparam BRAM_DELAY = 3; 
-    localparam DATA_WIDTH = `DMA_DATA_WIDTH;
+    localparam DATAW = daq_params_pkg::DMA_DATA_WIDTH;
 
-    sim_util_pkg::debug debug = new(sim_util_pkg::DEBUG,TEST_NUM,"BRAM_INTERFACE", IS_INTEGRATED); 
+    sim_util_pkg::debug debug = new(VERBOSE,TEST_NUM,"BRAM_INTERFACE", IS_INTEGRATED); 
 
     logic clk, rst; 
     int total_errors = 0;
     int curr_err,seed; 
     logic[$clog2(BRAM_DEPTH)-1:0] addr;
-    logic[DATA_WIDTH-1:0] line_in;
+    logic[DATAW-1:0] line_in;
     logic we, en;
     logic generator_mode, rst_gen_mode;
     logic next;
-    logic[DATA_WIDTH-1:0] line_out;
+    logic[DATAW-1:0] line_out;
     logic valid_line_out;
     logic[$clog2(BRAM_DEPTH)-1:0] generator_addr;
     logic write_rdy;
 
-    bram_interface #(.DATA_WIDTH(DATA_WIDTH), .BRAM_DEPTH(BRAM_DEPTH), .BRAM_DELAY(BRAM_DELAY))
+    bram_interface #(.DATA_WIDTH(DATAW), .BRAM_DEPTH(BRAM_DEPTH), .BRAM_DELAY(BRAM_DELAY))
     dut_i(.clk(clk), .rst(rst),
           .addr(addr), .line_in(line_in),
           .we(we), .en(en), .generator_mode(generator_mode),
@@ -35,7 +33,7 @@ module bram_intf_test #(parameter IS_INTEGRATED = 0)();
           .line_out(line_out), .valid_line_out(valid_line_out),
           .generator_addr(generator_addr), .write_rdy(write_rdy));
 
-    bram_intf_tb #(.DATA_WIDTH(DATA_WIDTH), .BRAM_DEPTH(BRAM_DEPTH))
+    bram_intf_tb #(.DATA_WIDTH(DATAW), .BRAM_DEPTH(BRAM_DEPTH))
     tb_i(.clk(clk),
          .line_out(line_out), .valid_line_out(valid_line_out),
          .generator_addr(generator_addr), .write_rdy(write_rdy),
@@ -70,7 +68,7 @@ module bram_intf_test #(parameter IS_INTEGRATED = 0)();
             seed = MAN_SEED;
             debug.displayc($sformatf("Using manually selected seed value %0d",seed),.msg_color(sim_util_pkg::BLUE),.msg_verbosity(sim_util_pkg::VERBOSE));
         end else begin
-            seed = generate_rand_seed();
+            seed = sim_util_pkg::generate_rand_seed();
             debug.displayc($sformatf("Using random seed value %0d",seed),.msg_color(sim_util_pkg::BLUE),.msg_verbosity(sim_util_pkg::VERBOSE));            
         end
         $srandom(seed);
@@ -129,7 +127,7 @@ module bram_intf_test #(parameter IS_INTEGRATED = 0)();
         // TEST 7
         debug.displayc($sformatf("%0d: Reset gen_mode and restart prev test",debug.test_num), .msg_verbosity(sim_util_pkg::VERBOSE));
         curr_err = debug.get_error_count();
-        flash_signal(rst_gen_mode,clk);  
+        sim_util_pkg::flash_signal(rst_gen_mode,clk);  
         tb_i.check_bram_vals(debug,3,.osc_next(1)); 
         combine_errors();
         debug.check_test(curr_err == debug.get_error_count(), .has_parts(1));

@@ -1,32 +1,32 @@
 `default_nettype none
 `timescale 1ns / 1ps
-// import mem_layout_pkg::*;
-`include "mem_layout.svh"
 
-module slave_test #(parameter IS_INTEGRATED = 0)();
+import mem_layout_pkg::*;
+import axi_params_pkg::*;
+module slave_test #(parameter IS_INTEGRATED = 0, parameter VERBOSE=sim_util_pkg::DEBUG)();
 	localparam TIMEOUT = 1000;
 	localparam TEST_NUM = 9*2 + 3; 
 	localparam int CLK_RATE_MHZ = 150;
     localparam MAN_SEED = 0; 
 
-    sim_util_pkg::debug debug = new(sim_util_pkg::DEBUG,TEST_NUM,"SLAVE", IS_INTEGRATED); 
+    sim_util_pkg::debug debug = new(VERBOSE,TEST_NUM,"SLAVE", IS_INTEGRATED); 
 
     logic clk, rst; 
     logic clr_rd_out; 
     int curr_err, total_errors; 
     bit halt_osc = 0;
     int seed;
-    logic[`MEM_SIZE-1:0] rtl_write_reqs, rtl_read_reqs, fresh_bits, rtl_rdy; 
-    logic[`MEM_SIZE-1:0][`WD_DATA_WIDTH-1:0] rtl_wd_in, rtl_rd_out;
-    logic[`WD_DATA_WIDTH-1:0] rdata, wdata;
-    Recieve_Transmit_IF #(`A_BUS_WIDTH, `A_DATA_WIDTH)   wa_if (); 
-    Recieve_Transmit_IF #(`WD_BUS_WIDTH, `WD_DATA_WIDTH) wd_if (); 
-    Recieve_Transmit_IF #(`A_BUS_WIDTH, `A_DATA_WIDTH)   ra_if (); 
-    Recieve_Transmit_IF #(`WD_BUS_WIDTH, `WD_DATA_WIDTH) rd_if (); 
-    Recieve_Transmit_IF #(2,2) wr_if (); 
-    Recieve_Transmit_IF #(2,2) rr_if ();
+    logic[MEM_SIZE-1:0] rtl_write_reqs, rtl_read_reqs, fresh_bits, rtl_rdy; 
+    logic[MEM_SIZE-1:0][WD_DATA_WIDTH-1:0] rtl_wd_in, rtl_rd_out;
+    logic[WD_DATA_WIDTH-1:0] rdata, wdata;
+    Recieve_Transmit_IF #(A_BUS_WIDTH, A_DATA_WIDTH)   wa_if (); 
+    Recieve_Transmit_IF #(WD_BUS_WIDTH, WD_DATA_WIDTH) wd_if (); 
+    Recieve_Transmit_IF #(A_BUS_WIDTH, A_DATA_WIDTH)   ra_if (); 
+    Recieve_Transmit_IF #(WD_BUS_WIDTH, WD_DATA_WIDTH) rd_if (); 
+    Recieve_Transmit_IF #(RESP_DATA_WIDTH, RESP_DATA_WIDTH) wr_if ();  
+    Recieve_Transmit_IF #(RESP_DATA_WIDTH, RESP_DATA_WIDTH) rr_if ();
 
-    slave_tb #(.MEM_SIZE(`MEM_SIZE), .DATA_WIDTH(`WD_DATA_WIDTH), .ADDR_WIDTH(`A_DATA_WIDTH))
+    slave_tb 
     tb_i(.clk(clk),
          .wa_if(wa_if), .wd_if(wd_if),
          .ra_if(ra_if), .rd_if(rd_if),
@@ -35,7 +35,7 @@ module slave_test #(parameter IS_INTEGRATED = 0)();
          .rtl_write_reqs(rtl_write_reqs), .rtl_read_reqs(rtl_read_reqs), .rtl_rdy(rtl_rdy),
          .rtl_wd_in(rtl_wd_in),           .rtl_rd_out(rtl_rd_out), .fresh_bits(fresh_bits));
 
-    axi_slave #(.A_BUS_WIDTH(`A_BUS_WIDTH), .A_DATA_WIDTH(`A_DATA_WIDTH), .WD_BUS_WIDTH(`WD_BUS_WIDTH), .WD_DATA_WIDTH(`WD_DATA_WIDTH))
+    axi_slave 
     dut_i(.clk(clk), .rst(rst),
           .waddr_if(wa_if), .wdata_if(wd_if),
           .raddr_if(ra_if), .rdata_if(rd_if),
@@ -44,21 +44,21 @@ module slave_test #(parameter IS_INTEGRATED = 0)();
           .clr_rd_out(clr_rd_out),         .rtl_rdy(rtl_rdy),
           .rtl_wd_in(rtl_wd_in),           .rtl_rd_out(rtl_rd_out), .fresh_bits(fresh_bits));
 
-        axi_receive #(.BUS_WIDTH(2), .DATA_WIDTH(2))
+        axi_receive #(.BUS_WIDTH(RESP_DATA_WIDTH), .DATA_WIDTH(RESP_DATA_WIDTH))
         ps_wresp_recieve(.clk(clk), .rst(rst),
                          .bus(wr_if.receive_bus),
                          .is_addr(1'b0)); 
-        axi_receive #(.BUS_WIDTH(`WD_BUS_WIDTH), .DATA_WIDTH(`WD_DATA_WIDTH))
+        axi_receive #(.BUS_WIDTH(WD_BUS_WIDTH), .DATA_WIDTH(WD_DATA_WIDTH))
         ps_rdata_recieve(.clk(clk), .rst(rst),
                          .bus(rd_if.receive_bus),
                          .is_addr(1'b0));
-        axi_transmit #(.BUS_WIDTH(`WD_BUS_WIDTH), .DATA_WIDTH(`WD_DATA_WIDTH))
+        axi_transmit #(.BUS_WIDTH(WD_BUS_WIDTH), .DATA_WIDTH(WD_DATA_WIDTH))
         ps_wdata_transmit(.clk(clk), .rst(rst),
                           .bus(wd_if.transmit_bus)); 
-        axi_transmit #(.BUS_WIDTH(`A_BUS_WIDTH), .DATA_WIDTH(`A_DATA_WIDTH))
+        axi_transmit #(.BUS_WIDTH(A_BUS_WIDTH), .DATA_WIDTH(A_DATA_WIDTH))
         ps_waddr_transmit(.clk(clk), .rst(rst),
                           .bus(wa_if.transmit_bus));
-        axi_transmit #(.BUS_WIDTH(`A_BUS_WIDTH), .DATA_WIDTH(`A_DATA_WIDTH))
+        axi_transmit #(.BUS_WIDTH(A_BUS_WIDTH), .DATA_WIDTH(A_DATA_WIDTH))
         ps_raddr_transmit(.clk(clk), .rst(rst),
                           .bus(ra_if.transmit_bus)); 
 
@@ -88,13 +88,13 @@ module slave_test #(parameter IS_INTEGRATED = 0)();
             seed = MAN_SEED;
             debug.displayc($sformatf("Using manually selected seed value %0d",seed),.msg_color(sim_util_pkg::BLUE),.msg_verbosity(sim_util_pkg::VERBOSE));
         end else begin
-            seed = generate_rand_seed();
+            seed = sim_util_pkg::generate_rand_seed();
             debug.displayc($sformatf("Using random seed value %0d",seed),.msg_color(sim_util_pkg::BLUE),.msg_verbosity(sim_util_pkg::VERBOSE));            
         end
         $srandom(seed);
         debug.timeout_watcher(clk,TIMEOUT);
         repeat (5) @(posedge clk);
-        flash_signal(rst,clk);        
+        sim_util_pkg::flash_signal(rst,clk);        
         tb_i.init(); 
         repeat (20) @(posedge clk);
         //Run tests first with constant ready
@@ -113,7 +113,7 @@ module slave_test #(parameter IS_INTEGRATED = 0)();
         curr_err = debug.get_error_count();
         fork 
             wdata = $urandom();
-            begin tb_i.ps_write(debug,`RST_ADDR, 250); end 
+            begin tb_i.ps_write(debug,RST_ADDR, 250); end 
             begin 
                 repeat (2) @(posedge clk); 
                 tb_i.rtl_write(0,wdata); 
@@ -121,14 +121,14 @@ module slave_test #(parameter IS_INTEGRATED = 0)();
             end 
         join
         debug.disp_test_part(1,rdata == wdata,"Error when writing at same time (1st rtl read wrong)");
-        tb_i.ps_read(`RST_ADDR,rdata);
+        tb_i.ps_read(RST_ADDR,rdata);
         debug.disp_test_part(2,rdata == 250,"Error when writing at same time (ps read wrong)");
         tb_i.rtl_read(0,rdata);
         debug.disp_test_part(3,rdata == 250,"Error when writing at same time (2nd rtl read wrong)");
         //2. rtl writes immediately after ps; no conflict, should read rtl value
         fork 
             wdata = $urandom();
-            begin tb_i.ps_write(debug,`RST_ADDR, 350); end 
+            begin tb_i.ps_write(debug,RST_ADDR, 350); end 
             begin 
                 repeat (3) @(posedge clk); 
                 tb_i.rtl_write(0,wdata); 
@@ -136,12 +136,12 @@ module slave_test #(parameter IS_INTEGRATED = 0)();
             end 
         join
         debug.disp_test_part(4,rdata == wdata,"Error when rtl writes immediately after ps (rtl read wrong)");
-        tb_i.ps_read(`RST_ADDR,rdata);
+        tb_i.ps_read(RST_ADDR,rdata);
         debug.disp_test_part(5,rdata == wdata,"Error when rtl writes immediately after ps (ps read wrong)");
         //3. rtl writes immediately before ps; no conflict, should read ps value (rtl should read its own at first since the rtl read takes precedence over the ps write)
         fork 
             wdata = $urandom();
-            begin tb_i.ps_write(debug,`RST_ADDR, 450); end 
+            begin tb_i.ps_write(debug,RST_ADDR, 450); end 
             begin 
                 repeat (1) @(posedge clk); 
                 tb_i.rtl_write(0,wdata); 
@@ -149,7 +149,7 @@ module slave_test #(parameter IS_INTEGRATED = 0)();
             end 
         join
         debug.disp_test_part(6,rdata == wdata,"Error when rtl writes immediately before ps (1st rtl read wrong)");
-        tb_i.ps_read(`RST_ADDR,rdata);
+        tb_i.ps_read(RST_ADDR,rdata);
         debug.disp_test_part(7,rdata == 450,"Error when rtl writes immediately before ps (ps read wrong)");
         tb_i.rtl_read(0,rdata); 
         debug.disp_test_part(8,rdata == 450,"Error when rtl writes immediately before ps (2nd rtl read wrong");
@@ -161,31 +161,31 @@ module slave_test #(parameter IS_INTEGRATED = 0)();
         // 1. write and read at same time
         curr_err = debug.get_error_count();
         wdata = $urandom();
-        tb_i.rtl_write(`DAC1_ID, wdata);
+        tb_i.rtl_write(DAC1_ID, wdata);
         fork 
-            begin tb_i.rtl_write(`DAC1_ID, 10); end
-            begin tb_i.rtl_read(`DAC1_ID, rdata, .clr(0)); end 
+            begin tb_i.rtl_write(DAC1_ID, 10); end
+            begin tb_i.rtl_read(DAC1_ID, rdata, .clr(0)); end 
         join 
         debug.disp_test_part(1,rdata == wdata,"1: 1st read wrong");
-        tb_i.rtl_read(`DAC1_ID, rdata); 
+        tb_i.rtl_read(DAC1_ID, rdata); 
         debug.disp_test_part(2,rdata == 10,"1: 2nd read wrong");
         // 2. Read before write
         wdata = $urandom();
         fork 
-            begin tb_i.rtl_read(`DAC1_ID, rdata, .clr(0)); end 
-            begin @(posedge clk); tb_i.rtl_write(`DAC1_ID, wdata); end
+            begin tb_i.rtl_read(DAC1_ID, rdata, .clr(0)); end 
+            begin @(posedge clk); tb_i.rtl_write(DAC1_ID, wdata); end
         join 
         debug.disp_test_part(3,rdata == 10,"2: 1st read wrong");
-        tb_i.rtl_read(`DAC1_ID, rdata); 
+        tb_i.rtl_read(DAC1_ID, rdata); 
         debug.disp_test_part(4,rdata == wdata,"2: 2nd read wrong");
         // 2. Write before read
         wdata = $urandom();
         fork 
-            begin tb_i.rtl_write(`DAC1_ID, wdata); end
-            begin @(posedge clk); tb_i.rtl_read(`DAC1_ID, rdata, .clr(0)); end 
+            begin tb_i.rtl_write(DAC1_ID, wdata); end
+            begin @(posedge clk); tb_i.rtl_read(DAC1_ID, rdata, .clr(0)); end 
         join 
         debug.disp_test_part(5,rdata == wdata,"3: 1st read wrong");
-        tb_i.rtl_read(`DAC1_ID, rdata); 
+        tb_i.rtl_read(DAC1_ID, rdata); 
         debug.disp_test_part(6,rdata == wdata,"3: 2nd read wrong");
         debug.check_test(curr_err == debug.get_error_count(), .has_parts(1));
         reset_errors();
@@ -195,9 +195,9 @@ module slave_test #(parameter IS_INTEGRATED = 0)();
         curr_err = debug.get_error_count();
         debug.disp_test_part(1,fresh_bits == 0,"Freshbits shouldn't be activated right now");
         fork 
-            begin tb_i.ps_write(debug, `SCALE_DAC_OUT_ADDR, 5); end
+            begin tb_i.ps_write(debug, SCALE_DAC_OUT_ADDR, 5); end
             begin 
-                rtl_rdy[`SCALE_DAC_OUT_ID] <= 0;
+                rtl_rdy[SCALE_DAC_OUT_ID] <= 0;
                 while (1) begin
                     @ (posedge clk); 
                     if (fresh_bits != 0) break; 
@@ -205,11 +205,11 @@ module slave_test #(parameter IS_INTEGRATED = 0)();
             end 
         join
         repeat (10) @(posedge clk); 
-        debug.disp_test_part(2,fresh_bits[`SCALE_DAC_OUT_ID] == 1,"Freshbits should be high");
-        rtl_rdy[`SCALE_DAC_OUT_ID] <= 1;
+        debug.disp_test_part(2,fresh_bits[SCALE_DAC_OUT_ID] == 1,"Freshbits should be high");
+        rtl_rdy[SCALE_DAC_OUT_ID] <= 1;
         repeat(2) @(posedge clk);
-        debug.disp_test_part(3,fresh_bits[`SCALE_DAC_OUT_ID] == 0,"Freshbits should have fallen");
-        debug.disp_test_part(4,rtl_rd_out[`SCALE_DAC_OUT_ID] == 5,"Correct value not polled");
+        debug.disp_test_part(3,fresh_bits[SCALE_DAC_OUT_ID] == 0,"Freshbits should have fallen");
+        debug.disp_test_part(4,rtl_rd_out[SCALE_DAC_OUT_ID] == 5,"Correct value not polled");
         combine_errors();
         debug.check_test(curr_err == debug.get_error_count(), .has_parts(1));
 
@@ -222,7 +222,7 @@ module slave_test #(parameter IS_INTEGRATED = 0)();
         // TEST 1
         debug.displayc($sformatf("%0d: PS Write (addr delayed) %s",debug.test_num,osc_string), .msg_verbosity(sim_util_pkg::VERBOSE));
         wdata = $urandom();
-        tb_i.ps_write(debug,`RST_ADDR, wdata, .delay($urandom_range(3,20)), .addr_first(1));
+        tb_i.ps_write(debug,RST_ADDR, wdata, .delay($urandom_range(3,20)), .addr_first(1));
         tb_i.rtl_read(0,rdata);
         debug.check_test(rdata == wdata, .has_parts(0));
         reset_errors();
@@ -230,7 +230,7 @@ module slave_test #(parameter IS_INTEGRATED = 0)();
         // TEST 2
         debug.displayc($sformatf("%0d: PS Write (data delayed) %s",debug.test_num, osc_string), .msg_verbosity(sim_util_pkg::VERBOSE));
         wdata = $urandom();
-        tb_i.ps_write(debug,`RST_ADDR, wdata, .delay($urandom_range(3,20)), .addr_first(0));
+        tb_i.ps_write(debug,RST_ADDR, wdata, .delay($urandom_range(3,20)), .addr_first(0));
         tb_i.rtl_read(0,rdata);
         debug.check_test(rdata == wdata, .has_parts(0));
         reset_errors();
@@ -240,30 +240,30 @@ module slave_test #(parameter IS_INTEGRATED = 0)();
         debug.displayc($sformatf("%0d: RTL holds a write while PS tries to write %s", debug.test_num, osc_string), .msg_verbosity(sim_util_pkg::VERBOSE));
         curr_err = debug.get_error_count();
         wdata = $urandom(); 
-        for (int i = `PS_SEED_BASE_ID; i <= `PS_SEED_VALID_ID; i++) begin
+        for (int i = PS_SEED_BASE_ID; i <= PS_SEED_VALID_ID; i++) begin
             rtl_write_reqs[i] <= 1;
             rtl_wd_in[i] <= 16'hBEEF; 
         end
         @(posedge clk); 
         fork 
-            tb_i.ps_write(debug,`PS_SEED_BASE_ADDR+4, wdata);
+            tb_i.ps_write(debug,PS_SEED_BASE_ADDR+4, wdata);
         join_none
         repeat(20) @(posedge clk);
-        tb_i.rtl_read(`PS_SEED_BASE_ID+1,rdata); 
+        tb_i.rtl_read(PS_SEED_BASE_ID+1,rdata); 
         debug.disp_test_part(1,rdata == 16'hBEEF,"Error while rtl holds write (rtl read wrong)");
         debug.disp_test_part(2,dut_i.ps_write_req == 1,"PS write req should not be complete yet");
-        for (int i = `PS_SEED_BASE_ID; i <= `PS_SEED_VALID_ID; i++) begin
-            rtl_wd_in[i] <= 16'hBEEF+(i-`PS_SEED_BASE_ID); 
+        for (int i = PS_SEED_BASE_ID; i <= PS_SEED_VALID_ID; i++) begin
+            rtl_wd_in[i] <= 16'hBEEF+(i-PS_SEED_BASE_ID); 
             @(posedge clk); 
         end
-        tb_i.rtl_read(`PS_SEED_BASE_ID+1,rdata); 
+        tb_i.rtl_read(PS_SEED_BASE_ID+1,rdata); 
         debug.disp_test_part(3,rdata == (16'hBEEF+1),"Error while rtl holds write (rtl read wrong)");
         debug.disp_test_part(4,dut_i.ps_write_req == 1,"PS write req should not be complete yet");
         repeat(5) @(posedge clk);
         {rtl_wd_in,rtl_write_reqs} <= 0;
         while (~dut_i.wcomplete) @(posedge clk);
         debug.disp_test_part(5,dut_i.ps_write_req == 0,"PS write req should be done now");
-        tb_i.ps_read(`PS_SEED_BASE_ADDR+4,rdata);
+        tb_i.ps_read(PS_SEED_BASE_ADDR+4,rdata);
         debug.disp_test_part(6,rdata == wdata,"PS read wrong");
         debug.check_test(curr_err == debug.get_error_count(), .has_parts(1));
         reset_errors();
@@ -271,14 +271,14 @@ module slave_test #(parameter IS_INTEGRATED = 0)();
         // TEST 4
         debug.displayc($sformatf("%0d: RTL holds writes while PS tries to write to an unrelated address %s", debug.test_num, osc_string), .msg_verbosity(sim_util_pkg::VERBOSE));
         wdata = $urandom(); 
-        for (int i = `PS_SEED_BASE_ID; i <= `PS_SEED_VALID_ID; i++) begin
-            if (i != `PS_SEED_BASE_ID+3) begin
+        for (int i = PS_SEED_BASE_ID; i <= PS_SEED_VALID_ID; i++) begin
+            if (i != PS_SEED_BASE_ID+3) begin
                 rtl_write_reqs[i] <= 1;
                 rtl_wd_in[i] <= 16'hBEEF+i; 
             end 
         end
-        tb_i.ps_write(debug,`PS_SEED_BASE_ADDR+(4*3), wdata);
-        tb_i.ps_read(`PS_SEED_BASE_ADDR+(4*3),rdata);
+        tb_i.ps_write(debug,PS_SEED_BASE_ADDR+(4*3), wdata);
+        tb_i.ps_read(PS_SEED_BASE_ADDR+(4*3),rdata);
         {rtl_wd_in,rtl_write_reqs} <= 0;
         debug.check_test(rdata == wdata, .has_parts(0));
         reset_errors();
@@ -286,7 +286,7 @@ module slave_test #(parameter IS_INTEGRATED = 0)();
         // TEST 5
         debug.displayc($sformatf("%0d: Ensure read response is set %s", debug.test_num, osc_string), .msg_verbosity(sim_util_pkg::VERBOSE));
         fork 
-            begin tb_i.ps_read(`RST_ADDR,wdata); end
+            begin tb_i.ps_read(RST_ADDR,wdata); end
             begin 
                 while (1) begin
                     if (rr_if.valid_pack) begin
@@ -297,7 +297,7 @@ module slave_test #(parameter IS_INTEGRATED = 0)();
                 end
             end
         join
-        debug.check_test(rdata == `OKAY, .has_parts(0));
+        debug.check_test(rdata == OKAY, .has_parts(0));
         reset_errors();
 
         // TEST 6
@@ -310,12 +310,12 @@ module slave_test #(parameter IS_INTEGRATED = 0)();
         // TEST 7
         debug.displayc($sformatf("%0d: Read/Write past memory space %s", debug.test_num, osc_string), .msg_verbosity(sim_util_pkg::VERBOSE));        
         curr_err = debug.get_error_count();
-        tb_i.ps_read(`ABS_ADDR_CEILING,rdata); 
+        tb_i.ps_read(ABS_ADDR_CEILING,rdata); 
         debug.disp_test_part(1,$signed(rdata) == -2,$sformatf("MMap ceiling should contain -2. Read data is %0d", rdata));
-        tb_i.ps_write(debug,`ABS_ADDR_CEILING, 500);
-        tb_i.ps_read(`ABS_ADDR_CEILING,rdata); 
+        tb_i.ps_write(debug,ABS_ADDR_CEILING, 500);
+        tb_i.ps_read(ABS_ADDR_CEILING,rdata); 
         debug.disp_test_part(2,$signed(rdata) == -2,"MMap ceiling should not be writable");
-        tb_i.ps_read(`ABS_ADDR_CEILING+4*50,rdata);
+        tb_i.ps_read(ABS_ADDR_CEILING+4*50,rdata);
         debug.disp_test_part(3,$signed(rdata) == -2,"Reading past ceiling should resolve to the ceiling");
         debug.check_test(curr_err == debug.get_error_count(), .has_parts(1));
         reset_errors();
@@ -323,7 +323,7 @@ module slave_test #(parameter IS_INTEGRATED = 0)();
         // TEST 8
         debug.displayc($sformatf("%0d: Reset memory map and check default values %s", debug.test_num, osc_string), .msg_verbosity(sim_util_pkg::VERBOSE));        
         curr_err = debug.get_error_count();
-        flash_signal(rst,clk);
+        sim_util_pkg::flash_signal(rst,clk);
         tb_i.check_addr_space(debug);       
         debug.check_test(curr_err == debug.get_error_count(), .has_parts(1));
         reset_errors();

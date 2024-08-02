@@ -1,8 +1,7 @@
 `default_nettype none
 `timescale 1ns / 1ps
-// import mem_layout_pkg::*;
-`include "mem_layout.svh"
-// import mem_layout_pkg::flash_signal;
+import mem_layout_pkg::PS_SEED_BASE_ID;
+import mem_layout_pkg::PS_SEED_BASE_ID;
 module dac_intf_tb #(parameter MEM_SIZE, parameter DATA_WIDTH, parameter BATCH_SIZE, parameter DMA_DATA_WIDTH, parameter MAX_DAC_BURST_SIZE)
 					   (input wire ps_clk,dac_clk,
 					   	input wire dac_intf_rdy, pwl_rdy,
@@ -16,19 +15,20 @@ module dac_intf_tb #(parameter MEM_SIZE, parameter DATA_WIDTH, parameter BATCH_S
 						output logic[$clog2(DATA_WIDTH)-1:0] scale_factor_in,
 						output logic[$clog2(MAX_DAC_BURST_SIZE):0] dac_bs_in,
 						output logic halt,
-						Axis_IF dma);
-
+						Axis_IF dma);					 
 	localparam BATCH_WIDTH = BATCH_SIZE*DATA_WIDTH;					   
 	int period_len;	
 	int expc_wave [$];
-
+	logic ps_clk2,dac_clk2;
+	assign ps_clk2 = ps_clk;	
+	assign dac_clk2 = dac_clk;	
 
 	task automatic init();
 		{dma.valid, dma.last, dma.data} <= 0;
 		{read_resps, scale_factor_in, dac_bs_in, fresh_bits, halt} <= 0;
 		fork 
-			begin `flash_signal(ps_rst,ps_clk); end 
-			begin `flash_signal(dac_rst, dac_clk); end 
+			begin sim_util_pkg::flash_signal(ps_rst,ps_clk2); end 
+			begin sim_util_pkg::flash_signal(dac_rst, dac_clk2); end 
 		join_none 
 	endtask 
 
@@ -42,9 +42,9 @@ module dac_intf_tb #(parameter MEM_SIZE, parameter DATA_WIDTH, parameter BATCH_S
 	task automatic send_rand_samples(inout sim_util_pkg::debug debug);
 		logic[BATCH_SIZE-1:0][DATA_WIDTH-1:0] expected;
 		for (int i = 0; i < BATCH_SIZE; i++) expected[i] = 16'hBEEF+i;	
-		for (int i = `PS_SEED_BASE_ID; i < `PS_SEED_VALID_ID; i++) read_resps[i] <= 16'hBEEF+(i-`PS_SEED_BASE_ID);
-		read_resps[`PS_SEED_VALID_ID] <= 1; 
-		for (int i = `PS_SEED_BASE_ID; i <= `PS_SEED_VALID_ID; i++) notify_dac(i); 
+		for (int i = PS_SEED_BASE_ID; i < PS_SEED_VALID_ID; i++) read_resps[i] <= 16'hBEEF+(i-PS_SEED_BASE_ID);
+		read_resps[PS_SEED_VALID_ID] <= 1; 
+		for (int i = PS_SEED_BASE_ID; i <= PS_SEED_VALID_ID; i++) notify_dac(i); 
 		while (~valid_dac_batch) @(posedge dac_clk);
 		for (int i = 0; i < BATCH_SIZE; i++) debug.disp_test_part(i,dac_batch[i] == expected[i], $sformatf("Error on random wave sample #%0d: expected %0d got %0d",i, expected[i], dac_batch[i]));
 		while (~dac_intf_rdy) @(posedge ps_clk);	
@@ -53,7 +53,7 @@ module dac_intf_tb #(parameter MEM_SIZE, parameter DATA_WIDTH, parameter BATCH_S
 	task automatic send_trig_wave(inout sim_util_pkg::debug debug, input int samples_to_check);	
 		int starting_val = 0;
 		logic[BATCH_SIZE-1:0][DATA_WIDTH-1:0] expected = 0;			
-		notify_dac(`TRIG_WAVE_ID);
+		notify_dac(mem_layout_pkg::TRIG_WAVE_ID);
 		for (int n = 0; n < samples_to_check; n++) begin
 			while (~valid_dac_batch) @(posedge dac_clk);
 			for (int i = 0; i < BATCH_SIZE; i++) expected[i] = starting_val+i;
@@ -71,7 +71,7 @@ module dac_intf_tb #(parameter MEM_SIZE, parameter DATA_WIDTH, parameter BATCH_S
 	endfunction
 
 	task automatic halt_dac();
-		`flash_signal(halt,ps_clk);
+		sim_util_pkg::flash_signal(halt,ps_clk2);
 		while (valid_dac_batch) @(posedge dac_clk);
 		while (~dac_intf_rdy) @(posedge ps_clk);
 	endtask 
@@ -118,7 +118,7 @@ module dac_intf_tb #(parameter MEM_SIZE, parameter DATA_WIDTH, parameter BATCH_S
 		int samples_seen,periods_seen,expc_sample;
 		bit do_print;
 		periods_seen = 0; 
-		notify_dac(`RUN_PWL_ID);
+		notify_dac(mem_layout_pkg::RUN_PWL_ID);
 		@(posedge ps_clk);
 		repeat(periods_to_check) begin
 			expc_wave_tmp = expc_wave;
@@ -141,7 +141,7 @@ module dac_intf_tb #(parameter MEM_SIZE, parameter DATA_WIDTH, parameter BATCH_S
 		@(posedge ps_clk);
 		scale_factor_in <= $urandom_range(1,15);
 		if (delay_range[1] > 0) repeat($urandom_range(delay_range[0],delay_range[1])) @(posedge ps_clk); 
-		dac_bs_in <= $urandom_range(1,`MAX_DAC_BURST_SIZE);
+		dac_bs_in <= $urandom_range(1,daq_params_pkg::MAX_DAC_BURST_SIZE);
 		@(posedge ps_clk);
 		while (~dac_intf_rdy && (dac_bs_in != dac_bs_out) || (scale_factor_in != scale_factor_out)) @(posedge ps_clk); 
 		{scale_factor_in, dac_bs_in} <= 0;
@@ -169,7 +169,7 @@ module dac_intf_tb #(parameter MEM_SIZE, parameter DATA_WIDTH, parameter BATCH_S
 		dac_bs_in <= bs;
 		@(posedge ps_clk);
 		while (dac_bs_in != dac_bs_out) @(posedge ps_clk); 
-		notify_dac(`RUN_PWL_ID);
+		notify_dac(mem_layout_pkg::RUN_PWL_ID);
 		@(posedge dac_clk);
 		while (~valid_dac_batch) @(posedge dac_clk);
 		while (valid_dac_batch) begin

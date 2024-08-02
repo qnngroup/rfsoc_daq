@@ -8,22 +8,28 @@ def find_num_pats(s,pat):
         num+=1
     return num
 
-def pullParams(s,macro=False):
+def pullParams(s,addition):
     out = ""
     start = s.find("#")
     end = s.find(")")+1
     line = s[start:end]
-    while True:
-        i = line.find("parameter")
-        if i == -1: break 
-        i+=len("parameter")+1
-        j = i 
+    if find_num_pats(s,"parameter") == 1:
+        i = line.find("parameter")+len("parameter")
+        args = line[i:].split(",")
+        args = [el.replace(" ", "").replace(")","") for el in args]
+        for arg in args: out += f".{arg}({addition if addition else ''}{arg}), "
+    else:   
         while True:
-            if line[j] in [" ", "=", ",",""")"""]: break
-            j+=1 
-        arg = line[i:j]
-        out += f".{arg}({'`' if macro else ''}{arg}), "
-        line = line[j:]
+            i = line.find("parameter")
+            if i == -1: break 
+            i+=len("parameter")+1
+            j = i 
+            while True:
+                if line[j] in [" ", "=",""")"""]: break
+                j+=1 
+            arg = line[i:j]
+            out += f".{arg}({addition if addition else ''}{arg}), "
+            line = line[j:]
     return out[:-2],s[end:]
     
 def getfName(s, params=False):
@@ -44,11 +50,11 @@ def align(s):
     return out
 
 
-def formatFuncCall(s,fName = "functionName",macro=False):
+def formatFuncCall(s,fName = "functionName",addition=None):
     n = find_num_pats(s, ",")+1
     out,i = getfName(s)
     if "#" in s: 
-        params,s = pullParams(s,macro)
+        params,s = pullParams(s,addition)
         out += f" #({params})\n"
         # params=True 
         n+=1
@@ -72,49 +78,15 @@ def formatFuncCall(s,fName = "functionName",macro=False):
     return out+align(body)
 
 
-st = """module top_tb #(parameter BATCH_SIZE, parameter A_BUS_WIDTH, parameter WD_BUS_WIDTH, parameter DMA_DATA_WIDTH, parameter WD_WIDTH,
-				parameter SDC_DATA_WIDTH, parameter BUFF_CONFIG_WIDTH, parameter CHANNEL_MUX_WIDTH, parameter BUFF_TIMESTAMP_WIDTH)
-					   (input wire ps_clk, dac_clk, pl_rstn,
-					   	output logic ps_rst, dac_rst, 
-		                //DAC
-		                output logic dac0_rdy,
-		                input  wire[BATCH_SIZE-1:0][WD_WIDTH-1:0] dac_batch, 
-		                input  wire valid_dac_batch, 
-		                //AXI
-		                output logic [A_BUS_WIDTH-1:0] raddr_packet,
-		                output logic raddr_valid_packet,
-		                output logic [A_BUS_WIDTH-1:0] waddr_packet,
-		                output logic waddr_valid_packet,
-		                output logic [WD_BUS_WIDTH-1:0] wdata_packet,
-		                output logic wdata_valid_packet,
-		                output logic ps_wresp_rdy,ps_read_rdy,
-		                input  wire[1:0] wresp_out,rresp_out,
-		                input  wire wresp_valid_out, rresp_valid_out,
-		                input  wire[WD_BUS_WIDTH-1:0] rdata_packet,
-		                input  wire rdata_valid_out,
-		                //Config Registers
-		                input  wire sdc_rdy_in,
-		                output logic[SDC_DATA_WIDTH-1:0] sdc_data_out,
-		                output logic sdc_valid_out,
-		                input  wire buffc_rdy_in,
-		                output logic[BUFF_CONFIG_WIDTH-1:0] buffc_data_out,
-		                output logic buffc_valid_out,
-		                input  wire cmc_rdy_in,
-		                output logic[CHANNEL_MUX_WIDTH-1:0] cmc_data_out,
-		                output logic cmc_valid_out, 
-		                input  wire[BUFF_TIMESTAMP_WIDTH-1:0] bufft_data_in,
-		                input  wire bufft_valid_in,
-		                output logic bufft_rdy_out, 
-		                //DMA
-		                output logic[DMA_DATA_WIDTH-1:0] pwl_data,
-		                output logic[(DMA_DATA_WIDTH/8)-1:0] pwl_keep,
-		                output logic pwl_last, pwl_valid,
-		                input  wire pwl_ready,
-		                input  wire run_pwl, run_trig, run_rand);
+st = """module wave_generator (input wire clk,rst,
+			 		  input wire next,
+			 		  output logic[DATAW-1:0] sample_out, 
+			 		  output logic sample_out_valid,
+			 		  Axis_IF.stream_in wave);
                  """
-fName = "tb_i"
-macro = True
-out= formatFuncCall(st,fName=fName,macro=macro)
+fName = "wave_gen"
+addition = "daq_params_pkg::"
+out= formatFuncCall(st,fName=fName,addition=addition)
 print(out)
 
 

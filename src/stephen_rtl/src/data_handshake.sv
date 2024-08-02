@@ -1,6 +1,6 @@
 `timescale 1ns / 1ps
 `default_nettype none
-import mem_layout_pkg::*;
+
 
 //For a given valid in, valid out sometimes goes high twice (see dac_intf_tb)
 module data_handshake #(parameter DATA_WIDTH = 32) 

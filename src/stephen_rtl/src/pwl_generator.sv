@@ -1,18 +1,18 @@
 `timescale 1ns / 1ps
 `default_nettype none
 
+import daq_params_pkg::INTERPOLATER_DELAY;
 module pwl_generator #(parameter DMA_DATA_WIDTH, parameter SAMPLE_WIDTH, parameter BATCH_SIZE, parameter SPARSE_BRAM_DEPTH, parameter DENSE_BRAM_DEPTH) 
 			 		  (input wire clk,rst,
 			 		   input wire halt, 
 			 		   input wire run, 
 			 		   output logic pwl_rdy,
-			 		   output logic[(2*`WD_DATA_WIDTH)-1:0] pwl_wave_period,
+			 		   output logic[(2*(axi_params_pkg::WD_DATA_WIDTH))-1:0] pwl_wave_period,
 			 		   output logic valid_pwl_wave_period, 
 			 		   output logic[BATCH_SIZE-1:0][SAMPLE_WIDTH-1:0] batch_out,
 			 		   output logic valid_batch_out,
 			 		   Axis_IF.stream_in dma);
 	localparam BATCH_WIDTH = BATCH_SIZE*SAMPLE_WIDTH;
-	localparam INTERPOLATER_DELAY = `INTERPOLATER_DELAY;
 	localparam BRAM_DELAY = 3; 
 
 	logic[SAMPLE_WIDTH-1:0] curr_dma_x,curr_dma_dt,x,x_reg_whole, dt,dt_reg, curr_dma_slope_whole; 
@@ -38,7 +38,7 @@ module pwl_generator #(parameter DMA_DATA_WIDTH, parameter SAMPLE_WIDTH, paramet
 	logic dbram_we,dbram_en;
 	logic dbram_next;
 	logic gen_mode, rst_gen_mode;
-	logic[(2*`WD_DATA_WIDTH)-1:0] batch_counter; 
+	logic[(2*(axi_params_pkg::WD_DATA_WIDTH))-1:0] batch_counter; 
 	logic valid_dense_batch, dbram_write_rdy;
 	logic[$clog2(BATCH_SIZE)-1:0] batch_ptr; 
 	logic[INTERPOLATER_DELAY-1:0][SAMPLE_WIDTH+1:0] intrp_pipe; 

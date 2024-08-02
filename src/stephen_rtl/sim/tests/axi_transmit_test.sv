@@ -1,16 +1,15 @@
 `default_nettype none
 `timescale 1ns / 1ps
-// import mem_layout_pkg::*;
-`include "mem_layout.svh"
-// Clean up this test and recieve's test so you're not repeating the test.
+
+//Clean up this test and recieve's test so you're not repeating the test.
 // have an inital begin in the generate and wait for a start vecotr, and continue to next with a done. 
-module axi_transmit_test #(parameter IS_INTEGRATED = 0)();
+module axi_transmit_test #(parameter IS_INTEGRATED = 0, parameter VERBOSE=sim_util_pkg::DEBUG)();
 	localparam TIMEOUT = 1000;
 	localparam TEST_NUM = 12*2;; //12 with oscillating rdy, 12 with constant ready
 	localparam int CLK_RATE_MHZ = 150;
 	localparam MAN_SEED = 0;
 
-	sim_util_pkg::debug debug = new(sim_util_pkg::DEBUG,TEST_NUM,"AXI_TRANSMIT",IS_INTEGRATED); 
+	sim_util_pkg::debug debug = new(VERBOSE,TEST_NUM,"AXI_TRANSMIT",IS_INTEGRATED); 
 
 	logic clk, rst; 
 	int total_errors = 0;
@@ -66,13 +65,13 @@ module axi_transmit_test #(parameter IS_INTEGRATED = 0)();
             seed = MAN_SEED;
             debug.displayc($sformatf("Using manually selected seed value %0d",seed),.msg_color(sim_util_pkg::BLUE),.msg_verbosity(sim_util_pkg::VERBOSE));
         end else begin
-            seed = generate_rand_seed();
+            seed = sim_util_pkg::generate_rand_seed();
             debug.displayc($sformatf("Using random seed value %0d",seed),.msg_color(sim_util_pkg::BLUE),.msg_verbosity(sim_util_pkg::VERBOSE));            
         end
         $srandom(seed);
      	debug.timeout_watcher(clk,TIMEOUT);
         repeat (5) @(posedge clk);
-        flash_signal(rst,clk);        
+        sim_util_pkg::flash_signal(rst,clk);        
        	repeat (20) @(posedge clk);
        	//Tests 0-12: Transmit random packets with altering bus/data widths (const ready signal)
        	//Tests 12-24:Transmit random packets with altering bus/data widths (oscillating ready signal)	

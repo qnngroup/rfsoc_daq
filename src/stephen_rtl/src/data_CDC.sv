@@ -1,6 +1,6 @@
 `timescale 1ns / 1ps
 `default_nettype none
-import mem_layout_pkg::*;
+
 
 module data_CDC #(parameter DATA_WIDTH = 16) 
 							(input wire src_clk, src_reset,

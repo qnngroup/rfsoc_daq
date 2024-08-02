@@ -1,27 +1,31 @@
-module ps_reqhandler (input wire clk, rst,
+`timescale 1ns / 1ps
+`default_nettype none
+
+module ps_reqhandler #(parameter A_DATA_WIDTH, WD_DATA_WIDTH, REQ_BUFFER_SZ)
+					 (input wire clk, rst,
 					  input wire have_windex, have_wdata, have_rdata,
-					  input wire[`WD_DATA_WIDTH-1:0] rdata_in, wdata_in,
-					  input wire[`A_DATA_WIDTH-1:0] windex_in, rindex_in, 
+					  input wire[WD_DATA_WIDTH-1:0] rdata_in, wdata_in,
+					  input wire[A_DATA_WIDTH-1:0] windex_in, rindex_in, 
 					  input wire transmit_wrsp_rdy, transmit_rdata_rdy,
 					  input wire wcomplete, rcomplete, 
-					  output logic[`WD_DATA_WIDTH-1:0] rdata_out, wdata_out,
-					  output logic[`A_DATA_WIDTH-1:0] windex_out, rindex_out, 
+					  output logic[WD_DATA_WIDTH-1:0] rdata_out, wdata_out,
+					  output logic[A_DATA_WIDTH-1:0] windex_out, rindex_out, 
 					  output logic[1:0] wresp, 
 					  output logic transmit_wresp, transmit_rdata,
 					  output logic ps_read_req, ps_write_req); 
 
 	enum logic {IDLE, SEND} wrespTransmitState, rdataTransmitState;
-	logic[$clog2(`REQ_BUFFER_SZ):0] ps_wd_buffptr, ps_wi_buffptr, ps_rd_buffptr;     // write and read buffer pointers
-	logic[`REQ_BUFFER_SZ-1:0][`WD_DATA_WIDTH-1:0] ps_wdbuff, ps_rdbuff;              // write and read data buffers  
-	logic[`REQ_BUFFER_SZ-1:0][`A_DATA_WIDTH-1:0] ps_wibuff, ps_ribuff;               // write and read address buffer  	
+	logic[$clog2(REQ_BUFFER_SZ):0] ps_wd_buffptr, ps_wi_buffptr, ps_rd_buffptr;     // write and read buffer pointers
+	logic[REQ_BUFFER_SZ-1:0][WD_DATA_WIDTH-1:0] ps_wdbuff, ps_rdbuff;              // write and read data buffers  
+	logic[REQ_BUFFER_SZ-1:0][A_DATA_WIDTH-1:0] ps_wibuff, ps_ribuff;               // write and read address buffer  	
 
 	// Setting all output signals for transmitting rdata/wresp, writing recieved wdata, and requesting r/w
 	always_comb begin
-		wdata_out = (ps_wd_buffptr < `REQ_BUFFER_SZ)? ps_wdbuff[ps_wd_buffptr] : 0;
-		windex_out = (ps_wi_buffptr < `REQ_BUFFER_SZ)? ps_wibuff[ps_wi_buffptr] : 0; 
-		ps_write_req = (ps_wd_buffptr < `REQ_BUFFER_SZ  && ps_wi_buffptr < `REQ_BUFFER_SZ && ps_wd_buffptr == ps_wi_buffptr && wrespTransmitState == IDLE && ~wcomplete)? 1 : 0; 
+		wdata_out = (ps_wd_buffptr < REQ_BUFFER_SZ)? ps_wdbuff[ps_wd_buffptr] : 0;
+		windex_out = (ps_wi_buffptr < REQ_BUFFER_SZ)? ps_wibuff[ps_wi_buffptr] : 0; 
+		ps_write_req = (ps_wd_buffptr < REQ_BUFFER_SZ  && ps_wi_buffptr < REQ_BUFFER_SZ && ps_wd_buffptr == ps_wi_buffptr && wrespTransmitState == IDLE && ~wcomplete)? 1 : 0; 
 
-		if (ps_rd_buffptr < `REQ_BUFFER_SZ) begin
+		if (ps_rd_buffptr < REQ_BUFFER_SZ) begin
 			rdata_out = ps_rdbuff[ps_rd_buffptr];
 			rindex_out = ps_ribuff[ps_rd_buffptr]; 
 			ps_read_req = (rdataTransmitState == IDLE && ~rcomplete)? 1 : 0; 
@@ -33,7 +37,7 @@ module ps_reqhandler (input wire clk, rst,
 			default: transmit_rdata = 0;
 		endcase
 
-		wresp = (windex_out <= `MEM_SIZE)? `OKAY : `SLVERR; 
+		wresp = (windex_out <= mem_layout_pkg::MEM_SIZE)? axi_params_pkg::OKAY : axi_params_pkg::SLVERR; 
 		case(wrespTransmitState)
 			IDLE: transmit_wresp = 0; 
 			SEND: transmit_wresp = (transmit_wrsp_rdy)? 1 : 0; 
@@ -52,11 +56,11 @@ module ps_reqhandler (input wire clk, rst,
 			// Buffer and handle writes
 			if (have_windex) begin
 				ps_wi_buffptr <= ps_wi_buffptr + 1; 
-				ps_wibuff[(ps_wi_buffptr+1)%(`REQ_BUFFER_SZ)] <= windex_in;
+				ps_wibuff[(ps_wi_buffptr+1)%(REQ_BUFFER_SZ)] <= windex_in;
 			end
 			if (have_wdata) begin
 				ps_wd_buffptr <= ps_wd_buffptr + 1; 
-				ps_wdbuff[(ps_wd_buffptr+1)%(`REQ_BUFFER_SZ)] <= wdata_in;
+				ps_wdbuff[(ps_wd_buffptr+1)%(REQ_BUFFER_SZ)] <= wdata_in;
 			end
 			case(wrespTransmitState)
 				IDLE: begin
@@ -77,8 +81,8 @@ module ps_reqhandler (input wire clk, rst,
 			// Buffer and handle reads
 			if (have_rdata) begin
 				ps_rd_buffptr <= ps_rd_buffptr + 1;  
-				ps_rdbuff[(ps_rd_buffptr+1)%(`REQ_BUFFER_SZ)] <= rdata_in;
-				ps_ribuff[(ps_rd_buffptr+1)%(`REQ_BUFFER_SZ)] <= rindex_in; 
+				ps_rdbuff[(ps_rd_buffptr+1)%(REQ_BUFFER_SZ)] <= rdata_in;
+				ps_ribuff[(ps_rd_buffptr+1)%(REQ_BUFFER_SZ)] <= rindex_in; 
 			end else begin
 				case(rdataTransmitState) 
 					IDLE: begin
@@ -98,4 +102,5 @@ module ps_reqhandler (input wire clk, rst,
 	end
 endmodule 
 
-// Make a pswrite request fall immediately after being served, same with read request 
+`default_nettype wire
+

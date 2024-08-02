@@ -1,58 +1,58 @@
 `timescale 1ns / 1ps
 `default_nettype none
-import mem_layout_pkg::*;
+
 
 module top_level(input wire ps_clk,ps_rst, dac_clk, dac_rst,
                  //Inputs from DAC
                  input wire dac0_rdy,
                  //Outpus to DAC
-                 output logic[`BATCH_WIDTH-1:0] dac_batch, 
+                 output logic[(daq_params_pkg::BATCH_WIDTH)-1:0] dac_batch, 
                  output logic valid_dac_batch, 
                  output logic pl_rstn, 
                  //Inputs from PS
-                 input  wire [`A_BUS_WIDTH-1:0] raddr_packet,
+                 input  wire [(axi_params_pkg::A_BUS_WIDTH)-1:0] raddr_packet,
                  input  wire raddr_valid_packet,
-                 input  wire [`A_BUS_WIDTH-1:0] waddr_packet,
+                 input  wire [(axi_params_pkg::A_BUS_WIDTH)-1:0] waddr_packet,
                  input  wire waddr_valid_packet,
-                 input  wire [`WD_BUS_WIDTH-1:0] wdata_packet,
+                 input  wire [(axi_params_pkg::WD_BUS_WIDTH)-1:0] wdata_packet,
                  input  wire wdata_valid_packet,
                  input  wire ps_wresp_rdy,ps_read_rdy,
                  //axi_slave Outputs
-                 output logic [1:0] wresp_out,rresp_out,
+                 output logic [(axi_params_pkg::RESP_DATA_WIDTH-1):0] wresp_out,rresp_out,
                  output logic wresp_valid_out, rresp_valid_out,
-                 output logic [`WD_BUS_WIDTH-1:0] rdata_packet,
+                 output logic [(axi_params_pkg::WD_BUS_WIDTH)-1:0] rdata_packet,
                  output logic rdata_valid_out,
                  //Config Registers
                  input  wire sdc_rdy_in,
-                 output logic[`SDC_DATA_WIDTH-1:0] sdc_data_out,
+                 output logic[(daq_params_pkg::SDC_DATA_WIDTH)-1:0] sdc_data_out,
                  output logic sdc_valid_out,
                  input  wire buffc_rdy_in,
-                 output logic[`BUFF_CONFIG_WIDTH-1:0] buffc_data_out,
+                 output logic[(daq_params_pkg::BUFF_CONFIG_WIDTH)-1:0] buffc_data_out,
                  output logic buffc_valid_out,
                  input  wire cmc_rdy_in,
-                 output logic[`CHANNEL_MUX_WIDTH-1:0] cmc_data_out,
+                 output logic[(daq_params_pkg::CHANNEL_MUX_WIDTH)-1:0] cmc_data_out,
                  output logic cmc_valid_out, 
-                 input  wire[`BUFF_TIMESTAMP_WIDTH-1:0] bufft_data_in,
+                 input  wire[(daq_params_pkg::BUFF_TIMESTAMP_WIDTH)-1:0] bufft_data_in,
                  input  wire bufft_valid_in,
                  output logic bufft_rdy_out, 
                  //DMA Inputs/Outputs (axi-stream)
-                 input  wire[`DMA_DATA_WIDTH-1:0] pwl_tdata,
-                 input  wire[(`DMA_DATA_WIDTH/8)-1:0] pwl_tkeep,
+                 input  wire[(daq_params_pkg::DMA_DATA_WIDTH)-1:0] pwl_tdata,
+                 input  wire[(daq_params_pkg::DMA_DATA_WIDTH/8)-1:0] pwl_tkeep,
                  input  wire pwl_tlast, pwl_tvalid,
                  output logic pwl_tready);
 
-    Recieve_Transmit_IF #(`A_BUS_WIDTH, `A_DATA_WIDTH)   wa_if (); 
-    Recieve_Transmit_IF #(`WD_BUS_WIDTH, `WD_DATA_WIDTH) wd_if (); 
-    Recieve_Transmit_IF #(`A_BUS_WIDTH, `A_DATA_WIDTH)   ra_if (); 
-    Recieve_Transmit_IF #(`WD_BUS_WIDTH, `WD_DATA_WIDTH) rd_if (); 
-    Recieve_Transmit_IF #(2,2) wr_if (); 
-    Recieve_Transmit_IF #(2,2) rr_if ();
+    Recieve_Transmit_IF #(axi_params_pkg::A_BUS_WIDTH,  axi_params_pkg::A_DATA_WIDTH)  wa_if (); 
+    Recieve_Transmit_IF #(axi_params_pkg::WD_BUS_WIDTH, axi_params_pkg::WD_DATA_WIDTH) wd_if (); 
+    Recieve_Transmit_IF #(axi_params_pkg::A_BUS_WIDTH,  axi_params_pkg::A_DATA_WIDTH)  ra_if (); 
+    Recieve_Transmit_IF #(axi_params_pkg::WD_BUS_WIDTH, axi_params_pkg::WD_DATA_WIDTH) rd_if (); 
+    Recieve_Transmit_IF #(axi_params_pkg::RESP_DATA_WIDTH, axi_params_pkg::RESP_DATA_WIDTH) wr_if ();  
+    Recieve_Transmit_IF #(axi_params_pkg::RESP_DATA_WIDTH, axi_params_pkg::RESP_DATA_WIDTH) rr_if ();
 
-    Axis_IF #(`BUFF_TIMESTAMP_WIDTH) bufft_if(); 
-    Axis_IF #(`BUFF_CONFIG_WIDTH) buffc_if();
-    Axis_IF #(`DMA_DATA_WIDTH) pwl_dma_if();
-    Axis_IF #(`CHANNEL_MUX_WIDTH) cmc_if();
-    Axis_IF #(`SDC_DATA_WIDTH) sdc_if();
+    Axis_IF #(daq_params_pkg::BUFF_TIMESTAMP_WIDTH) bufft_if(); 
+    Axis_IF #(daq_params_pkg::BUFF_CONFIG_WIDTH) buffc_if();
+    Axis_IF #(daq_params_pkg::DMA_DATA_WIDTH) pwl_dma_if();
+    Axis_IF #(daq_params_pkg::CHANNEL_MUX_WIDTH) cmc_if();
+    Axis_IF #(daq_params_pkg::SDC_DATA_WIDTH) sdc_if();
 
 
     assign pwl_dma_if.data = pwl_tdata;
@@ -108,22 +108,14 @@ module top_level(input wire ps_clk,ps_rst, dac_clk, dac_rst,
     // All of these signals don't apply to read response since a transmitter module doesn't handle setting the packet and valid_packet field: its set directly in the slave module. 
     assign {rr_if.dev_rdy, rr_if.data_to_send, rr_if.send, rr_if.trans_rdy} = 0; 
 
-    sys sys (.ps_clk(ps_clk), .ps_rst(ps_rst), .dac_clk(dac_clk), .dac_rst(dac_rst),
-             .dac0_rdy(dac0_rdy),
-             .dac_batch(dac_batch),
-             .valid_dac_batch(valid_dac_batch),
-             .pl_rstn(pl_rstn),
-             .wa_if(wa_if),
-             .wd_if(wd_if),
-             .ra_if(ra_if),
-             .rd_if(rd_if),
-             .wr_if(wr_if),
-             .rr_if(rr_if),
-             .pwl_dma_if(pwl_dma_if),
-             .bufft_if(bufft_if),
-             .buffc_if(buffc_if),
-             .cmc_if(cmc_if),
-             .sdc_if(sdc_if)); 
+    sys 
+    sys (.ps_clk(ps_clk), .ps_rst(ps_rst), .dac_clk(dac_clk), .dac_rst(dac_rst), .pl_rstn(pl_rstn),
+         .dac_batch(dac_batch), .valid_dac_batch(valid_dac_batch), .dac0_rdy(dac0_rdy),
+         .wa_if(wa_if), .wd_if(wd_if),
+         .ra_if(ra_if), .rd_if(rd_if),
+         .wr_if(wr_if), .rr_if(rr_if),
+         .pwl_dma_if(pwl_dma_if),
+         .bufft_if(bufft_if), .buffc_if(buffc_if), .cmc_if(cmc_if), .sdc_if(sdc_if)); 
     
       // sys_ILA sys_ILA (.clk(ps_clk), 
       //                  .probe0(sys.rst),
