@@ -25,6 +25,13 @@ segmented_buffer #(
   .adc_reset,
   .adc_data_in,
   .adc_digital_trigger_in,
+  .ps_clk,
+  .ps_reset,
+  .ps_readout_data,
+  .ps_capture_start_stop,
+  .ps_capture_banking_mode,
+  .ps_discriminator_thresholds,
+
 );
 
 

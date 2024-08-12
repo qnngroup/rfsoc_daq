@@ -26,6 +26,7 @@ module segmented_buffer #(
   Axis_If.Slave ps_discriminator_delays,
   Axis_If.Slave ps_discriminator_trigger_select,
   Axis_If.Slave ps_discriminator_bypass,
+  // Buffer reset
   Axis_If.Slave ps_capture_sw_reset, // ps clock domain; reset capture logic
   Axis_If.Slave ps_readout_sw_reset, // ps clock domain; reset readout logic
   Axis_If.Slave ps_readout_start, // enable DMA over ps_readout_data interface
@@ -37,7 +38,9 @@ Realtime_Parallel_If #(.DWIDTH(rx_pkg::DATA_WIDTH), .CHANNELS(rx_pkg::CHANNELS))
 Realtime_Parallel_If #(.DWIDTH(buffer_pkg::TSTAMP_WIDTH), .CHANNELS(rx_pkg::CHANNELS)) adc_timestamps_out ();
 
 Axis_If #(.DWIDTH(rx_pkg::DATA_WIDTH)) ps_data ();
+Axis_If #(.DWIDTH(AXI_MM_WIDTH)) ps_data_resized ();
 Axis_If #(.DWIDTH(buffer_pkg::TSTAMP_WIDTH)) ps_timestamps ();
+Axis_If #(.DWIDTH(AXI_MM_WIDTH)) ps_timestamps_resized ();
 Axis_If #(.DWIDTH(rx_pkg::DATA_WIDTH)) ps_data_write_depth ();
 Axis_If #(.DWIDTH(buffer_pkg::TSTAMP_WIDTH)) ps_timestamp_write_depth ();
 
@@ -140,7 +143,53 @@ axis_width_converter #(
 ) timestamp_width_converter_i (
   .clk(ps_clk),
   .reset(ps_reset),
-  .data_in(
+  .data_in(ps_timestamps),
+  .data_out(ps_timestamps_resized)
 );
+
+axis_width_converter #(
+  .DWIDTH_IN(rx_pkg::DATA_WIDTH),
+  .DWIDTH_OUT(AXI_MM_WIDTH)
+) data_width_converter_i (
+  .clk(ps_clk),
+  .reset(ps_reset),
+  .data_in(ps_data),
+  .data_out(ps_data_resized)
+);
+
+/////////////////////
+// mux the outputs
+/////////////////////
+
+enum {TIMESTAMP, DATA} ps_buffer_select;
+
+always_ff @(posedge ps_clk) begin
+  if (ps_reset) begin
+    ps_buffer_select <= TIMESTAMP;
+  end else begin
+    unique case (ps_buffer_select)
+      TIMESTAMP: if (ps_timestamps_resized.last && ps_timestamps_resized.ok) ps_buffer_select <= DATA;
+      DATA: if (ps_data_resized.last && ps_data_resized.ok) ps_buffer_select <= TIMESTAMP;
+    endcase
+  end
+end
+
+// buffer -> DMA
+always_comb begin
+  unique case (ps_buffer_select)
+    TIMESTAMP:
+      ps_readout_data.data = ps_timestamps_resized.data;
+      ps_readout_data.valid = ps_timestamps_resized.valid;
+      ps_readout_data.last = 1'b0; // don't send last until all data has been sent
+    DATA:
+      ps_readout_data.data = ps_data_resized.data;
+      ps_readout_data.valid = ps_data_resized.valid;
+      ps_readout_data.last = ps_data_resized.last;
+  endcase
+end
+
+// DMA -> buffer
+assign ps_timestamps_resized.ready = (buffer_select == TIMESTAMP) ? ps_readout_data.ready : 1'b0;
+assign ps_data_resized.ready = (buffer_select == DATA) ? ps_readout_data.ready : 1'b0;
 
 endmodule
