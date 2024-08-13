@@ -98,6 +98,9 @@ axis_receiver #(
   .intf(ps_timestamps_write_depth)
 );
 
+logic adc_disable_samples;
+logic adc_disable_timestamps;
+
 // drivers for samples and timestamps
 realtime_parallel_driver #(
   .DWIDTH(rx_pkg::DATA_WIDTH),
@@ -106,7 +109,7 @@ realtime_parallel_driver #(
   .clk(adc_clk),
   .reset(adc_reset),
   .valid_rand('1),
-  .valid_en({rx_pkg::CHANNELS{~adc_reset}}),
+  .valid_en({rx_pkg::CHANNELS{~adc_reset & ~adc_disable_samples}}),
   .intf(adc_samples_in)
 );
 
@@ -117,7 +120,7 @@ realtime_parallel_driver #(
   .clk(adc_clk),
   .reset(adc_reset),
   .valid_rand('1),
-  .valid_en({rx_pkg::CHANNELS{~adc_reset}}),
+  .valid_en({rx_pkg::CHANNELS{~adc_reset & ~adc_disable_timestamps}}),
   .intf(adc_timestamps_in)
 );
 
@@ -131,6 +134,8 @@ task automatic init();
   ps_capture_sw_reset_tx_i.init();
   ps_readout_sw_reset_tx_i.init();
   ps_readout_start_tx_i.init();
+  adc_disable_samples <= 1'b0;
+  adc_disable_timestamps <= 1'b0;
 endtask
 
 task automatic clear_sent_data();
@@ -145,6 +150,14 @@ endtask
 
 task automatic clear_received_data();
   ps_readout_data_rx_i.clear_queues();
+endtask
+
+task automatic adc_samples_enabled(input logic enable_disable);
+  adc_disable_samples <= enable_disable;
+endtask
+
+task automatic adc_timestamps_enabled(input logic enable_disable);
+  adc_disable_timestamps <= enable_disable;
 endtask
 
 task automatic capture_arm_start_stop(
@@ -196,24 +209,14 @@ task automatic reset_readout(
 endtask
 
 task automatic start_readout(
-  inout sim_util_pkg::debug debug,
-  input logic expected_response
+  inout sim_util_pkg::debug debug
 );
   logic success;
   debug.display("starting readout", sim_util_pkg::DEBUG);
   ps_readout_start_tx_i.send_sample_with_timeout(10, 1'b1, success);
-  case (expected_response)
-    1'b1: begin
-      if (~success) begin
-        debug.error("failed to start readout");
-      end
-    end
-    1'b0: begin
-      if (success) begin
-        debug.error("started readout, but shouldn't have been able to");
-      end
-    end
-  endcase
+  if (~success) begin
+    debug.error("failed to start readout");
+  end
 endtask
 
 endmodule

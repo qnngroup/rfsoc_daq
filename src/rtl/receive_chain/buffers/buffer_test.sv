@@ -135,8 +135,7 @@ initial begin
                     // wait to make sure DUT is armed (since there is a CDC delay)
                     repeat (10) @(posedge ps_clk);
                     if ((capture_reset_mode == CAPTURE_ARM_RESET) && (reset_during_arm == 0)) begin
-                      // send reset after arming but before capture actually
-                      // starts
+                      // send reset after arming but before capture actually starts
                       tb_i.reset_capture(debug);
                       // clear samples sent
                       tb_i.clear_sent_data();
