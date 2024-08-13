@@ -12,28 +12,34 @@ module receive_top #(
   parameter int SAMPLE_WIDTH = 16, // width in bits of each sample
   parameter int APPROX_CLOCK_WIDTH = 48 // requested width of timestamp
 ) (
-  /////////////////////////////////////
-  // PS clock domain (100MHz)
-  /////////////////////////////////////
-  input wire ps_clk, ps_reset,
-  // configuration registers
-  Axis_If.Slave ps_sample_discriminator_config, // 2*CHANNELS*SAMPLE_WIDTH bits
-  Axis_If.Slave ps_buffer_config, // $clog2($clog2(CHANNELS) + 1) bits, can only be updated when buffer is in IDLE state
-  Axis_If.Slave ps_buffer_start_stop, // 2 bits
+  // PS clock, reset (100MHz)
+  input logic ps_clk, ps_reset,
+  // Output data
+  Axis_If.Master ps_readout_data,
+  // Command registers
+  Axis_If.Slave ps_capture_arm,
+  Axis_If.Slave ps_capture_sw_reset,
+  Axis_If.Slave ps_readout_sw_reset,
+  Axis_If.Slave ps_readout_start,
+  // Configuration registers
+  Axis_If.Slave ps_discriminator_config, // {thresholds, delays, trigger_select, bypass}
+  Axis_If.Slave ps_capture_banking_mode,
+  // Status registers
+  Axis_If.Master ps_capture_write_depth
+
+  Axis_If.Slave ps_buffer_start_stop,
   Axis_If.Slave ps_channel_mux_config, // $clog2(2*CHANNELS)*CHANNELS bits
   // output registers
   Axis_If.Master ps_buffer_timestamp_width, // 32 bits
   Axis_If.Master ps_buffer_capture_done, // 1 bits
 
-  /////////////////////////////////////
-  // RFADC clock domain (256MHz)
-  /////////////////////////////////////
-  input wire adc_clk, adc_reset,
+  // ADC clock, reset (256MHz)
+  input logic adc_clk, adc_reset,
   // data pipeline
   Realtime_Parallel_If.Slave adc_data_in,
   Axis_If.Master adc_dma_out,
   // trigger from transmit_top
-  input wire adc_trigger_in
+  input logic [tx_pkg::CHANNELS-1:0] adc_digital_trigger_in
 );
 
 //////////////////////////////////////////////////////////////////////////

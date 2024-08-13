@@ -18,7 +18,7 @@
 `timescale 1ns/1ps
 module buffer_test ();
 
-sim_util_pkg::debug debug = new(sim_util_pkg::DEBUG);
+sim_util_pkg::debug debug = new(sim_util_pkg::DEFAULT);
 
 localparam int BUFFER_DEPTH = 64;
 localparam int READ_LATENCY = 4;

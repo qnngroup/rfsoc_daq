@@ -16,23 +16,26 @@
 // - adc_capture_hw_stop: input, hardware trigger for stopping capture
 // - adc_capture_full: output, goes high when buffer fills up
 //
-// Configuration registers:
+// Configuration/command registers:
 // - arm:
 //    - arm the buffer for hardware-triggered capture
+//    - 1-bit quantity
 // - banking_mode:
 //    - select how many channels are active
 //    - enables deeper storage of sample data when fewer channels are active
 //    - active_channels = 1 << banking_mode
+//    - buffer_pkg::BANKING_MODE_WIDTH-bit quantity
 // - capture/readout sw_reset:
 //    - reset state machine and counters for capture and readout logic
 //    - capture sw_reset can be asserted at any time
 //        - capture reset will require re-arming of the buffer (performed
 //          automatically by writing to the ps_capture_start register in the
-//          segmented_buffer module)
+//          segmented_buffer module) to save samples again
 //    - readout sw_reset can only be asserted when the readout hardware is in
 //      the DMA_ACTIVE state (this allows for re-trying failed DMA transfers)
 //      and only resets to DMA_READY so that capture cannot be triggered again
 //      (unless capture sw_reset is also asserted)
+//    - 1-bit quantities
 //
 // Status registers:
 // - ps_capture_write_depth:
@@ -54,13 +57,14 @@ module buffer #(
   // realtime ports
   input wire adc_capture_hw_start,
   input wire adc_capture_hw_stop,
+  output logic adc_capture_ready, // asserted when adc_capture_state != HOLD_SAMPLES
   output logic adc_capture_full, // asserted when any active buffers fill
 
   // Readout (PS) clock, reset (100 MHz)
   input wire ps_clk, ps_reset,
   Axis_If.Master ps_readout_data,
   // Configuration
-  Axis_If.Slave ps_capture_arm, // controls capture {arm, sw_start, sw_stop}
+  Axis_If.Slave ps_capture_arm, // arms capture to prepare for hw_start
   Axis_If.Slave ps_capture_banking_mode, // controls capture (active_channels = 1 << banking_mode)
   Axis_If.Slave ps_capture_sw_reset, // ps clock domain; reset capture logic
   Axis_If.Slave ps_readout_sw_reset, // ps clock domain; reset readout logic
@@ -92,7 +96,7 @@ enum {CAPTURE_IDLE, TRIGGER_WAIT, SAVE_SAMPLES, HOLD_SAMPLES} adc_capture_state;
 // banking_mode
 ////////////////////////
 logic [$clog2(rx_pkg::CHANNELS+1)-1:0] adc_active_channels;
-Axis_If #(.DWIDTH($clog2($clog2(rx_pkg::CHANNELS+1)))) adc_capture_banking_mode_sync ();
+Axis_If #(.DWIDTH(buffer_pkg::BANKING_MODE_WIDTH)) adc_capture_banking_mode_sync ();
 assign adc_capture_banking_mode_sync.ready = adc_capture_state == CAPTURE_IDLE;
 always_ff @(posedge adc_clk) begin
   if (adc_reset) begin
@@ -105,7 +109,7 @@ always_ff @(posedge adc_clk) begin
 end
 // CDC for banking mode
 axis_config_reg_cdc #(
-  .DWIDTH($clog2($clog2(rx_pkg::CHANNELS+1)))
+  .DWIDTH(buffer_pkg::BANKING_MODE_WIDTH)
 ) capture_banking_mode_cdc_i (
   .src_clk(ps_clk),
   .src_reset(ps_reset),
@@ -139,7 +143,8 @@ axis_config_reg_cdc #(
 ////////////////////////
 logic adc_capture_arm;
 Axis_If #(.DWIDTH(1)) adc_capture_arm_sync ();
-assign adc_capture_arm_sync.ready = (adc_capture_state != HOLD_SAMPLES);
+assign adc_capture_ready = (adc_capture_state != HOLD_SAMPLES);
+assign adc_capture_arm_sync.ready = adc_capture_ready;
 assign adc_capture_arm = adc_capture_arm_sync.ok ? adc_capture_arm_sync.data : 1'b0;
 // CDC for capture arm/start/stop
 axis_config_reg_cdc #(
@@ -381,13 +386,12 @@ always_ff @(posedge adc_clk) begin
       unique case (adc_capture_state)
         CAPTURE_IDLE: begin
           // if we get an arm signal, go to TRIGGER_WAIT
-          // if we get a sw_start signal, go to SAVE_SAMPLES
           if (adc_capture_arm) begin
             adc_capture_state <= TRIGGER_WAIT;
           end
         end
         TRIGGER_WAIT:
-          // if we get a hw_start signal or a sw_start signal, go to SAVE_SAMPLES
+          // if we get a hw_start signal, go to SAVE_SAMPLES
           if (adc_capture_start_pls) begin
             adc_capture_state <= SAVE_SAMPLES;
           end

@@ -29,7 +29,7 @@ axis_driver #(
 );
 
 axis_driver #(
-  .DWIDTH($clog2($clog2(rx_pkg::CHANNELS+1)))
+  .DWIDTH(buffer_pkg::BANKING_MODE_WIDTH)
 ) ps_capture_banking_mode_tx_i (
   .clk(ps_clk),
   .intf(ps_capture_banking_mode)
@@ -123,7 +123,7 @@ endtask
 
 task automatic set_banking_mode(
   inout sim_util_pkg::debug debug,
-  input logic [$clog2($clog2(rx_pkg::CHANNELS+1))-1:0] banking_mode
+  input logic [buffer_pkg::BANKING_MODE_WIDTH-1:0] banking_mode
 );
   logic success;
   debug.display($sformatf("writing banking_mode = %0d", banking_mode), sim_util_pkg::DEBUG);
