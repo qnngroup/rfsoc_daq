@@ -1,9 +1,9 @@
-// segmented_buffer_tb.sv - Reed Foster
+// timetagging_sample_buffer_tb.sv - Reed Foster
 // Tasks and driver submodules to verify segmented buffer
 
 
 `timescale 1ns/1ps
-module segmented_buffer_tb #(
+module timetagging_sample_buffer_tb #(
   parameter int AXI_MM_WIDTH
 ) (
   // ADC clock, reset (512 MHz)

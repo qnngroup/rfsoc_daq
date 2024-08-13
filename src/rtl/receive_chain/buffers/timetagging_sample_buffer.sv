@@ -1,8 +1,8 @@
-// segmented_buffer.sv - Reed Foster
+// timetagging_sample_buffer.sv - Reed Foster
 // combines sample_discriminator with two buffers
 
 `timescale 1ns/1ps
-module segmented_buffer #(
+module timetagging_sample_buffer #(
   parameter int BUFFER_READ_LATENCY, // default 4 to permit UltraRAM inference
   parameter int AXI_MM_WIDTH // 128 bits
 ) (

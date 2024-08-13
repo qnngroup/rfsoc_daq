@@ -1,6 +1,6 @@
 
 `timescale 1ns/1ps
-module segmented_buffer_test ();
+module timetagging_sample_buffer_test ();
 
 sim_util_pkg::debug debug = new(sim_util_pkg::DEFAULT);
 
@@ -37,7 +37,7 @@ Axis_If #(.DWIDTH(1)) ps_capture_sw_reset ();
 Axis_If #(.DWIDTH(1)) ps_readout_sw_reset ();
 Axis_If #(.DWIDTH(1)) ps_readout_start ();
 
-segmented_buffer #(
+timetagging_sample_buffer #(
   .BUFFER_READ_LATENCY(BUFFFER_READ_LATENCY),
   .AXI_MM_WIDTH(AXI_MM_WIDTH)
 ) dut_i (
@@ -59,7 +59,7 @@ segmented_buffer #(
   .ps_readout_start
 );
 
-segmented_buffer_tb #(
+timetagging_sample_buffer_tb #(
   .AXI_MM_WIDTH(AXI_MM_WIDTH)
 ) tb_i (
   .adc_clk,
