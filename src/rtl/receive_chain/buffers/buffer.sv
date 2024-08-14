@@ -47,6 +47,7 @@
 
 `timescale 1ns/1ps
 module buffer #(
+  parameter int DATA_WIDTH,
   parameter int BUFFER_DEPTH,
   parameter int READ_LATENCY // default 4 to permit UltraRAM inference
 ) (
@@ -74,7 +75,7 @@ module buffer #(
 );
 
 localparam int ADDR_WIDTH = $clog2(BUFFER_DEPTH);
-logic [rx_pkg::DATA_WIDTH-1:0] memory [rx_pkg::CHANNELS][BUFFER_DEPTH];
+logic [DATA_WIDTH-1:0] memory [rx_pkg::CHANNELS][BUFFER_DEPTH];
 
 ////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////
@@ -254,11 +255,11 @@ end
 // depending on banking mode
 ////////////////////////////////////
 // register data in for timing
-logic [rx_pkg::CHANNELS-1:0][rx_pkg::DATA_WIDTH-1:0] adc_data_d;
+logic [rx_pkg::CHANNELS-1:0][DATA_WIDTH-1:0] adc_data_d;
 always_ff @(posedge adc_clk) adc_data_d <= adc_data.data;
 
 // mux data based on banking_mode (registered for timing)
-logic [rx_pkg::CHANNELS-1:0][rx_pkg::DATA_WIDTH-1:0] adc_buffer_in;
+logic [rx_pkg::CHANNELS-1:0][DATA_WIDTH-1:0] adc_buffer_in;
 always_ff @(posedge adc_clk) begin
   for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
     adc_buffer_in[channel] <= adc_data_d[$clog2(rx_pkg::CHANNELS)'($clog2(rx_pkg::CHANNELS+1)'(channel) % adc_active_channels)];
@@ -440,7 +441,7 @@ logic [$clog2(rx_pkg::CHANNELS)-1:0] ps_bank_select;
 
 // pipeline to allow registered output of bank memory
 // bank_select needs to be delayed appropriately to match latency of data,valid,last
-logic [rx_pkg::CHANNELS-1:0][READ_LATENCY-1:0][rx_pkg::DATA_WIDTH-1:0] ps_readout_data_pipe;
+logic [rx_pkg::CHANNELS-1:0][READ_LATENCY-1:0][DATA_WIDTH-1:0] ps_readout_data_pipe;
 logic [READ_LATENCY-1:0] ps_readout_valid_pipe, ps_readout_last_pipe;
 logic [READ_LATENCY-1:0][$clog2(rx_pkg::CHANNELS)-1:0] ps_bank_select_pipe;
 

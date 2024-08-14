@@ -5,7 +5,8 @@
 
 `timescale 1ns/1ps
 module buffer_tb #(
-  parameter int BUFFER_DEPTH = 1024
+  parameter int DATA_WIDTH,
+  parameter int BUFFER_DEPTH
 ) (
   input logic adc_clk,
   input logic adc_reset,
@@ -66,7 +67,7 @@ axis_receiver #(
 );
 
 axis_receiver #(
-  .DWIDTH(rx_pkg::DATA_WIDTH)
+  .DWIDTH(DATA_WIDTH)
 ) ps_readout_data_rx_i (
   .clk(ps_clk),
   .ready_rand(1'b1),
@@ -75,7 +76,7 @@ axis_receiver #(
 );
 
 realtime_parallel_driver #(
-  .DWIDTH(rx_pkg::DATA_WIDTH),
+  .DWIDTH(DATA_WIDTH),
   .CHANNELS(rx_pkg::CHANNELS)
 ) adc_data_tx_i (
   .clk(adc_clk),

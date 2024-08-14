@@ -20,6 +20,7 @@ module buffer_test ();
 
 sim_util_pkg::debug debug = new(sim_util_pkg::DEFAULT);
 
+localparam int DATA_WIDTH = 128;
 localparam int BUFFER_DEPTH = 64;
 localparam int READ_LATENCY = 4;
 
@@ -33,12 +34,12 @@ logic ps_clk = 0;
 localparam int PS_CLK_RATE_HZ = 100_000_000;
 always #(0.5s/PS_CLK_RATE_HZ) ps_clk = ~ps_clk;
 
-Realtime_Parallel_If #(.DWIDTH(rx_pkg::DATA_WIDTH), .CHANNELS(rx_pkg::CHANNELS)) adc_data ();
+Realtime_Parallel_If #(.DWIDTH(DATA_WIDTH), .CHANNELS(rx_pkg::CHANNELS)) adc_data ();
 logic adc_capture_hw_start, adc_capture_hw_stop; // DUT input
 logic adc_capture_full; // DUT output
 
 // data input
-Axis_If #(.DWIDTH(rx_pkg::DATA_WIDTH)) ps_readout_data ();
+Axis_If #(.DWIDTH(DATA_WIDTH)) ps_readout_data ();
 // configuration inputs
 Axis_If #(.DWIDTH(1)) ps_capture_arm ();
 Axis_If #(.DWIDTH($clog2($clog2(rx_pkg::CHANNELS+1)))) ps_capture_banking_mode ();
@@ -50,6 +51,7 @@ Axis_If #(.DWIDTH(rx_pkg::CHANNELS*($clog2(BUFFER_DEPTH)+1))) ps_capture_write_d
 
 // utilities for driving configuration inputs and checking DUT response
 buffer_tb #(
+  .DATA_WIDTH(DATA_WIDTH),
   .BUFFER_DEPTH(BUFFER_DEPTH)
 ) tb_i (
   .adc_clk,
@@ -66,6 +68,7 @@ buffer_tb #(
 );
 
 buffer #(
+  .DATA_WIDTH(DATA_WIDTH),
   .BUFFER_DEPTH(BUFFER_DEPTH),
   .READ_LATENCY(READ_LATENCY)
 ) dut_i (
