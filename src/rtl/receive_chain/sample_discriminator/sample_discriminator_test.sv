@@ -36,6 +36,10 @@ Axis_If #(.DWIDTH(3*rx_pkg::CHANNELS*TIMER_BITS)) ps_delays ();
 Axis_If #(.DWIDTH(rx_pkg::CHANNELS*$clog2(rx_pkg::CHANNELS+tx_pkg::CHANNELS))) ps_trigger_select ();
 Axis_If #(.DWIDTH(rx_pkg::CHANNELS)) ps_bypass ();
 
+// right now the way this is implemented is a little janky, but it gets the
+// job done. TODO fix
+logic [rx_pkg::CHANNELS-1:0][$clog2(rx_pkg::CHANNELS+tx_pkg::CHANNELS)-1:0] trigger_sources;
+
 sample_discriminator_tb #(
   .MAX_DELAY_CYCLES(MAX_DELAY_CYCLES)
 ) tb_i (
@@ -73,7 +77,6 @@ sample_discriminator #(
 
 logic [rx_pkg::CHANNELS-1:0][rx_pkg::SAMPLE_WIDTH-1:0] low_thresholds, high_thresholds;
 logic [rx_pkg::CHANNELS-1:0][TIMER_BITS-1:0] start_delays, stop_delays, digital_delays;
-logic [rx_pkg::CHANNELS-1:0][$clog2(rx_pkg::CHANNELS+tx_pkg::CHANNELS)-1:0] trigger_sources;
 
 int max_delay;
 logic [TIMER_BITS-1:0] start_delay_nsamp, stop_delay_nsamp, digital_delay_nsamp;

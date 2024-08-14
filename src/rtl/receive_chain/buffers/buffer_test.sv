@@ -74,6 +74,7 @@ buffer #(
   .adc_data,
   .adc_capture_hw_start,
   .adc_capture_hw_stop,
+  .adc_capture_ready(),
   .adc_capture_full,
   .ps_clk,
   .ps_reset,

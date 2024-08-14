@@ -110,13 +110,11 @@ task automatic send_sample_with_timeout(
   success = 1'b0;
   intf.valid <= 1'b1;
   intf.data <= data;
-  while ((timer < timeout) & (~success)) begin
-    timer = timer + 1;
-    if (intf.ok) begin
-      success = 1'b1;
-    end
+  do begin
     @(posedge clk);
-  end
+    timer = timer + 1;
+    success = intf.ok;
+  end while ((timer < timeout) & (~intf.ok));
   intf.valid <= 1'b0;
 endtask
 

@@ -42,7 +42,7 @@ Axis_If #(.DWIDTH(AXI_MM_WIDTH)) ps_timestamps_resized ();
 logic [1:0] adc_capture_ready;
 
 // CDC for start/stop
-Axis_If #(.DWIDTH(3)) adc_capture_arm_start_stop_sync ();
+Axis_If #(.DWIDTH(2)) adc_capture_start_stop_sync ();
 logic adc_capture_start, adc_capture_stop;
 assign adc_capture_start_stop_sync.ready = &adc_capture_ready;
 always_ff @(posedge adc_clk) begin
@@ -51,18 +51,37 @@ always_ff @(posedge adc_clk) begin
   end
   if (adc_capture_start_stop_sync.ok) begin
     // use hw_start/hw_stop inputs of buffer
-    {adc_capture_start, adc_capture_stop} <= adc_capture_arm_start_stop_sync.data[1:0];
+    {adc_capture_start, adc_capture_stop} <= adc_capture_start_stop_sync.data;
+  end else begin
+    adc_capture_start <= 1'b0;
+    adc_capture_stop <= 1'b0;
+  end
+end
+// delay ps_capture_arm_start_stop by a cycle to ensure start/stop signals are
+// delayed enough to arrive after arm signal
+Axis_If #(.DWIDTH(2)) ps_capture_start_stop_delay ();
+localparam int START_STOP_DELAY = 1;
+logic [START_STOP_DELAY-1:0][1:0] ps_capture_start_stop_d_data;
+logic [START_STOP_DELAY-1:0] ps_capture_start_stop_d_valid;
+assign ps_capture_arm_start_stop.ready = ps_capture_start_stop_delay.ready;
+assign ps_capture_start_stop_delay.last = 1'b0; // don't care
+always_ff @(posedge ps_clk) begin
+  if (ps_capture_start_stop_delay.ready) begin
+    ps_capture_start_stop_d_valid <= {ps_capture_start_stop_d_valid[START_STOP_DELAY-2:0], ps_capture_arm_start_stop.valid};
+    ps_capture_start_stop_d_data <= {ps_capture_start_stop_d_data[START_STOP_DELAY-2:0], ps_capture_arm_start_stop.data};
+    ps_capture_start_stop_delay.valid <= ps_capture_start_stop_d_valid[START_STOP_DELAY-1];
+    ps_capture_start_stop_delay.data <= ps_capture_start_stop_d_data[START_STOP_DELAY-1];
   end
 end
 axis_config_reg_cdc #(
-  .DWIDTH(3)
-) capture_arm_start_stop_cdc_i (
+  .DWIDTH(2)
+) capture_start_stop_cdc_i (
   .src_clk(ps_clk),
   .src_reset(ps_reset),
-  .src(ps_capture_arm_start_stop),
+  .src(ps_capture_start_stop_delay),
   .dest_clk(adc_clk),
   .dest_reset(adc_reset),
-  .dest(adc_capture_arm_start_stop_sync)
+  .dest(adc_capture_start_stop_sync)
 );
 
 // send arm signal to both buffers whenever arm_start_stop comes in
@@ -70,6 +89,8 @@ Axis_If #(.DWIDTH(1)) ps_samples_capture_arm ();
 Axis_If #(.DWIDTH(1)) ps_timestamps_capture_arm ();
 assign ps_samples_capture_arm.data = 1'b1;
 assign ps_timestamps_capture_arm.data = 1'b1;
+assign ps_samples_capture_arm.last = 1'b0; // don't care
+assign ps_timestamps_capture_arm.last = 1'b0; // don't care
 always_ff @(posedge ps_clk) begin
   if (ps_capture_arm_start_stop.ok & ps_capture_arm_start_stop.data[2]) begin
     ps_samples_capture_arm.valid <= 1'b1;
@@ -91,7 +112,7 @@ logic adc_capture_hw_start;
 always_ff @(posedge adc_clk) begin
   adc_capture_start_pipe <= {adc_capture_start_pipe[DISC_LATENCY-2:0], adc_capture_start};
 end
-assign adc_capture_hw_start = adc_capture_start_pipe[DISC_LATENCY-1] | adc_digital_trigger_in;
+assign adc_capture_hw_start = adc_capture_start_pipe[DISC_LATENCY-1] | adc_digital_trigger;
 assign adc_discriminator_reset = adc_capture_start;
 
 
@@ -154,7 +175,7 @@ buffer #(
   .adc_data(adc_timestamps_in),
   .adc_capture_hw_start,
   .adc_capture_hw_stop(adc_capture_full[1] | adc_capture_stop),
-  .adc_capture_ready(adc_capture_ready[0]);
+  .adc_capture_ready(adc_capture_ready[0]),
   .adc_capture_full(adc_capture_full[0]),
   .ps_clk,
   .ps_reset,
@@ -164,7 +185,7 @@ buffer #(
   .ps_capture_sw_reset(ps_timestamps_capture_sw_reset),
   .ps_readout_sw_reset(ps_timestamps_readout_sw_reset),
   .ps_readout_start(ps_timestamps_readout_start),
-  .ps_capture_write_depth(ps_timestamp_write_depth)
+  .ps_capture_write_depth(ps_timestamps_write_depth)
 );
 
 buffer #(
@@ -176,7 +197,7 @@ buffer #(
   .adc_data(adc_samples_in),
   .adc_capture_hw_start,
   .adc_capture_hw_stop(adc_capture_full[0] | adc_capture_stop),
-  .adc_capture_ready(adc_capture_ready[1]);
+  .adc_capture_ready(adc_capture_ready[1]),
   .adc_capture_full(adc_capture_full[1]),
   .ps_clk,
   .ps_reset,
@@ -229,19 +250,21 @@ end
 // buffer -> DMA
 always_comb begin
   unique case (ps_buffer_select)
-    TIMESTAMP:
+    TIMESTAMP: begin
       ps_readout_data.data = ps_timestamps_resized.data;
       ps_readout_data.valid = ps_timestamps_resized.valid;
       ps_readout_data.last = 1'b0; // don't send last until all data has been sent
-    DATA:
+    end
+    DATA: begin
       ps_readout_data.data = ps_samples_resized.data;
       ps_readout_data.valid = ps_samples_resized.valid;
       ps_readout_data.last = ps_samples_resized.last;
+    end
   endcase
 end
 
 // DMA -> buffer
-assign ps_timestamps_resized.ready = (buffer_select == TIMESTAMP) ? ps_readout_data.ready : 1'b0;
-assign ps_samples_resized.ready = (buffer_select == DATA) ? ps_readout_data.ready : 1'b0;
+assign ps_timestamps_resized.ready = (ps_buffer_select == TIMESTAMP) ? ps_readout_data.ready : 1'b0;
+assign ps_samples_resized.ready = (ps_buffer_select == DATA) ? ps_readout_data.ready : 1'b0;
 
 endmodule

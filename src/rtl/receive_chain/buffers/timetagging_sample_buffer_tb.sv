@@ -153,22 +153,22 @@ task automatic clear_received_data();
 endtask
 
 task automatic adc_samples_enabled(input logic enable_disable);
-  adc_disable_samples <= enable_disable;
+  adc_disable_samples <= ~enable_disable;
 endtask
 
 task automatic adc_timestamps_enabled(input logic enable_disable);
-  adc_disable_timestamps <= enable_disable;
+  adc_disable_timestamps <= ~enable_disable;
 endtask
 
 task automatic capture_arm_start_stop(
   inout sim_util_pkg::debug debug,
   input logic arm,
   input logic start,
-  input logic stop,
+  input logic stop
 );
   logic success;
   debug.display($sformatf("sending arm(%0d)/start(%0d)/stop(%0d) to capture", arm, start, stop), sim_util_pkg::DEBUG);
-  ps_capture_arm_start_stop_tx_i.send_sample_with_timeout(10, {arm, start, stop}, success);
+  ps_capture_arm_start_stop_tx_i.send_sample_with_timeout(20, {arm, start, stop}, success);
   if (~success) begin
     debug.error("failed to write to arm/start/stop register");
   end
@@ -215,7 +215,27 @@ task automatic start_readout(
   debug.display("starting readout", sim_util_pkg::DEBUG);
   ps_readout_start_tx_i.send_sample_with_timeout(10, 1'b1, success);
   if (~success) begin
-    debug.error("failed to start readout");
+    debug.fatal("failed to start readout");
+  end
+endtask
+
+// checking output
+task automatic check_write_depth_num_packets (
+  inout sim_util_pkg::debug debug
+);
+  debug.display("checking number of write_depth transfers", sim_util_pkg::DEBUG);
+  // check write_depth queue is empty
+  if (ps_samples_write_depth_rx_i.data_q.size() !== 1) begin
+    debug.error($sformatf(
+      "samples_write_depth.size() = %0d, expected 1 transactions",
+      ps_samples_write_depth_rx_i.data_q.size())
+    );
+  end
+  if (ps_timestamps_write_depth_rx_i.data_q.size() !== 1) begin
+    debug.error($sformatf(
+      "timestamps_write_depth.size() = %0d, expected 1 transactions",
+      ps_timestamps_write_depth_rx_i.data_q.size())
+    );
   end
 endtask
 
