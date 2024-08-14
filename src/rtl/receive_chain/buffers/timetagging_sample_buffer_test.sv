@@ -80,8 +80,7 @@ timetagging_sample_buffer_tb #(
   .ps_readout_start
 );
 
-//enum {CAPTURE_NO_RESET, CAPTURE_RESET} capture_reset;
-enum {CAPTURE_RESET, CAPTURE_NO_RESET} capture_reset;
+enum {CAPTURE_NO_RESET, CAPTURE_RESET} capture_reset;
 enum {READOUT_NO_RESET, READOUT_TSTAMP_RESET, READOUT_SAMPLE_RESET} readout_reset;
 enum {SW_START, HW_START} start_mode;
 enum {MANUAL_STOP, FULL} stop_mode;
@@ -220,8 +219,14 @@ initial begin
                     tb_i.clear_received_data();
                   end
                 end
-                // wait for last signal
-                do @(posedge ps_clk); while (~(ps_readout_data.ok & ps_readout_data.last));
+                if ((readout_reset == READOUT_NO_RESET) | (readout_iter != 0)) begin
+                  // wait for last signal only if we haven't just reset the
+                  // readout FSM
+                  do @(posedge ps_clk); while (~(ps_readout_data.ok & ps_readout_data.last));
+                end else begin
+                  // wait a few cycles before retrying readout
+                  repeat (20) @(posedge ps_clk);
+                end
               end
               // wait a few cycles
               repeat (5) @(posedge ps_clk);
