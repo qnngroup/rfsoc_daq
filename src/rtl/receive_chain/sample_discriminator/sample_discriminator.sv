@@ -72,7 +72,7 @@
 
 `timescale 1ns/1ps
 module sample_discriminator #(
-  parameter int MAX_DELAY_CYCLES = 64 // capture up to 128 ns before event @ 512 MHz
+  parameter int MAX_DELAY_CYCLES // 64: capture up to 128 ns before event @ 512 MHz
 ) (
   // ADC clock, reset (512 MHz)
   input logic adc_clk, adc_reset,

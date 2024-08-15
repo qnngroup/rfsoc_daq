@@ -4,113 +4,66 @@
 
 `timescale 1ns/1ps
 module receive_top #(
-  parameter int CHANNELS = 8, // number of input channels
-  parameter int TSTAMP_BUFFER_DEPTH = 1024, // depth of timestamp buffer
-  parameter int DATA_BUFFER_DEPTH = 16384, // depth of data/sample buffer
-  parameter int AXI_MM_WIDTH = 128, // width of DMA AXI-stream interface
-  parameter int PARALLEL_SAMPLES = 16, // number of parallel samples per clock cycle per channel
-  parameter int SAMPLE_WIDTH = 16, // width in bits of each sample
-  parameter int APPROX_CLOCK_WIDTH = 48 // requested width of timestamp
+  parameter int DISCRIMINATOR_MAX_DELAY, // 64 -> 128 ns @ 512 MHz
+  parameter int BUFFER_READ_LATENCY, // 4 -> permit UltraRAM inference
+  parameter int AXI_MM_WIDTH // 128
 ) (
-  // PS clock, reset (100MHz)
-  input logic ps_clk, ps_reset,
-  // Output data
+  /////////////////////////////////
+  // ADC clock, reset (512 MHz)
+  /////////////////////////////////
+  input logic adc_clk, adc_reset,
+  // Data
+  Realtime_Parallel_If.Slave adc_data_in,
+  // Realtime inputs
+  input logic [tx_pkg::CHANNELS-1:0] adc_digital_triggers,
+
+  /////////////////////////////////
+  // PS clock, reset (100 MHz)
+  /////////////////////////////////
+  // DMA data
   Axis_If.Master ps_readout_data,
-  // Command registers
-  Axis_If.Slave ps_capture_arm,
+  // Buffer status registers
+  Axis_If.Master ps_samples_write_depth,
+  Axis_If.Master ps_timestamps_write_depth,
+  // Buffer configuration registers
+  Axis_If.Slave ps_capture_arm_start_stop,
+  Axis_If.Slave ps_capture_banking_mode,
   Axis_If.Slave ps_capture_sw_reset,
   Axis_If.Slave ps_readout_sw_reset,
   Axis_If.Slave ps_readout_start,
-  // Configuration registers
-  Axis_If.Slave ps_discriminator_config, // {thresholds, delays, trigger_select, bypass}
-  Axis_If.Slave ps_capture_banking_mode,
-  // Status registers
-  Axis_If.Master ps_capture_write_depth
 
-  Axis_If.Slave ps_buffer_start_stop,
-  Axis_If.Slave ps_channel_mux_config, // $clog2(2*CHANNELS)*CHANNELS bits
-  // output registers
-  Axis_If.Master ps_buffer_timestamp_width, // 32 bits
-  Axis_If.Master ps_buffer_capture_done, // 1 bits
-
-  // ADC clock, reset (256MHz)
-  input logic adc_clk, adc_reset,
-  // data pipeline
-  Realtime_Parallel_If.Slave adc_data_in,
-  Axis_If.Master adc_dma_out,
-  // trigger from transmit_top
-  input logic [tx_pkg::CHANNELS-1:0] adc_digital_trigger_in
+  // Discriminator configuration registers
+  Axis_If.Slave ps_discriminator_thresholds,
+  Axis_If.Slave ps_discriminator_delays,
+  Axis_If.Slave ps_discriminator_trigger_select,
+  Axis_If.Slave ps_discriminator_bypass,
+  // Channel mux configuration registers
+  Axis_If.Slave ps_channel_mux_config,
+  // Trigger manager configuration registers
+  Axis_If.Slave ps_capture_digtal_trigger_select
 );
 
-//////////////////////////////////////////////////////////////////////////
-// PS clock domain (100MHz) -> RFADC clock domain (256MHz) CDC
-//////////////////////////////////////////////////////////////////////////
-Axis_If #(.DWIDTH(2*CHANNELS*SAMPLE_WIDTH)) adc_sample_discriminator_config ();
-Axis_If #(.DWIDTH($clog2($clog2(CHANNELS)+1))) adc_buffer_config ();
-Axis_If #(.DWIDTH(2)) adc_buffer_start_stop ();
-Axis_If #(.DWIDTH($clog2(2*CHANNELS)*CHANNELS)) adc_channel_mux_config ();
-Axis_If #(.DWIDTH(32)) adc_buffer_timestamp_width ();
-Axis_If #(.DWIDTH(1)) adc_buffer_capture_done ();
-
+// CDC ps_capture_digital_trigger_select
+Axis_If #(.DWIDTH(tx_pkg::CHANNELS)) adc_capture_digital_trigger_select_sync ();
 axis_config_reg_cdc #(
-  .DWIDTH(2*CHANNELS*SAMPLE_WIDTH)
-) ps_to_adc_sample_discriminator_config_i (
+  .DWIDTH(tx_pkg::CHANNELS)
+) cdc_digital_trigger_select_i (
   .src_clk(ps_clk),
   .src_reset(ps_reset),
-  .src(ps_sample_discriminator_config),
+  .src(ps_capture_digtal_trigger_select),
   .dest_clk(adc_clk),
   .dest_reset(adc_reset),
-  .dest(adc_sample_discriminator_config)
+  .dest(adc_capture_digital_trigger_select_sync)
 );
-axis_config_reg_cdc #(
-  .DWIDTH($clog2($clog2(CHANNELS)+1))
-) ps_to_adc_buffer_config_i (
-  .src_clk(ps_clk),
-  .src_reset(ps_reset),
-  .src(ps_buffer_config),
-  .dest_clk(adc_clk),
-  .dest_reset(adc_reset),
-  .dest(adc_buffer_config)
-);
-axis_config_reg_cdc #(
-  .DWIDTH(2)
-) ps_to_adc_buffer_start_stop_i (
-  .src_clk(ps_clk),
-  .src_reset(ps_reset),
-  .src(ps_buffer_start_stop),
-  .dest_clk(adc_clk),
-  .dest_reset(adc_reset),
-  .dest(adc_buffer_start_stop)
-);
-axis_config_reg_cdc #(
-  .DWIDTH($clog2(2*CHANNELS)*CHANNELS)
-) ps_to_adc_channel_mux_config_i (
-  .src_clk(ps_clk),
-  .src_reset(ps_reset),
-  .src(ps_channel_mux_config),
-  .dest_clk(adc_clk),
-  .dest_reset(adc_reset),
-  .dest(adc_channel_mux_config)
-);
-axis_config_reg_cdc #(
-  .DWIDTH(32)
-) adc_to_ps_buffer_timestamp_width_i (
-  .src_clk(adc_clk),
-  .src_reset(adc_reset),
-  .src(adc_buffer_timestamp_width),
-  .dest_clk(ps_clk),
-  .dest_reset(ps_reset),
-  .dest(ps_buffer_timestamp_width)
-);
-axis_config_reg_cdc #(
-  .DWIDTH(1)
-) adc_to_ps_buffer_capture_done_i (
-  .src_clk(adc_clk),
-  .src_reset(adc_reset),
-  .src(adc_buffer_capture_done),
-  .dest_clk(ps_clk),
-  .dest_reset(ps_reset),
-  .dest(ps_buffer_capture_done)
+logic adc_capture_trigger;
+trigger_manager #(
+  .CHANNELS(tx_pkg::CHANNELS)
+) trigger_manager_i (
+  .clk(adc_clk),
+  .reset(adc_reset),
+  .triggers_in(adc_digital_triggers),
+  .trigger_config(adc_capture_digital_trigger_select_sync),
+  .trigger_out(adc_capture_trigger)
 );
 
 //////////////////////////////////////////////////////////////////////////

@@ -4,9 +4,9 @@
 
 `timescale 1ns/1ps
 module lmh6401_spi #(
-  parameter int AXIS_CLK_FREQ = 150_000_000,
-  parameter int SPI_CLK_FREQ = 1_000_000,
-  parameter int NUM_CHANNELS = 2
+  parameter int AXIS_CLK_FREQ,
+  parameter int SPI_CLK_FREQ,
+  parameter int NUM_CHANNELS
 ) (
   input wire clk, reset,
   Axis_If.Slave command_in, // {addr + data}

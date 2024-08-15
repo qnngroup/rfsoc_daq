@@ -11,43 +11,57 @@ module axis_channel_mux #(
   parameter int OUTPUT_CHANNELS = 8,
   parameter int INPUT_CHANNELS = 16
 ) (
-  input wire clk, reset,
+  input logic data_clk, data_reset,
 
   Realtime_Parallel_If.Slave data_in, // INPUT_CHANNELS
   Realtime_Parallel_If.Master data_out, // OUTPUT_CHANNELS
 
   // selection of which input goes to each output
   // OUTPUT_CHANNELS * $clog2(INPUT_CHANNELS) bits
+  input logic config_clk, config_reset,
   Axis_If.Slave config_in
 );
 
-assign config_in.ready = 1'b1; // always accept a new configuration
+localparam int CONFIG_WIDTH = OUTPUT_CHANNELS*$clog2(INPUT_CHANNELS);
+Axis_If #(.DWIDTH(CONFIG_WIDTH)) data_config_sync ();
+axis_config_reg_cdc #(
+  .DWIDTH(CONFIG_WIDTH)
+) config_cdc_i (
+  .src_clk(config_clk),
+  .src_reset(config_reset),
+  .src(config_in),
+  .dest_clk(data_clk),
+  .dest_reset(data_reset),
+  .dest(data_config_sync)
+);
+
+assign data_config_sync.ready = 1'b1; // always accept a new configuration
 
 // register to store current selection for each logical channel
 localparam int SELECT_BITS = $clog2(INPUT_CHANNELS);
-logic [OUTPUT_CHANNELS-1:0][SELECT_BITS-1:0] source_select;
+logic [OUTPUT_CHANNELS-1:0][SELECT_BITS-1:0] data_source_select;
 
-always_ff @(posedge clk) begin
-  if (reset) begin
+always_ff @(posedge data_clk) begin
+  if (data_reset) begin
     for (int out_channel = 0; out_channel < OUTPUT_CHANNELS; out_channel++) begin
-      source_select[out_channel] <= SELECT_BITS'(out_channel); // map raw physical channels directly to logical channels
+      data_source_select[out_channel] <= SELECT_BITS'(out_channel); // map raw physical channels directly to logical channels
     end
   end else begin
-    if (config_in.ok) begin
-      source_select <= config_in.data;
+    if (data_config_sync.ok) begin
+      data_source_select <= data_config_sync.data;
     end
   end
 end
 
 // actually mux the data (registered so we could probably run this at 512 MHz if we wanted)
-always_ff @(posedge clk) begin
-  if (reset) begin
+always_ff @(posedge data_clk) begin
+  if (data_reset) begin
     data_out.valid <= '0;
   end else begin
-    // no reset condition for data, since it doesn't really matter
+    // no data_reset condition for data, since it doesn't really matter
     for (int out_channel = 0; out_channel < OUTPUT_CHANNELS; out_channel++) begin
-      data_out.data[out_channel] <= data_in.data[source_select[out_channel]];
-      data_out.valid[out_channel] <= data_in.valid[source_select[out_channel]];
+      data_out.data[out_channel] <= data_in.data[data_source_select[out_channel]];
+      data_out.valid[out_channel] <= data_in.valid[data_source_select[out_channel]];
     end
   end
 end

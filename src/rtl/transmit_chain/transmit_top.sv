@@ -56,21 +56,7 @@ module transmit_top #(
 ////////////////////////////////////////////////////////////////////////////////
 // CDC for configuration registers for DAC prescaler and DDS
 ////////////////////////////////////////////////////////////////////////////////
-Axis_If #(.DWIDTH((SCALE_WIDTH+OFFSET_WIDTH)*CHANNELS)) dac_scale_offset ();
 Axis_If #(.DWIDTH(1+2*CHANNELS)) dac_trigger_config ();
-Axis_If #(.DWIDTH($clog2(CHANNELS*3)*CHANNELS)) dac_channel_mux_config ();
-
-// synchronize dac_prescaler scale factor
-axis_config_reg_cdc #(
-  .DWIDTH((SCALE_WIDTH+OFFSET_WIDTH)*CHANNELS)
-) ps_to_dac_scale_offset_cdc_i (
-  .src_clk(ps_clk),
-  .src_reset(ps_reset),
-  .src(ps_scale_offset),
-  .dest_clk(dac_clk),
-  .dest_reset(dac_reset),
-  .dest(dac_scale_offset)
-);
 
 // synchronize trigger configuration to RFDAC clock domain
 axis_config_reg_cdc #(
@@ -82,18 +68,6 @@ axis_config_reg_cdc #(
   .dest_clk(dac_clk),
   .dest_reset(dac_reset),
   .dest(dac_trigger_config)
-);
-
-// synchronize multiplexer configuration to RFDAC clock domain
-axis_config_reg_cdc #(
-  .DWIDTH($clog2(3*CHANNELS)*CHANNELS)
-) ps_to_dac_mux_config_cdc_i (
-  .src_clk(ps_clk),
-  .src_reset(ps_reset),
-  .src(ps_channel_mux_config),
-  .dest_clk(dac_clk),
-  .dest_reset(dac_reset),
-  .dest(dac_channel_mux_config)
 );
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -187,15 +161,17 @@ axis_channel_mux #(
   .INPUT_CHANNELS(3*CHANNELS),
   .OUTPUT_CHANNELS(CHANNELS)
 ) channel_mux_i (
-  .clk(dac_clk),
-  .reset(dac_reset),
+  .data_clk(dac_clk),
+  .data_reset(dac_reset),
   .data_in(dac_mux_data_in),
   .data_out(dac_mux_data_out),
-  .config_in(dac_channel_mux_config)
+  .config_clk(ps_clk),
+  .config_reset(ps_reset),
+  .config_in(ps_channel_mux_config)
 );
 
 // scaler
-dac_prescaler #(
+realtime_affine #(
   .PARALLEL_SAMPLES(PARALLEL_SAMPLES),
   .SAMPLE_WIDTH(SAMPLE_WIDTH),
   .CHANNELS(CHANNELS),
@@ -203,11 +179,13 @@ dac_prescaler #(
   .OFFSET_WIDTH(OFFSET_WIDTH),
   .SCALE_INT_BITS(SCALE_INT_BITS)
 ) dac_prescaler_i (
-  .clk(dac_clk),
-  .reset(dac_reset),
+  .data_clk(dac_clk),
+  .data_reset(dac_reset),
   .data_out(dac_data_out),
   .data_in(dac_mux_data_out),
-  .scale_offset(dac_scale_offset)
+  .config_clk(ps_clk),
+  .config_reset(ps_reset),
+  .config_scale_offset(ps_scale_offset)
 );
 
 endmodule
