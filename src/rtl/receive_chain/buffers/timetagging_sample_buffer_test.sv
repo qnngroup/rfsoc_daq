@@ -2,7 +2,7 @@
 `timescale 1ns/1ps
 module timetagging_sample_buffer_test ();
 
-sim_util_pkg::debug debug = new(sim_util_pkg::DEBUG);
+sim_util_pkg::debug debug = new(sim_util_pkg::VERBOSE);
 
 localparam int BUFFER_READ_LATENCY = 4;
 localparam int AXI_MM_WIDTH = 128;
@@ -120,13 +120,7 @@ initial begin
               adc_digital_trigger <= 1'b0;
 
               tb_i.init ();
-              repeat (10) @(posedge ps_clk);
-              ps_reset <= 1'b0;
-              @(posedge adc_clk);
-              adc_reset <= 1'b0;
-              // wait a few cycles to come out of reset
-              repeat (5) @(posedge ps_clk);
-              // configure DUT
+              // configure stimulus
               case (input_mode)
                 ONLY_TIMESTAMPS: begin
                   tb_i.adc_samples_enabled(1'b0);
@@ -141,6 +135,12 @@ initial begin
                   tb_i.adc_timestamps_enabled(1'b1);
                 end
               endcase
+              repeat (10) @(posedge ps_clk);
+              ps_reset <= 1'b0;
+              @(posedge adc_clk);
+              adc_reset <= 1'b0;
+              // wait a few cycles to come out of reset
+              repeat (5) @(posedge ps_clk);
               // set banking mode
               tb_i.set_banking_mode(debug, banking_mode);
               // send data
@@ -233,6 +233,7 @@ initial begin
 
               // check output
               tb_i.check_write_depth_num_packets(debug);
+              tb_i.check_output(debug, 1 << banking_mode);
 
               // clear queues
               tb_i.clear_write_depth();

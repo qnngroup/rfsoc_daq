@@ -239,4 +239,143 @@ task automatic check_write_depth_num_packets (
   end
 endtask
 
+// check that the correct number of samples match between the output and
+// input
+localparam int TSTAMP_CHANNEL_SIZE = (buffer_pkg::TSTAMP_BUFFER_DEPTH*buffer_pkg::TSTAMP_WIDTH)/AXI_MM_WIDTH;
+localparam int SAMPLE_CHANNEL_SIZE = (buffer_pkg::SAMPLE_BUFFER_DEPTH*rx_pkg::DATA_WIDTH)/AXI_MM_WIDTH;
+localparam int READOUT_MIDPOINT = rx_pkg::CHANNELS*TSTAMP_CHANNEL_SIZE;
+task automatic check_output(
+  inout sim_util_pkg::debug debug,
+  input int active_channels
+);
+  sim_util_pkg::queue #(.T(rx_pkg::sample_t), .T2(logic [buffer_pkg::TSTAMP_WIDTH-1:0])) tstamp_q_util = new();
+  sim_util_pkg::queue #(.T(rx_pkg::sample_t), .T2(logic [rx_pkg::DATA_WIDTH-1:0])) sample_q_util = new();
+  sim_util_pkg::queue #(.T(rx_pkg::sample_t), .T2(logic [AXI_MM_WIDTH-1:0])) readout_q_util = new();
+  logic [AXI_MM_WIDTH-1:0] readout_samples_q [rx_pkg::CHANNELS][$];
+  logic [AXI_MM_WIDTH-1:0] readout_timestamps_q [rx_pkg::CHANNELS][$];
+  rx_pkg::sample_t input_q [$];
+  rx_pkg::sample_t output_q [$];
+  logic [rx_pkg::CHANNELS-1:0][$clog2(buffer_pkg::TSTAMP_BUFFER_DEPTH):0] timestamps_write_depths_temp;
+  logic [rx_pkg::CHANNELS-1:0][$clog2(buffer_pkg::SAMPLE_BUFFER_DEPTH):0] samples_write_depths_temp;
+  int total_depth;
+  int expected_sample_count;
+  int destination_channel;
+  int arrival_time;
+  logic matched;
+  for (int i = ps_readout_data_rx_i.data_q.size() - 1; i >= 0; i--) begin
+    arrival_time = ps_readout_data_rx_i.data_q.size() - 1 - i;
+    if (arrival_time < READOUT_MIDPOINT) begin
+      destination_channel = (arrival_time / TSTAMP_CHANNEL_SIZE) % active_channels;
+      debug.display($sformatf("saving timestamp %x to channel %0d", ps_readout_data_rx_i.data_q[i], destination_channel), sim_util_pkg::DEBUG);
+      readout_timestamps_q[destination_channel].push_front(ps_readout_data_rx_i.data_q[i]);
+      // timestamp
+    end else begin
+      destination_channel = ((arrival_time - READOUT_MIDPOINT) / SAMPLE_CHANNEL_SIZE) % active_channels;
+      debug.display($sformatf("saving sample %x to channel %0d", ps_readout_data_rx_i.data_q[i], destination_channel), sim_util_pkg::DEBUG);
+      readout_samples_q[destination_channel].push_front(ps_readout_data_rx_i.data_q[i]);
+      // data
+    end
+  end
+  timestamps_write_depths_temp = ps_timestamps_write_depth_rx_i.data_q[$];
+  samples_write_depths_temp = ps_samples_write_depth_rx_i.data_q[$];
+  debug.display($sformatf("ps_timestamps_write_depth_rx_i.data_q[$] = %x", ps_timestamps_write_depth_rx_i.data_q[$]), sim_util_pkg::DEBUG);
+  debug.display($sformatf("ps_samples_write_depth_rx_i.data_q[$] = %x", ps_samples_write_depth_rx_i.data_q[$]), sim_util_pkg::DEBUG);
+  for (int source = 0; source < 2; source++) begin
+    for (int channel = 0; channel < active_channels; channel++) begin
+      total_depth = 0;
+      for (int bank = channel; bank < rx_pkg::CHANNELS; bank += active_channels) begin
+        total_depth += (source == 0) ? timestamps_write_depths_temp[bank] : samples_write_depths_temp[bank];
+      end
+      debug.display($sformatf(
+        "source = %s, channel = %0d, total_write_depth = %0d (raw = %x)",
+        (source == 0) ? "TSTAMP" : "SAMP",
+        channel,
+        total_depth,
+        (source == 0) ? timestamps_write_depths_temp : samples_write_depths_temp),
+        sim_util_pkg::DEBUG
+      );
+      // split up data into 16-bit qtys
+      while (input_q.size() > 0) input_q.pop_back();
+      if (source == 0) begin
+        tstamp_q_util.samples_from_batches(
+          adc_timestamps_in_tx_i.data_q[channel],
+          input_q,
+          rx_pkg::SAMPLE_WIDTH,
+          buffer_pkg::TSTAMP_WIDTH/rx_pkg::SAMPLE_WIDTH
+        );
+        readout_q_util.samples_from_batches(
+          readout_timestamps_q[channel],
+          output_q,
+          rx_pkg::SAMPLE_WIDTH,
+          AXI_MM_WIDTH/rx_pkg::SAMPLE_WIDTH
+        );
+        expected_sample_count = (total_depth * buffer_pkg::TSTAMP_WIDTH) / rx_pkg::SAMPLE_WIDTH;
+      end else begin
+        sample_q_util.samples_from_batches(
+          adc_samples_in_tx_i.data_q[channel],
+          input_q,
+          rx_pkg::SAMPLE_WIDTH,
+          rx_pkg::PARALLEL_SAMPLES
+        );
+        // remove irrelevant output data
+        readout_q_util.samples_from_batches(
+          readout_samples_q[channel],
+          output_q,
+          rx_pkg::SAMPLE_WIDTH,
+          AXI_MM_WIDTH/rx_pkg::SAMPLE_WIDTH
+        );
+        expected_sample_count = (total_depth * rx_pkg::DATA_WIDTH) / rx_pkg::SAMPLE_WIDTH;
+      end
+      // remove irrelevant trailing output data
+      while (output_q.size() > expected_sample_count) output_q.pop_front();
+      // remove extra samples until we get something that matches the DMA data
+      // since we aren't sure exactly when the DUT started saving data
+      // match more than just a couple samples
+      matched = 1'b0;
+      while ((input_q.size() > expected_sample_count) && (!matched)) begin
+        matched = 1'b1;
+        for (int i = 0; i < 4; i++) begin
+          if (input_q[$-i] !== output_q[$-i]) begin
+            matched = 1'b0;
+          end
+        end
+        if (matched) begin
+          break;
+        end
+        debug.display($sformatf(
+          "input_q[%0d] = %x, output_q[%0d] = %x",
+          channel, input_q[$],
+          channel, output_q[$]),
+          sim_util_pkg::DEBUG
+        );
+        input_q.pop_back();
+      end
+      // make sure depth is correct
+      if (source == 0) begin
+        expected_sample_count = (total_depth * buffer_pkg::TSTAMP_WIDTH)/rx_pkg::SAMPLE_WIDTH;
+      end else begin
+        expected_sample_count = total_depth * rx_pkg::PARALLEL_SAMPLES;
+      end
+      if (expected_sample_count > input_q.size()) begin
+        debug.error($sformatf(
+          "channel %0d: DUT reported write depth from %s = %0d, but only %0d samples were sent",
+          channel,
+          source == 0 ? "TSTAMP" : "SAMP",
+          expected_sample_count,
+          input_q.size())
+        );
+      end
+      // remove trailing samples on input queue
+      while (input_q.size() > expected_sample_count) input_q.pop_front();
+      //
+      // check that queues match
+      // compare queues
+      readout_q_util.compare(debug, input_q, output_q);
+      while (input_q.size() > 0) input_q.pop_back();
+      while (output_q.size() > 0) output_q.pop_back();
+    end
+  end
+endtask
+
+
 endmodule

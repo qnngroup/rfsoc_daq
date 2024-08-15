@@ -167,6 +167,7 @@ assign ps_timestamps_readout_start.last = ps_readout_start.last;
 logic [1:0] adc_capture_full;
 
 buffer #(
+  .DATA_WIDTH(buffer_pkg::TSTAMP_WIDTH),
   .BUFFER_DEPTH(buffer_pkg::TSTAMP_BUFFER_DEPTH),
   .READ_LATENCY(BUFFER_READ_LATENCY)
 ) timestamp_buffer_i (
@@ -189,6 +190,7 @@ buffer #(
 );
 
 buffer #(
+  .DATA_WIDTH(rx_pkg::DATA_WIDTH),
   .BUFFER_DEPTH(buffer_pkg::SAMPLE_BUFFER_DEPTH),
   .READ_LATENCY(BUFFER_READ_LATENCY)
 ) data_buffer_i (
