@@ -36,6 +36,8 @@
 //      and only resets to DMA_READY so that capture cannot be triggered again
 //      (unless capture sw_reset is also asserted)
 //    - 1-bit quantities
+// - readout_start:
+//    - initiate a readout of data
 //
 // Status registers:
 // - ps_capture_write_depth:

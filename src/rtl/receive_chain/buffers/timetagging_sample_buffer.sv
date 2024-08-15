@@ -1,5 +1,53 @@
 // timetagging_sample_buffer.sv - Reed Foster
-// combines sample_discriminator with two buffers
+// Combines two buffers, one for timestamps, one for samples
+//
+// Datastream interfaces
+// - adc_samples_in: incoming sample data
+// - adc_timestamps_in: incoming timestamp data
+// - ps_readout_data:
+//    - AXI_MM_WIDTH-wide bus for DMA readout of buffers
+//    - First outputs timestamps, then samples
+//    - Transfer size (and order) is fixed; use write_depth registers to
+//      determine number of valid samples
+//    - [valid timestamps, ..., valid samples, ...]
+//
+// Realtime I/O
+// - adc_digital_trigger:
+//    - Output of trigger manager, used to start capture from a digital event
+// - adc_discriminator_reset:
+//    - Input to sample discriminator that goes high when capture is started
+//      to reset sample discriminator hysteresis tracking and sample index
+//
+// Status registers
+// - ps_samples_write_depth:
+//    - number of sample batches saved
+//    - rx_pkg::PARALLEL_SAMPLES per batch
+// - ps_timestamps_write_depth:
+//    - number of timestamp batches saved
+//    - 1 timestamp per batch
+//
+// Configuration registers
+// - ps_capture_arm_start_stop:
+//    - {arm, start, stop}
+//    - arm will put the capture FSM into a state where adc_digital_trigger
+//      can start a capture
+//      - {1,0,0} to arm
+//    - start causes a software start, and must be accompanied by an arm
+//      - {1,1,0} to start
+//    - stop allows manual stopping of capture, e.g. when input stream is very
+//      sparse and one doesn't want to wait until the buffer fills up
+//      - {0,0,1} to stop
+// - ps_capture_banking_mode:
+//    - selects number of active capture channels
+//    - see buffer.sv for details
+// - ps_capture_sw_reset:
+//    - reset capture FSM
+//    - see buffer.sv for details
+// - ps_readout_sw_reset:
+//    - reset readout FSM
+//    - see buffer.sv for details
+// - ps_readout_start:
+//    - put readout FSM into DMA mode and initiate a readout of data
 
 `timescale 1ns/1ps
 module timetagging_sample_buffer #(
