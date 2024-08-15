@@ -8,64 +8,67 @@ module axis_channel_mux_test ();
 
 sim_util_pkg::debug debug = new(sim_util_pkg::DEFAULT); // printing, error tracking
 
-logic clk = 0;
-localparam CLK_RATE_HZ = 100_000_000;
-always #(0.5s/CLK_RATE_HZ) clk = ~clk;
+logic data_clk = 0;
+localparam DATA_CLK_RATE_HZ = 256_000_000;
+always #(0.5s/DATA_CLK_RATE_HZ) data_clk = ~data_clk;
+logic data_reset;
 
-logic reset;
+logic config_clk = 0;
+localparam CONFIG_CLK_RATE_HZ = 256_000_000;
+always #(0.5s/CONFIG_CLK_RATE_HZ) config_clk = ~config_clk;
+logic config_reset;
 
-localparam int PARALLEL_SAMPLES = 16;
-localparam int SAMPLE_WIDTH = 16;
+localparam int DATA_WIDTH = 256;
 localparam int INPUT_CHANNELS = 16;
 localparam int OUTPUT_CHANNELS = 8;
 
-typedef logic [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0] sample_t;
+typedef logic [DATA_WIDTH-1:0] sample_t;
 sim_util_pkg::queue #(.T(sample_t)) q_util = new;
 
 localparam int SELECT_BITS = $clog2(INPUT_CHANNELS);
 
-Realtime_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(INPUT_CHANNELS)) data_in ();
-Realtime_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(OUTPUT_CHANNELS)) data_out ();
+Realtime_Parallel_If #(.DWIDTH(DATA_WIDTH), .CHANNELS(INPUT_CHANNELS)) data_in ();
+Realtime_Parallel_If #(.DWIDTH(DATA_WIDTH), .CHANNELS(OUTPUT_CHANNELS)) data_out ();
 
 Axis_If #(.DWIDTH(OUTPUT_CHANNELS*SELECT_BITS)) config_in ();
 
 axis_channel_mux #(
-  .PARALLEL_SAMPLES(PARALLEL_SAMPLES),
-  .SAMPLE_WIDTH(SAMPLE_WIDTH),
   .INPUT_CHANNELS(INPUT_CHANNELS),
   .OUTPUT_CHANNELS(OUTPUT_CHANNELS)
 ) dut_i (
-  .clk,
-  .reset,
+  .data_clk,
+  .data_reset,
   .data_in,
   .data_out,
+  .config_clk,
+  .config_reset,
   .config_in
 );
 
 logic [INPUT_CHANNELS-1:0] valid_en;
 realtime_parallel_driver #(
-  .DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH),
+  .DWIDTH(DATA_WIDTH),
   .CHANNELS(INPUT_CHANNELS)
 ) driver_i (
-  .clk,
-  .reset,
+  .clk(data_clk),
+  .reset(data_reset),
   .valid_rand('1),
   .valid_en,
   .intf(data_in)
 );
 
 realtime_parallel_receiver #(
-  .DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH),
+  .DWIDTH(DATA_WIDTH),
   .CHANNELS(OUTPUT_CHANNELS)
 ) receiver_i (
-  .clk,
+  .clk(data_clk),
   .intf(data_out)
 );
 
 logic [OUTPUT_CHANNELS-1:0][SELECT_BITS-1:0] source_select;
 
-always_ff @(posedge clk) begin
-  if (reset) begin
+always_ff @(posedge config_clk) begin
+  if (config_reset) begin
     config_in.data <= '0;
   end else begin
     for (int out_channel = 0; out_channel < OUTPUT_CHANNELS; out_channel++) begin
@@ -101,26 +104,32 @@ endtask
 
 initial begin
   debug.display("### TESTING AXIS_CHANNEL_MUX ###", sim_util_pkg::DEFAULT);
-  reset <= 1'b1;
+  config_reset <= 1'b1;
+  data_reset <= 1'b1;
   config_in.valid <= 1'b0;
   valid_en <= '0;
-  repeat (100) @(posedge clk);
-  reset <= 1'b0;
-  repeat (100) @(posedge clk);
+  repeat (100) @(posedge config_clk);
+  config_reset <= 1'b0;
+  @(posedge data_clk);
+  data_reset <= 1'b0;
+  repeat (100) @(posedge data_clk);
   // change the configuration a few times
   repeat (5) begin
+    @(posedge data_clk);
     receiver_i.clear_queues();
     driver_i.clear_queues();
     valid_en <= '0;
+    @(posedge config_clk);
     config_in.valid <= 1'b1;
-    @(posedge clk);
+    @(posedge config_clk);
     config_in.valid <= 1'b0;
+    repeat (10) @(posedge data_clk);
     valid_en <= '1;
     repeat (200) begin
-      @(posedge clk);
+      @(posedge data_clk);
     end
     valid_en <= '0;
-    repeat (5) @(posedge clk);
+    repeat (5) @(posedge data_clk);
     check_results(source_select);
   end
   debug.finish();

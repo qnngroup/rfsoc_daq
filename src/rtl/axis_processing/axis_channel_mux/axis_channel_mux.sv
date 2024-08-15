@@ -6,8 +6,6 @@
 
 `timescale 1ns/1ps
 module axis_channel_mux #(
-  parameter int PARALLEL_SAMPLES = 16, // 4.096 GS/s @ 256 MHz
-  parameter int SAMPLE_WIDTH = 16, // 12-bit ADC
   parameter int OUTPUT_CHANNELS = 8,
   parameter int INPUT_CHANNELS = 16
 ) (
