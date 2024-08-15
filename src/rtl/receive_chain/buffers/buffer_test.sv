@@ -217,9 +217,10 @@ initial begin
                   // send reset in the middle of readout
                   tb_i.reset_readout(debug);
                   // clear received data
-                  // wait an extra cycle to make sure that we don't
-                  // accidentally save the tailend of the cancelled readout
-                  @(posedge ps_clk);
+                  // wait to make sure that we don't accidentally save
+                  // the tailend of the cancelled readout
+                  do @(posedge ps_clk); while (dut_i.ps_readout_valid_pipe !== 0);
+                  repeat (10) @(posedge ps_clk);
                   tb_i.clear_received_data();
                 end else begin
                   // finish readout

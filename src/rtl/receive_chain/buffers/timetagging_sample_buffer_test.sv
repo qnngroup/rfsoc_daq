@@ -2,7 +2,7 @@
 `timescale 1ns/1ps
 module timetagging_sample_buffer_test ();
 
-sim_util_pkg::debug debug = new(sim_util_pkg::VERBOSE);
+sim_util_pkg::debug debug = new(sim_util_pkg::DEFAULT);
 
 localparam int BUFFER_READ_LATENCY = 4;
 localparam int AXI_MM_WIDTH = 128;
@@ -81,10 +81,16 @@ timetagging_sample_buffer_tb #(
 );
 
 enum {CAPTURE_NO_RESET, CAPTURE_RESET} capture_reset;
-enum {READOUT_NO_RESET, READOUT_TSTAMP_RESET, READOUT_SAMPLE_RESET} readout_reset;
+//enum {READOUT_NO_RESET, READOUT_TSTAMP_RESET, READOUT_SAMPLE_RESET} readout_reset;
+enum {READOUT_TSTAMP_RESET, READOUT_SAMPLE_RESET, READOUT_NO_RESET} readout_reset;
 enum {SW_START, HW_START} start_mode;
 enum {MANUAL_STOP, FULL} stop_mode;
 enum {ONLY_TIMESTAMPS, ONLY_SAMPLES, BOTH} input_mode;
+
+int readout_q_size;
+always_comb begin
+  readout_q_size = tb_i.ps_readout_data_rx_i.data_q.size();
+end
 
 int timeout;
 
@@ -216,6 +222,10 @@ initial begin
                   end
                   if (readout_iter == 0) begin
                     tb_i.reset_readout(debug);
+                    // wait to make sure we don't accidentally save
+                    // the tailend of the cancelled readout
+                    do @(posedge ps_clk); while (~((dut_i.timestamp_buffer_i.ps_readout_valid_pipe === 0) && (dut_i.sample_buffer_i.ps_readout_valid_pipe === 0)));
+                    repeat (10) @(posedge ps_clk)
                     tb_i.clear_received_data();
                   end
                 end

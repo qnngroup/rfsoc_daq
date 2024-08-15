@@ -193,7 +193,7 @@ buffer #(
   .DATA_WIDTH(rx_pkg::DATA_WIDTH),
   .BUFFER_DEPTH(buffer_pkg::SAMPLE_BUFFER_DEPTH),
   .READ_LATENCY(BUFFER_READ_LATENCY)
-) data_buffer_i (
+) sample_buffer_i (
   .adc_clk,
   .adc_reset,
   .adc_data(adc_samples_in),
@@ -212,12 +212,25 @@ buffer #(
   .ps_capture_write_depth(ps_samples_write_depth)
 );
 
+logic ps_readout_sw_reset_d;
+always_ff @(posedge ps_clk) begin
+  if (ps_reset) begin
+    ps_readout_sw_reset_d <= 1'b0;
+  end else begin
+    if (ps_readout_sw_reset.ok) begin
+      ps_readout_sw_reset_d <= 1'b1;
+    end else begin
+      ps_readout_sw_reset_d <= 1'b0;
+    end
+  end
+end
+
 axis_width_converter #(
   .DWIDTH_IN(buffer_pkg::TSTAMP_WIDTH),
   .DWIDTH_OUT(AXI_MM_WIDTH)
 ) timestamp_width_converter_i (
   .clk(ps_clk),
-  .reset(ps_reset),
+  .reset(ps_reset | ps_readout_sw_reset_d),
   .data_in(ps_timestamps),
   .data_out(ps_timestamps_resized)
 );
@@ -227,7 +240,7 @@ axis_width_converter #(
   .DWIDTH_OUT(AXI_MM_WIDTH)
 ) data_width_converter_i (
   .clk(ps_clk),
-  .reset(ps_reset),
+  .reset(ps_reset | ps_readout_sw_reset_d),
   .data_in(ps_samples),
   .data_out(ps_samples_resized)
 );
