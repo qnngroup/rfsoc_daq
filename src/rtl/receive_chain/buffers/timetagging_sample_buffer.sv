@@ -60,17 +60,12 @@ end
 // delay ps_capture_arm_start_stop by a cycle to ensure start/stop signals are
 // delayed enough to arrive after arm signal
 Axis_If #(.DWIDTH(2)) ps_capture_start_stop_delay ();
-localparam int START_STOP_DELAY = 1;
-logic [START_STOP_DELAY-1:0][1:0] ps_capture_start_stop_d_data;
-logic [START_STOP_DELAY-1:0] ps_capture_start_stop_d_valid;
 assign ps_capture_arm_start_stop.ready = ps_capture_start_stop_delay.ready;
 assign ps_capture_start_stop_delay.last = 1'b0; // don't care
 always_ff @(posedge ps_clk) begin
   if (ps_capture_start_stop_delay.ready) begin
-    ps_capture_start_stop_d_valid <= {ps_capture_start_stop_d_valid[START_STOP_DELAY-2:0], ps_capture_arm_start_stop.valid};
-    ps_capture_start_stop_d_data <= {ps_capture_start_stop_d_data[START_STOP_DELAY-2:0], ps_capture_arm_start_stop.data};
-    ps_capture_start_stop_delay.valid <= ps_capture_start_stop_d_valid[START_STOP_DELAY-1];
-    ps_capture_start_stop_delay.data <= ps_capture_start_stop_d_data[START_STOP_DELAY-1];
+    ps_capture_start_stop_delay.valid <= ps_capture_arm_start_stop.valid;
+    ps_capture_start_stop_delay.data <= ps_capture_arm_start_stop.data;
   end
 end
 axis_config_reg_cdc #(
