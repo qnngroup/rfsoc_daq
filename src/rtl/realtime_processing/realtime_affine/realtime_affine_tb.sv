@@ -1,4 +1,5 @@
 // realtime_affine_tb.sv
+// testbench to interface with realtime_affine module
 
 `timescale 1ns / 1ps
 module realtime_affine_tb #(
