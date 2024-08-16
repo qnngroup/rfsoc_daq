@@ -266,20 +266,38 @@ task automatic check_output(
     arrival_time = ps_readout_data_rx_i.data_q.size() - 1 - i;
     if (arrival_time < READOUT_MIDPOINT) begin
       destination_channel = (arrival_time / TSTAMP_CHANNEL_SIZE) % active_channels;
-      debug.display($sformatf("saving timestamp %x to channel %0d", ps_readout_data_rx_i.data_q[i], destination_channel), sim_util_pkg::DEBUG);
+      debug.display($sformatf(
+        "saving timestamp %x to channel %0d",
+        ps_readout_data_rx_i.data_q[i],
+        destination_channel),
+        sim_util_pkg::DEBUG
+      );
       readout_timestamps_q[destination_channel].push_front(ps_readout_data_rx_i.data_q[i]);
       // timestamp
     end else begin
       destination_channel = ((arrival_time - READOUT_MIDPOINT) / SAMPLE_CHANNEL_SIZE) % active_channels;
-      debug.display($sformatf("saving sample %x to channel %0d", ps_readout_data_rx_i.data_q[i], destination_channel), sim_util_pkg::DEBUG);
+      debug.display($sformatf(
+        "saving sample %x to channel %0d",
+        ps_readout_data_rx_i.data_q[i],
+        destination_channel),
+        sim_util_pkg::DEBUG
+      );
       readout_samples_q[destination_channel].push_front(ps_readout_data_rx_i.data_q[i]);
       // data
     end
   end
   timestamps_write_depths_temp = ps_timestamps_write_depth_rx_i.data_q[$];
   samples_write_depths_temp = ps_samples_write_depth_rx_i.data_q[$];
-  debug.display($sformatf("ps_timestamps_write_depth_rx_i.data_q[$] = %x", ps_timestamps_write_depth_rx_i.data_q[$]), sim_util_pkg::DEBUG);
-  debug.display($sformatf("ps_samples_write_depth_rx_i.data_q[$] = %x", ps_samples_write_depth_rx_i.data_q[$]), sim_util_pkg::DEBUG);
+  debug.display($sformatf(
+    "ps_timestamps_write_depth_rx_i.data_q[$] = %x",
+    ps_timestamps_write_depth_rx_i.data_q[$]),
+    sim_util_pkg::DEBUG
+  );
+  debug.display($sformatf(
+    "ps_samples_write_depth_rx_i.data_q[$] = %x",
+    ps_samples_write_depth_rx_i.data_q[$]),
+    sim_util_pkg::DEBUG
+  );
   for (int source = 0; source < 2; source++) begin
     for (int channel = 0; channel < active_channels; channel++) begin
       total_depth = 0;

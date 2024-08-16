@@ -79,7 +79,7 @@ task automatic send_data ();
 endtask
 
 task automatic update_scale_offset (
-  sim_util_pkg::debug debug
+  inout sim_util_pkg::debug debug
 );
   logic [CONFIG_WIDTH-1:0] config_data;
   logic success;
@@ -112,7 +112,7 @@ task automatic sent_to_expected (
 endtask
 
 task automatic check_output (
-  sim_util_pkg::debug debug
+  inout sim_util_pkg::debug debug
 );
   int_t expected_q [$];
   int_t received_q [$];

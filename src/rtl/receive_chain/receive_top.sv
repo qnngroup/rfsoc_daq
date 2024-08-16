@@ -20,6 +20,7 @@ module receive_top #(
   /////////////////////////////////
   // PS clock, reset (100 MHz)
   /////////////////////////////////
+  input logic ps_clk, ps_reset,
   // DMA data
   Axis_If.Master ps_readout_data,
   // Buffer status registers
@@ -40,17 +41,17 @@ module receive_top #(
   // Channel mux configuration registers
   Axis_If.Slave ps_channel_mux_config,
   // Trigger manager configuration registers
-  Axis_If.Slave ps_capture_digtal_trigger_select
+  Axis_If.Slave ps_capture_digital_trigger_select
 );
 
 // CDC ps_capture_digital_trigger_select
-Axis_If #(.DWIDTH(tx_pkg::CHANNELS)) adc_capture_digital_trigger_select_sync ();
+Axis_If #(.DWIDTH(1+tx_pkg::CHANNELS)) adc_capture_digital_trigger_select_sync ();
 axis_config_reg_cdc #(
-  .DWIDTH(tx_pkg::CHANNELS)
+  .DWIDTH(1+tx_pkg::CHANNELS)
 ) cdc_digital_trigger_select_i (
   .src_clk(ps_clk),
   .src_reset(ps_reset),
-  .src(ps_capture_digtal_trigger_select),
+  .src(ps_capture_digital_trigger_select),
   .dest_clk(adc_clk),
   .dest_reset(adc_reset),
   .dest(adc_capture_digital_trigger_select_sync)
@@ -67,106 +68,92 @@ trigger_manager #(
 );
 
 //////////////////////////////////////////////////////////////////////////
-// RFADC clock domain (256MHz)
+// RFADC clock domain (512MHz)
 //////////////////////////////////////////////////////////////////////////
+
 // multiplexer takes in physical ADC channels + differentiator outputs and
 // produces logical channels
-Realtime_Parallel_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES), .CHANNELS(2*CHANNELS)) adc_mux_input ();
-Realtime_Parallel_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES), .CHANNELS(CHANNELS)) adc_mux_output ();
-
-genvar channel;
-generate
-  for (channel = 0; channel < CHANNELS; channel++) begin
-    //////////////////////////////////////////////////////////////////
-    // connect ADC outputs to lower CHANNELS inputs of channel mux
-    //////////////////////////////////////////////////////////////////
-    assign adc_mux_input.data[channel] = adc_data_in.data[channel];
-    assign adc_mux_input.valid[channel] = adc_data_in.valid[channel];
-
-    //////////////////////////////////////////////////////////////////
-    // instantiate and connect differentiator
-    //////////////////////////////////////////////////////////////////
-    Axis_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES)) differentiator_input ();
-    Axis_If #(.DWIDTH(SAMPLE_WIDTH*PARALLEL_SAMPLES)) differentiator_output ();
-
-    assign differentiator_input.data = adc_data_in.data[channel];
-    assign differentiator_input.valid = adc_data_in.valid[channel];
-    assign differentiator_input.last = 1'b0; // unused; tie to 0 to suppress warning
-    // differentiator_input.ready is ignored, since we're not applying backpressure
-    assign adc_mux_input.data[CHANNELS + channel] = differentiator_output.data;
-    assign adc_mux_input.valid[CHANNELS + channel] = differentiator_output.valid;
-    // sample discriminator won't apply backpressure, so make sure the differentiator always outputs data
-    assign differentiator_output.ready = 1'b1;
-
-    axis_differentiator #(
-      .SAMPLE_WIDTH(SAMPLE_WIDTH),
-      .PARALLEL_SAMPLES(PARALLEL_SAMPLES)
-    ) differentiator_i (
-      .clk(adc_clk),
-      .reset(adc_reset),
-      .data_in(differentiator_input),
-      .data_out(differentiator_output)
-    );
-
-    //////////////////////////////////////////////////////////////////
-    // insert more math/filter blocks below for additional functions
-    //////////////////////////////////////////////////////////////////
-  end
-endgenerate
-
-axis_channel_mux #(
-  .PARALLEL_SAMPLES(PARALLEL_SAMPLES),
-  .SAMPLE_WIDTH(SAMPLE_WIDTH),
-  .INPUT_CHANNELS(2*CHANNELS),
-  .OUTPUT_CHANNELS(CHANNELS)
-) channel_mux_i (
-  .clk(adc_clk),
-  .reset(adc_reset),
-  .data_in(adc_mux_input),
-  .data_out(adc_mux_output),
-  .config_in(adc_channel_mux_config)
-);
-
-logic [31:0] timestamp_width;
-assign adc_buffer_timestamp_width.data = timestamp_width;
-assign adc_buffer_timestamp_width.valid = 1'b1;
-assign adc_buffer_timestamp_width.last = 1'b1;
-
-logic capture_done, capture_done_d;
+Realtime_Parallel_If #(.DWIDTH(rx_pkg::DATA_WIDTH), .CHANNELS(rx_pkg::CHANNELS)) adc_ddt ();
+Realtime_Parallel_If #(.DWIDTH(rx_pkg::DATA_WIDTH), .CHANNELS(2*rx_pkg::CHANNELS)) adc_mux_input ();
+Realtime_Parallel_If #(.DWIDTH(rx_pkg::DATA_WIDTH), .CHANNELS(rx_pkg::CHANNELS)) adc_mux_output ();
+// connect physical ADC channels and differentiator to mux input
 always_ff @(posedge adc_clk) begin
-  capture_done_d <= capture_done;
-  if (adc_reset) begin
-    adc_buffer_capture_done.valid <= 1'b1;
-  end else begin
-    if (capture_done ^ capture_done_d) begin
-      adc_buffer_capture_done.valid <= 1'b1;
-    end else if (adc_buffer_capture_done.ok) begin
-      adc_buffer_capture_done.valid <= 1'b0;
-    end
+  for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
+    adc_mux_input.data[channel] <= adc_data_in.data[channel];
+    adc_mux_input.valid[channel] <= adc_data_in.valid[channel];
+    adc_mux_input.data[channel+rx_pkg::CHANNELS] <= adc_ddt.data[channel];
+    adc_mux_input.valid[channel+rx_pkg::CHANNELS] <= adc_ddt.valid[channel];
   end
 end
-assign adc_buffer_capture_done.data = capture_done;
-assign adc_buffer_capture_done.last = 1'b1;
+// mux
+axis_channel_mux #(
+  .INPUT_CHANNELS(2*rx_pkg::CHANNELS),
+  .OUTPUT_CHANNELS(rx_pkg::CHANNELS)
+) channel_mux_i (
+  .data_clk(adc_clk),
+  .data_reset(adc_reset),
+  .data_in(adc_mux_input),
+  .data_out(adc_mux_output),
+  .config_clk(ps_clk),
+  .config_reset(ps_reset),
+  .config_in(ps_channel_mux_config)
+);
 
-sparse_sample_buffer #(
-  .CHANNELS(CHANNELS),
-  .TSTAMP_BUFFER_DEPTH(TSTAMP_BUFFER_DEPTH),
-  .DATA_BUFFER_DEPTH(DATA_BUFFER_DEPTH),
-  .AXI_MM_WIDTH(AXI_MM_WIDTH),
-  .PARALLEL_SAMPLES(PARALLEL_SAMPLES),
-  .SAMPLE_WIDTH(SAMPLE_WIDTH),
-  .APPROX_CLOCK_WIDTH(APPROX_CLOCK_WIDTH)
-) buffer_i (
+// differentiator
+realtime_differentiator #(
+  .SAMPLE_WIDTH(rx_pkg::SAMPLE_WIDTH),
+  .PARALLEL_SAMPLES(rx_pkg::PARALLEL_SAMPLES),
+  .CHANNELS(rx_pkg::CHANNELS)
+) differentiator_i (
   .clk(adc_clk),
   .reset(adc_reset),
-  .timestamp_width,
-  .capture_done,
-  .data_in(adc_mux_output),
-  .data_out(adc_dma_out),
-  .sample_discriminator_config(adc_sample_discriminator_config),
-  .buffer_config(adc_buffer_config),
-  .buffer_start_stop(adc_buffer_start_stop),
-  .start_aux(adc_trigger_in)
+  .data_in(adc_data_in),
+  .data_out(adc_ddt)
+);
+
+// discriminator
+Realtime_Parallel_If #(.DWIDTH(rx_pkg::DATA_WIDTH), .CHANNELS(rx_pkg::CHANNELS)) adc_discriminator_samples ();
+Realtime_Parallel_If #(.DWIDTH(buffer_pkg::TSTAMP_WIDTH), .CHANNELS(rx_pkg::CHANNELS)) adc_discriminator_timestamps ();
+logic adc_discriminator_reset;
+sample_discriminator #(
+  .MAX_DELAY_CYCLES(DISCRIMINATOR_MAX_DELAY)
+) discriminator_i (
+  .adc_clk,
+  .adc_reset,
+  .adc_data_in(adc_mux_output),
+  .adc_samples_out(adc_discriminator_samples),
+  .adc_timestamps_out(adc_discriminator_timestamps),
+  .adc_reset_state(adc_discriminator_reset),
+  .adc_digital_trigger_in(adc_digital_triggers),
+  .ps_clk,
+  .ps_reset,
+  .ps_thresholds(ps_discriminator_thresholds),
+  .ps_delays(ps_discriminator_delays),
+  .ps_trigger_select(ps_discriminator_trigger_select),
+  .ps_bypass(ps_discriminator_bypass)
+);
+
+// timetagging buffer
+timetagging_sample_buffer #(
+  .BUFFER_READ_LATENCY(BUFFER_READ_LATENCY),
+  .AXI_MM_WIDTH(AXI_MM_WIDTH)
+) buffer_i (
+  .adc_clk,
+  .adc_reset,
+  .adc_samples_in(adc_discriminator_samples),
+  .adc_timestamps_in(adc_discriminator_timestamps),
+  .adc_digital_trigger(adc_capture_trigger),
+  .adc_discriminator_reset(adc_discriminator_reset),
+  .ps_clk,
+  .ps_reset,
+  .ps_readout_data,
+  .ps_samples_write_depth,
+  .ps_timestamps_write_depth,
+  .ps_capture_arm_start_stop,
+  .ps_capture_banking_mode,
+  .ps_capture_sw_reset,
+  .ps_readout_sw_reset,
+  .ps_readout_start
 );
 
 endmodule

@@ -1,4 +1,9 @@
 // trigger_manager.sv - Reed Foster
+// applies a per-channel mask
+// MSB of config selects either OR or AND
+// default config = 0 disables output of any triggers: |(triggers_in & 0)
+// most of the time, the MSB should be set to 0, unless multiple trigger
+// conditions must be satisfied simultaneously
 
 `timescale 1ns/1ps
 module trigger_manager #(

@@ -23,7 +23,7 @@ localparam int PS_CLK_RATE_HZ = 100_000_000;
 always #(0.5s/PS_CLK_RATE_HZ) ps_clk = ~ps_clk;
 
 Realtime_Parallel_If #(.DWIDTH(rx_pkg::DATA_WIDTH), .CHANNELS(rx_pkg::CHANNELS)) adc_data_in ();
-Realtime_Parallel_If #(.DWIDTH(rx_pkg::DATA_WIDTH), .CHANNELS(rx_pkg::CHANNELS)) adc_data_out ();
+Realtime_Parallel_If #(.DWIDTH(rx_pkg::DATA_WIDTH), .CHANNELS(rx_pkg::CHANNELS)) adc_samples_out ();
 Realtime_Parallel_If #(.DWIDTH(buffer_pkg::TSTAMP_WIDTH), .CHANNELS(rx_pkg::CHANNELS)) adc_timestamps_out ();
 logic adc_reset_state;
 logic [tx_pkg::CHANNELS-1:0] adc_digital_trigger_in;
@@ -37,7 +37,8 @@ Axis_If #(.DWIDTH(rx_pkg::CHANNELS*$clog2(rx_pkg::CHANNELS+tx_pkg::CHANNELS))) p
 Axis_If #(.DWIDTH(rx_pkg::CHANNELS)) ps_bypass ();
 
 // right now the way this is implemented is a little janky, but it gets the
-// job done. TODO fix
+// job done. TODO fix so we don't have this global variable being passed
+// around all over the place
 logic [rx_pkg::CHANNELS-1:0][$clog2(rx_pkg::CHANNELS+tx_pkg::CHANNELS)-1:0] trigger_sources;
 
 sample_discriminator_tb #(
@@ -46,7 +47,7 @@ sample_discriminator_tb #(
   .adc_clk,
   .adc_reset,
   .adc_data_in,
-  .adc_data_out,
+  .adc_samples_out,
   .adc_timestamps_out,
   .adc_digital_trigger_in,
   .ps_clk,
@@ -63,7 +64,7 @@ sample_discriminator #(
   .adc_clk,
   .adc_reset,
   .adc_data_in,
-  .adc_data_out,
+  .adc_samples_out,
   .adc_timestamps_out,
   .adc_reset_state,
   .adc_digital_trigger_in,
@@ -198,7 +199,7 @@ initial begin
           debug.display("waiting for adc_reset_state to take effect", sim_util_pkg::DEBUG);
           do @(posedge adc_clk); while (~adc_data_in.valid);
           // wait until data_out.valid goes low to make sure we flush the pipeline
-          do @(posedge adc_clk); while (adc_data_out.valid & (~bypassed_channel_mask));
+          do @(posedge adc_clk); while (adc_samples_out.valid & (~bypassed_channel_mask));
           adc_reset_state <= 1'b0;
           @(posedge adc_clk);
           debug.display("clearing input data", sim_util_pkg::DEBUG);
@@ -218,7 +219,7 @@ initial begin
           end
           // clear any output data from the DUT
           tb_i.adc_timestamps_out_rx_i.clear_queues();
-          tb_i.adc_data_out_rx_i.clear_queues();
+          tb_i.adc_samples_out_rx_i.clear_queues();
           tb_i.clear_trigger_q();
 
           debug.display("finished configuring DUT, sending data", sim_util_pkg::DEBUG);
@@ -249,7 +250,7 @@ initial begin
           end
           for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
             debug.display($sformatf("received_data[%0d] = ", channel), sim_util_pkg::DEBUG);
-            tb_i.print_data(debug, tb_i.adc_data_out_rx_i.data_q[channel]);
+            tb_i.print_data(debug, tb_i.adc_samples_out_rx_i.data_q[channel]);
           end
           for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
             debug.display($sformatf("sent_data[%0d] = ", channel), sim_util_pkg::DEBUG);
@@ -259,8 +260,8 @@ initial begin
           end
           for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
             debug.display($sformatf("received_data[%0d] = ", channel), sim_util_pkg::DEBUG);
-            for (int i = tb_i.adc_data_out_rx_i.data_q[channel].size() - 1; i >= 0; i--) begin
-              debug.display($sformatf("%x", tb_i.adc_data_out_rx_i.data_q[channel][i]), sim_util_pkg::DEBUG);
+            for (int i = tb_i.adc_samples_out_rx_i.data_q[channel].size() - 1; i >= 0; i--) begin
+              debug.display($sformatf("%x", tb_i.adc_samples_out_rx_i.data_q[channel][i]), sim_util_pkg::DEBUG);
             end
           end
           for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin

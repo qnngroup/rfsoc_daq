@@ -32,7 +32,7 @@
 //
 // Datastream interfaces
 // - adc_data_in: input stream (valid may be discontinuous)
-// - adc_data_out:
+// - adc_samples_out:
 //    - output, same as adc_data_in
 //    - valid is filtered to only select samples of interest.
 // - adc_timestamps_out:
@@ -78,7 +78,7 @@ module sample_discriminator #(
   input logic adc_clk, adc_reset,
   // Data
   Realtime_Parallel_If.Slave adc_data_in,
-  Realtime_Parallel_If.Master adc_data_out,
+  Realtime_Parallel_If.Master adc_samples_out,
   Realtime_Parallel_If.Master adc_timestamps_out,
   // Realtime ports
   input logic adc_reset_state,
@@ -265,8 +265,8 @@ end
 // select data and valid output from delay pipelines based on start_delay
 always_ff @(posedge adc_clk) begin
   for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
-    adc_data_out.data[channel] <= adc_data_pipe[adc_pipe_delay[channel]][channel];
-    adc_data_out.valid[channel] <= adc_valid_pipe[adc_pipe_delay[channel]][channel] & adc_active[channel];
+    adc_samples_out.data[channel] <= adc_data_pipe[adc_pipe_delay[channel]][channel];
+    adc_samples_out.valid[channel] <= adc_valid_pipe[adc_pipe_delay[channel]][channel] & adc_active[channel];
   end
 end
 
@@ -360,18 +360,20 @@ end
 
 // timestamps
 logic [rx_pkg::CHANNELS-1:0][buffer_pkg::SAMPLE_INDEX_WIDTH-1:0] adc_sample_index;
+logic adc_reset_state_d; // extend reset_state by 1 cycle since valid_out has a latency of 1
 logic [buffer_pkg::CLOCK_WIDTH-1:0] adc_time;
 always_ff @(posedge adc_clk) begin
+  adc_reset_state_d <= adc_reset_state;
   if (adc_reset) begin
     adc_time <= '0;
     adc_sample_index <= '0;
   end else begin
     adc_time <= adc_time + 1'b1;
-    if (adc_reset_state) begin
+    if (adc_reset_state | adc_reset_state_d) begin
       adc_sample_index <= '0;
     end else begin
       for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
-        if (adc_data_out.valid[channel]) begin
+        if (adc_samples_out.valid[channel]) begin
           adc_sample_index[channel] <= adc_sample_index[channel] + 1;
         end
       end

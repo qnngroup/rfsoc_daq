@@ -153,10 +153,10 @@ localparam int DISC_LATENCY = 4;
 logic [DISC_LATENCY-1:0] adc_capture_start_pipe;
 logic adc_capture_hw_start;
 always_ff @(posedge adc_clk) begin
-  adc_capture_start_pipe <= {adc_capture_start_pipe[DISC_LATENCY-2:0], adc_capture_start};
+  adc_capture_start_pipe <= {adc_capture_start_pipe[DISC_LATENCY-2:0], adc_capture_start | adc_digital_trigger};
 end
-assign adc_capture_hw_start = adc_capture_start_pipe[DISC_LATENCY-1] | adc_digital_trigger;
-assign adc_discriminator_reset = adc_capture_start;
+assign adc_capture_hw_start = adc_capture_start_pipe[DISC_LATENCY-1];
+assign adc_discriminator_reset = adc_capture_start | adc_digital_trigger;
 
 
 // merge banking_mode, capture/readout sw_reset, and readout_start config registers

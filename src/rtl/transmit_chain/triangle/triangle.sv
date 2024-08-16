@@ -3,10 +3,10 @@
 
 `timescale 1ns/1ps
 module triangle #(
-  parameter int PHASE_BITS = 32, // ~ 2 Hz resolution at 6 GS/s
-  parameter int CHANNELS = 8,
-  parameter int PARALLEL_SAMPLES = 16,
-  parameter int SAMPLE_WIDTH = 16
+  parameter int PHASE_BITS, // 32 -> ~2 Hz resolution at 6 GS/s
+  parameter int CHANNELS,
+  parameter int PARALLEL_SAMPLES,
+  parameter int SAMPLE_WIDTH
 ) (
   input logic ps_clk, ps_reset,
   Axis_If.Slave ps_phase_inc, // {phase_inc} for each channel
@@ -93,7 +93,6 @@ end
 // if some, but not all signals are in the second quadrant (MSBs = 01) and all signals are either
 // in the first or second quadrant (MSBs = 0X), then
 logic [CHANNELS-1:0] dac_rising_edge;
-logic [CHANNELS-1:0] dac_upper_half;
 logic [CHANNELS-1:0] dac_crossing_in_batch;
 logic [CHANNELS-1:0] dac_crossing_between_batch;
 always_ff @(posedge dac_clk) begin

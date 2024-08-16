@@ -72,7 +72,7 @@ task automatic sent_to_expected (
 endtask
 
 task automatic check_output (
-  sim_util_pkg::debug debug
+  inout sim_util_pkg::debug debug
 );
   sample_t expected_q [$];
   sample_t received_q [$];
