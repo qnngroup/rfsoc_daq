@@ -15,4 +15,6 @@ package buffer_pkg;
   localparam int SAMPLE_INDEX_WIDTH = $clog2(TSTAMP_BUFFER_DEPTH*rx_pkg::CHANNELS);
   localparam int CLOCK_WIDTH = TSTAMP_WIDTH - SAMPLE_INDEX_WIDTH;
 
+  typedef logic [TSTAMP_WIDTH-1:0] tstamp_t;
+
 endpackage

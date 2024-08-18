@@ -264,8 +264,13 @@ task automatic check_results (
 );
   rx_pkg::batch_t expected_q [rx_pkg::CHANNELS][$];
   logic [buffer_pkg::TSTAMP_WIDTH-1:0] timestamp_q [rx_pkg::CHANNELS][$];
+  logic [rx_pkg::CHANNELS-1:0][buffer_pkg::TSTAMP_WIDTH-1:0] time_init;
+  for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
+    time_init[channel] = adc_timestamps_out_rx_i.data_q[channel][$] >> buffer_pkg::SAMPLE_INDEX_WIDTH;
+  end
   generate_expected(
     debug,
+    time_init,
     low_thresholds,
     high_thresholds,
     start_delays,
@@ -290,6 +295,7 @@ endtask
 
 task automatic generate_expected (
   inout sim_util_pkg::debug debug,
+  input logic [rx_pkg::CHANNELS-1:0][buffer_pkg::TSTAMP_WIDTH-1:0] time_init,
   input logic [rx_pkg::CHANNELS-1:0][rx_pkg::SAMPLE_WIDTH-1:0] low_thresholds, high_thresholds,
   input logic [rx_pkg::CHANNELS-1:0][TIMER_BITS-1:0] start_delays, stop_delays, digital_delays,
   input logic [rx_pkg::CHANNELS-1:0][$clog2(rx_pkg::CHANNELS+tx_pkg::CHANNELS)-1:0] trigger_sources,
@@ -306,7 +312,6 @@ task automatic generate_expected (
   int stop_delay, start_delay;
   logic is_high;
   logic [buffer_pkg::SAMPLE_INDEX_WIDTH-1:0] index;
-  logic [buffer_pkg::TSTAMP_WIDTH-1:0] time_init;
   logic [$clog2(rx_pkg::CHANNELS+tx_pkg::CHANNELS)-1:0] source;
   for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
     source = trigger_sources[channel];
@@ -316,7 +321,6 @@ task automatic generate_expected (
       sim_util_pkg::DEBUG
     );
     debug.display($sformatf("trigger source = %0d", source), sim_util_pkg::DEBUG);
-    time_init = adc_timestamps_out_rx_i.data_q[channel][$] >> buffer_pkg::SAMPLE_INDEX_WIDTH;
     if (bypassed_channel_mask[channel] === 1'b1) begin
       // check we got everything
       // timestamp_q should be empty; don't do anything
@@ -429,7 +433,7 @@ task automatic generate_expected (
             timestamp_q[channel].push_front({trigger_time_q[channel].pop_back() + digital_delays[channel], index});
           end else begin
             timestamp_q[channel].push_front({
-              time_init + (expected_locations[$]-expected_locations[i])*adc_send_samples_decimation,
+              time_init[channel] + (expected_locations[$]-expected_locations[i])*adc_send_samples_decimation,
               index
             });
           end

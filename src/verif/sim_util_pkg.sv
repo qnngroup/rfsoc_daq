@@ -67,6 +67,19 @@ package sim_util_pkg;
 
     math #(.T(T)) math_i = new;
 
+    task automatic strip_to_matching(
+      inout T a_q [$],
+      input T b_q [$]
+    );
+      while (a_q.size() > b_q.size()) begin
+        if (a_q[$] === b_q[$]) begin
+          a_q.pop_front();
+        end else begin
+          a_q.pop_back();
+        end
+      end
+    endtask
+
     task automatic compare_threshold(
       debug debug_i,
       input T a_q [$],

@@ -2,7 +2,7 @@
 `timescale 1ns/1ps
 module timetagging_sample_buffer_test ();
 
-sim_util_pkg::debug debug = new(sim_util_pkg::DEFAULT);
+sim_util_pkg::debug debug = new(sim_util_pkg::DEBUG);
 
 localparam int BUFFER_READ_LATENCY = 4;
 localparam int AXI_MM_WIDTH = 128;
@@ -203,7 +203,7 @@ initial begin
                 if ((capture_reset == CAPTURE_RESET) && (capture_iter == 0)) begin
                   // send reset signal
                   tb_i.reset_capture(debug);
-                  repeat (20) @(posedge ps_clk);
+                  repeat (40) @(posedge ps_clk);
                   tb_i.clear_sent_data();
                   tb_i.clear_write_depth();
                 end
