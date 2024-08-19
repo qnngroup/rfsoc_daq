@@ -11,11 +11,7 @@
 
 `timescale 1ns/1ps
 module awg #(
-  parameter int DEPTH = 2048,
-  parameter int AXI_MM_WIDTH = 128,
-  parameter int PARALLEL_SAMPLES = 16,
-  parameter int SAMPLE_WIDTH = 16,
-  parameter int CHANNELS = 8
+  parameter int DEPTH = 2048
 ) (
   // DMA/PS clock domain: 150 MHz
   input wire dma_clk, dma_reset,
@@ -28,21 +24,21 @@ module awg #(
   //  Also put the receive state machine into the DMA_ACCEPTING state.
   //  Need to put restrictions on this so that we always get a clean
   //  transition between subsequent channels when performing the DMA
-  //  E.g. with SAMPLE_WIDTH*PARALLEL_SAMPLES = 2*AXI_MM_WIDTH, DEPTH must be
+  //  E.g. with tx_pkg::DATA_WIDTH = 2*tx_pkg::AXI_MM_WIDTH, DEPTH must be
   //  a multiple of 2
-  //  1+$clog2(DEPTH)*CHANNELS bits
+  //  1+$clog2(DEPTH)*tx_pkg::CHANNELS bits
   Axis_If.Slave dma_write_depth,
   // dma_trigger_out_config:
   //  For each channel, specify how the trigger signal is generated
   //    0: no trigger output
   //    1: trigger is outputted at the start of a burst
   //    2: trigger is outputted at the start of each frame in the burst
-  //  2*CHANNELS bits
+  //  2*tx_pkg::CHANNELS bits
   Axis_If.Slave dma_trigger_out_config,
   // dma_awg_burst_length:
   //  For each channel, specify the number of times the buffer memory should
   //  be read out (i.e. how many frames per burst)
-  //  64*CHANNELS bits
+  //  64*tx_pkg::CHANNELS bits
   Axis_If.Slave dma_awg_burst_length,
   // dma_awg_start_stop
   //  {start, stop}, commands the awg to start sending data or stop sending
@@ -64,7 +60,7 @@ module awg #(
   // trigger signal needs to be passed to the receive chain
   // The trigger module will also synchronize the trigger signal from the
   // RFDAC clock domain to the RFADC clock domain and apply a variable delay
-  output logic [CHANNELS-1:0] dac_trigger
+  output logic [tx_pkg::CHANNELS-1:0] dac_trigger
 );
 
 assign dma_transfer_error.last = 1'b1; // always send just a packet as a single word
@@ -89,17 +85,17 @@ assign dma_transfer_error.last = 1'b1; // always send just a packet as a single 
 //   1. wait for DAC to stop, then return to state <- DAC_IDLE
 enum {DMA_IDLE, DMA_ACCEPTING, DMA_BLOCKING} dma_write_state;
 
-Axis_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH)) dma_write_data ();
+Axis_If #(.DWIDTH(tx_pkg::DATA_WIDTH)) dma_write_data ();
 logic dma_write_enable;
 logic [$clog2(DEPTH)-1:0] dma_write_address;
-logic [$clog2(CHANNELS)-1:0] dma_write_channel;
-logic [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0] dma_write_data_reg;
-logic [CHANNELS-1:0] dma_write_done;
+logic [$clog2(tx_pkg::CHANNELS)-1:0] dma_write_channel;
+logic [tx_pkg::DATA_WIDTH-1:0] dma_write_data_reg;
+logic [tx_pkg::CHANNELS-1:0] dma_write_done;
 
 // configs from register map
-logic [CHANNELS-1:0][$clog2(DEPTH)-1:0] dma_address_max_reg;
-logic [CHANNELS-1:0][1:0] dma_trigger_out_config_reg;
-logic [CHANNELS-1:0][63:0] dma_awg_burst_length_reg;
+logic [tx_pkg::CHANNELS-1:0][$clog2(DEPTH)-1:0] dma_address_max_reg;
+logic [tx_pkg::CHANNELS-1:0][1:0] dma_trigger_out_config_reg;
+logic [tx_pkg::CHANNELS-1:0][63:0] dma_awg_burst_length_reg;
 logic dma_awg_start, dma_awg_stop;
 
 // signal synchronized from RFDAC domain indicating burst read of buffers is complete
@@ -143,7 +139,7 @@ always_ff @(posedge dma_clk) begin
       DMA_ACCEPTING: begin
         if ((dma_write_data.ok && dma_write_data.last) // normal operation
             || (dma_write_enable // didn't get tlast, but finished writing to buffer
-                & (dma_write_channel == $clog2(CHANNELS)'(CHANNELS - 1))
+                & (dma_write_channel == $clog2(tx_pkg::CHANNELS)'(tx_pkg::CHANNELS - 1))
                 & (dma_write_address == dma_address_max_reg[dma_write_channel]))) begin
           dma_write_state <= DMA_BLOCKING;
         end
@@ -162,7 +158,7 @@ always_ff @(posedge dma_clk) begin
     {dma_awg_start, dma_awg_stop} <= '0;
   end else begin
     if (dma_write_depth.ok) begin
-      for (int channel = 0; channel < CHANNELS; channel++) begin
+      for (int channel = 0; channel < tx_pkg::CHANNELS; channel++) begin
         dma_address_max_reg[channel] <= dma_write_depth.data[channel*$clog2(DEPTH)+:$clog2(DEPTH)];
       end
     end
@@ -170,7 +166,7 @@ always_ff @(posedge dma_clk) begin
       dma_trigger_out_config_reg <= dma_trigger_out_config.data;
     end
     if (dma_awg_burst_length.ok) begin
-      for (int channel = 0; channel < CHANNELS; channel++) begin
+      for (int channel = 0; channel < tx_pkg::CHANNELS; channel++) begin
         dma_awg_burst_length_reg[channel] <= dma_awg_burst_length.data[channel*64+:64] - 1;
       end
     end
@@ -201,7 +197,7 @@ always_ff @(posedge dma_clk) begin
         if (dma_write_address == dma_address_max_reg[dma_write_channel]) begin
           dma_write_address <= '0;
           dma_write_done[dma_write_channel] <= 1'b1;
-          if (dma_write_channel == $clog2(CHANNELS)'(CHANNELS - 1)) begin
+          if (dma_write_channel == $clog2(tx_pkg::CHANNELS)'(tx_pkg::CHANNELS - 1)) begin
             dma_write_channel <= '0;
           end else begin
             dma_write_channel <= dma_write_channel + 1'b1;
@@ -231,7 +227,7 @@ always_ff @(posedge dma_clk) begin
       dma_transfer_error.valid <= 1'b0;
     end else begin
       if (dma_write_enable) begin
-        if ((dma_write_channel == $clog2(CHANNELS)'(CHANNELS - 1)) & (dma_write_address == dma_address_max_reg[dma_write_channel])) begin
+        if ((dma_write_channel == $clog2(tx_pkg::CHANNELS)'(tx_pkg::CHANNELS - 1)) & (dma_write_address == dma_address_max_reg[dma_write_channel])) begin
           if (~dma_tlast_reg) begin
             // we were expecting tlast, but didn't get it
             dma_transfer_error.data[0] <= 1'b1;
@@ -253,10 +249,10 @@ always_ff @(posedge dma_clk) begin
   end
 end
 
-// axis_width_converter to step AXI_MM_WIDTH to BURST_WIDTH
+// axis_width_converter to step tx_pkg::AXI_MM_WIDTH to BURST_WIDTH
 axis_width_converter #(
-  .DWIDTH_IN(AXI_MM_WIDTH),
-  .DWIDTH_OUT(PARALLEL_SAMPLES*SAMPLE_WIDTH)
+  .DWIDTH_IN(tx_pkg::AXI_MM_WIDTH),
+  .DWIDTH_OUT(tx_pkg::DATA_WIDTH)
 ) dma_width_conv_i (
   .clk(dma_clk),
   .reset(dma_reset),
@@ -273,16 +269,16 @@ enum {DAC_IDLE, DAC_ACTIVE} dac_read_state;
 
 // output signals
 logic [2:0] dac_data_out_valid;
-logic [1:0][CHANNELS-1:0][PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0] dac_buffer_out_reg;
-logic [CHANNELS-1:0][PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0] dac_data_out_reg;
-logic [CHANNELS-1:0][$clog2(DEPTH)-1:0] dac_read_address;
-logic [CHANNELS-1:0][63:0] dac_frame_counter;
-logic [2:0][CHANNELS-1:0] dac_trigger_pipe; // match latency of BRAM output registers
+logic [1:0][tx_pkg::CHANNELS-1:0][tx_pkg::DATA_WIDTH-1:0] dac_buffer_out_reg;
+logic [tx_pkg::CHANNELS-1:0][tx_pkg::DATA_WIDTH-1:0] dac_data_out_reg;
+logic [tx_pkg::CHANNELS-1:0][$clog2(DEPTH)-1:0] dac_read_address;
+logic [tx_pkg::CHANNELS-1:0][63:0] dac_frame_counter;
+logic [2:0][tx_pkg::CHANNELS-1:0] dac_trigger_pipe; // match latency of BRAM output registers
 
 // tracking of when each channel finishes
-logic [1:0][CHANNELS-1:0] dac_awg_channels_done;
+logic [1:0][tx_pkg::CHANNELS-1:0] dac_awg_channels_done;
 logic dac_awg_done;
-logic [1:0][CHANNELS-1:0] dac_data_select; // switch between BRAM output and zero
+logic [1:0][tx_pkg::CHANNELS-1:0] dac_data_select; // switch between BRAM output and zero
 always_ff @(posedge dac_clk) dac_awg_done <= &dac_awg_channels_done[1];
 
 logic dac_awg_config_done; // synchronized from DMA/PS domain, used as write enable for CDC'd configurations for DAC readout of buffer
@@ -294,14 +290,14 @@ always_ff @(posedge dac_clk) begin
     dac_data_out_valid <= '0;
     dac_data_out.valid <= '0;
   end else begin
-    dac_data_out.valid <= {CHANNELS{dac_data_out_valid[2]}};
+    dac_data_out.valid <= {tx_pkg::CHANNELS{dac_data_out_valid[2]}};
     dac_data_out_valid <= {dac_data_out_valid[1:0], dac_started};
   end
 end
 
 always_ff @(posedge dac_clk) begin
   dac_data_out.data <= dac_data_out_reg;
-  for (int channel = 0; channel < CHANNELS; channel++) begin
+  for (int channel = 0; channel < tx_pkg::CHANNELS; channel++) begin
     if (dac_data_select[1][channel]) begin
       dac_data_out_reg[channel] <= '0;
     end else begin
@@ -316,7 +312,7 @@ always_ff @(posedge dac_clk) begin
     dac_data_select <= '0;
   end else begin
     dac_data_select[1] <= dac_data_select[0];
-    for (int channel = 0; channel < CHANNELS; channel++) begin
+    for (int channel = 0; channel < tx_pkg::CHANNELS; channel++) begin
       if (dac_awg_channels_done[0][channel] || (dac_read_state == DAC_IDLE)) begin
         dac_data_select[0][channel] <= 1'b1;
       end else begin
@@ -329,10 +325,10 @@ end
 // syncrhonized start/stop from DMA/PS domain
 logic dac_awg_start, dac_awg_stop;
 // synchronized address_max_reg from DMA/PS domain
-logic [CHANNELS-1:0][$clog2(DEPTH)-1:0] dac_address_max_sync, dac_address_max_reg;
-logic [CHANNELS-1:0][63:0] dac_awg_burst_length_sync, dac_awg_burst_length_reg;
+logic [tx_pkg::CHANNELS-1:0][$clog2(DEPTH)-1:0] dac_address_max_sync, dac_address_max_reg;
+logic [tx_pkg::CHANNELS-1:0][63:0] dac_awg_burst_length_sync, dac_awg_burst_length_reg;
 // synchronized trigger config from DMA/PS domain
-logic [CHANNELS-1:0][1:0] dac_trigger_out_config_sync, dac_trigger_out_config_reg;
+logic [tx_pkg::CHANNELS-1:0][1:0] dac_trigger_out_config_sync, dac_trigger_out_config_reg;
 
 // update state machine
 always_ff @(posedge dac_clk) begin
@@ -374,7 +370,7 @@ always_ff @(posedge dac_clk) begin
         dac_trigger_pipe[0] <= '0;
       end
       DAC_ACTIVE: begin
-        for (int channel = 0; channel < CHANNELS; channel++) begin
+        for (int channel = 0; channel < tx_pkg::CHANNELS; channel++) begin
           // update dac_read_address and dac_awg_channels_done
           if (dac_read_address[channel] == dac_address_max_reg[channel]) begin
             dac_read_address[channel] <= '0;
@@ -475,7 +471,7 @@ xpm_cdc_array_single #(
   .INIT_SYNC_FF(0), // disable behavioral initialization in simulation
   .SIM_ASSERT_CHK(1), // report violations when simulating
   .SRC_INPUT_REG(1), // register input
-  .WIDTH(CHANNELS*$clog2(DEPTH))
+  .WIDTH(tx_pkg::CHANNELS*$clog2(DEPTH))
 ) dma_to_dac_address_max_cdc_i (
   .src_clk(dma_clk),
   .src_in(dma_address_max_reg),
@@ -487,7 +483,7 @@ xpm_cdc_array_single #(
   .INIT_SYNC_FF(0), // disable behavioral initialization in simulation
   .SIM_ASSERT_CHK(1), // report violations when simulating
   .SRC_INPUT_REG(1), // register input
-  .WIDTH(CHANNELS*64)
+  .WIDTH(tx_pkg::CHANNELS*64)
 ) dma_to_dac_burst_length_cdc_i (
   .src_clk(dma_clk),
   .src_in(dma_awg_burst_length_reg),
@@ -499,7 +495,7 @@ xpm_cdc_array_single #(
   .INIT_SYNC_FF(0), // disable behavioral initialization in simulation
   .SIM_ASSERT_CHK(1), // report violations when simulating
   .SRC_INPUT_REG(1), // register input
-  .WIDTH(CHANNELS*2)
+  .WIDTH(tx_pkg::CHANNELS*2)
 ) dma_to_dac_trigger_config_cdc_i (
   .src_clk(dma_clk),
   .src_in(dma_trigger_out_config_reg),
@@ -534,8 +530,8 @@ xpm_cdc_pulse #(
 // buffers
 genvar channel;
 generate
-  for (channel = 0; channel < CHANNELS; channel++) begin
-    logic [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0] buffer [DEPTH];
+  for (channel = 0; channel < tx_pkg::CHANNELS; channel++) begin
+    logic [tx_pkg::DATA_WIDTH-1:0] buffer [DEPTH];
     
     // Write to the currently selected buffer as long as we haven't completed
     // the write.
