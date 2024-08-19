@@ -33,7 +33,7 @@
 `timescale 1ns / 1ps
 module receive_top_test ();
 
-sim_util_pkg::debug debug = new(sim_util_pkg::DEBUG); // printing, error tracking
+sim_util_pkg::debug debug = new(sim_util_pkg::DEFAULT); // printing, error tracking
 
 logic adc_reset;
 logic adc_clk = 0;

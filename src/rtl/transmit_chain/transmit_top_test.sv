@@ -17,9 +17,6 @@ logic ps_clk = 0;
 localparam int PS_CLK_RATE_HZ = 100_000_000;
 always #(0.5s/PS_CLK_RATE_HZ) ps_clk = ~ps_clk;
 
-localparam int CHANNELS = 8;
-localparam int PARALLEL_SAMPLES = 16;
-localparam int SAMPLE_WIDTH = 16;
 // DDS parameters
 localparam int DDS_PHASE_BITS = 32;
 localparam int DDS_QUANT_BITS = 20;
@@ -29,35 +26,34 @@ localparam int OFFSET_WIDTH = 14;
 localparam int SCALE_INT_BITS = 2;
 // AWG parameters
 localparam int AWG_DEPTH = 256;
-localparam int AXI_MM_WIDTH = 128;
 // Triangle parameters
 localparam int TRI_PHASE_BITS = 32;
 
 // AWG interfaces
-Axis_If #(.DWIDTH(AXI_MM_WIDTH)) ps_awg_dma_in ();
-Axis_If #(.DWIDTH($clog2(AWG_DEPTH)*CHANNELS)) ps_awg_frame_depth ();
-Axis_If #(.DWIDTH(2*CHANNELS)) ps_awg_trigger_out_config ();
-Axis_If #(.DWIDTH(64*CHANNELS)) ps_awg_burst_length ();
+Axis_If #(.DWIDTH(tx_pkg::AXI_MM_WIDTH)) ps_awg_dma_in ();
+Axis_If #(.DWIDTH($clog2(AWG_DEPTH)*tx_pkg::CHANNELS)) ps_awg_frame_depth ();
+Axis_If #(.DWIDTH(2*tx_pkg::CHANNELS)) ps_awg_trigger_out_config ();
+Axis_If #(.DWIDTH(64*tx_pkg::CHANNELS)) ps_awg_burst_length ();
 Axis_If #(.DWIDTH(2)) ps_awg_start_stop ();
 Axis_If #(.DWIDTH(2)) ps_awg_dma_error ();
 // DAC prescaler interface
-Axis_If #(.DWIDTH((SCALE_WIDTH+OFFSET_WIDTH)*CHANNELS)) ps_scale_offset ();
+Axis_If #(.DWIDTH((SCALE_WIDTH+OFFSET_WIDTH)*tx_pkg::CHANNELS)) ps_scale_offset ();
 // DDS interface
-Axis_If #(.DWIDTH(DDS_PHASE_BITS*CHANNELS)) ps_dds_phase_inc ();
-Axis_If #(.DWIDTH(TRI_PHASE_BITS*CHANNELS)) ps_tri_phase_inc ();
+Axis_If #(.DWIDTH(DDS_PHASE_BITS*tx_pkg::CHANNELS)) ps_dds_phase_inc ();
+Axis_If #(.DWIDTH(TRI_PHASE_BITS*tx_pkg::CHANNELS)) ps_tri_phase_inc ();
 // Trigger manager interface
-Axis_If #(.DWIDTH(1+2*CHANNELS)) ps_trigger_config ();
+Axis_If #(.DWIDTH(1+2*tx_pkg::CHANNELS)) ps_trigger_config ();
 // Channel mux interface
-Axis_If #(.DWIDTH($clog2(3*CHANNELS)*CHANNELS)) ps_channel_mux_config ();
+Axis_If #(.DWIDTH($clog2(3*tx_pkg::CHANNELS)*tx_pkg::CHANNELS)) ps_channel_mux_config ();
 // Outputs
-Realtime_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(CHANNELS)) dac_data_out ();
+Realtime_Parallel_If #(.DWIDTH(tx_pkg::DATA_WIDTH), .CHANNELS(tx_pkg::CHANNELS)) dac_data_out ();
 logic dac_trigger_out;
 
 // pull out awg_trigger/tri_trigger output and match latency of dac_prescaler/mux
-logic [5:0][CHANNELS-1:0] dac_awg_triggers_pipe;
-logic [5:0][CHANNELS-1:0] dac_tri_triggers_pipe;
-logic [CHANNELS-1:0] dac_awg_trigger;
-logic [CHANNELS-1:0] dac_tri_trigger;
+logic [5:0][tx_pkg::CHANNELS-1:0] dac_awg_triggers_pipe;
+logic [5:0][tx_pkg::CHANNELS-1:0] dac_tri_triggers_pipe;
+logic [tx_pkg::CHANNELS-1:0] dac_awg_trigger;
+logic [tx_pkg::CHANNELS-1:0] dac_tri_trigger;
 assign dac_awg_trigger = dac_awg_triggers_pipe[5];
 assign dac_tri_trigger = dac_tri_triggers_pipe[5];
 always @(posedge dac_clk) begin
@@ -66,15 +62,11 @@ always @(posedge dac_clk) begin
 end
 
 // AWG testing
-logic [CHANNELS-1:0][$clog2(AWG_DEPTH)-1:0] write_depths;
-logic [CHANNELS-1:0][63:0] burst_lengths;
-logic [CHANNELS-1:0][1:0] trigger_modes;
+logic [tx_pkg::CHANNELS-1:0][$clog2(AWG_DEPTH)-1:0] write_depths;
+logic [tx_pkg::CHANNELS-1:0][63:0] burst_lengths;
+logic [tx_pkg::CHANNELS-1:0][1:0] trigger_modes;
 awg_tb #(
-  .DEPTH(AWG_DEPTH),
-  .AXI_MM_WIDTH(AXI_MM_WIDTH),
-  .PARALLEL_SAMPLES(PARALLEL_SAMPLES),
-  .SAMPLE_WIDTH(SAMPLE_WIDTH),
-  .CHANNELS(CHANNELS)
+  .DEPTH(AWG_DEPTH)
 ) awg_tb_i (
   .dma_clk(ps_clk),
   .dma_data_in(ps_awg_dma_in),
@@ -89,7 +81,7 @@ awg_tb #(
 );
 
 // DDS testing
-int freqs [CHANNELS] = {
+int freqs [tx_pkg::CHANNELS] = {
   12_130_000,
   517_036_000,
   1_729_725_000,
@@ -101,10 +93,7 @@ int freqs [CHANNELS] = {
 };
 dds_tb #(
   .PHASE_BITS(DDS_PHASE_BITS),
-  .QUANT_BITS(DDS_QUANT_BITS),
-  .SAMPLE_WIDTH(SAMPLE_WIDTH),
-  .PARALLEL_SAMPLES(PARALLEL_SAMPLES),
-  .CHANNELS(CHANNELS)
+  .QUANT_BITS(DDS_QUANT_BITS)
 ) dds_tb_i (
   .ps_clk,
   .ps_phase_inc(ps_dds_phase_inc),
@@ -113,12 +102,12 @@ dds_tb #(
 );
 
 // triangle testing
-logic [CHANNELS-1:0][TRI_PHASE_BITS-1:0] tri_phase_increment;
+logic [tx_pkg::CHANNELS-1:0][TRI_PHASE_BITS-1:0] tri_phase_increment;
 triangle_tb #(
   .PHASE_BITS(TRI_PHASE_BITS),
-  .CHANNELS(CHANNELS),
-  .PARALLEL_SAMPLES(PARALLEL_SAMPLES),
-  .SAMPLE_WIDTH(SAMPLE_WIDTH)
+  .CHANNELS(tx_pkg::CHANNELS),
+  .PARALLEL_SAMPLES(tx_pkg::PARALLEL_SAMPLES),
+  .SAMPLE_WIDTH(tx_pkg::SAMPLE_WIDTH)
 ) tri_tb_i (
   .ps_clk,
   .ps_phase_inc(ps_tri_phase_inc),
@@ -128,17 +117,13 @@ triangle_tb #(
 );
 
 transmit_top #(
-  .CHANNELS(CHANNELS),
-  .PARALLEL_SAMPLES(PARALLEL_SAMPLES),
-  .SAMPLE_WIDTH(SAMPLE_WIDTH),
   .DDS_PHASE_BITS(DDS_PHASE_BITS),
   .DDS_QUANT_BITS(DDS_QUANT_BITS),
   .SCALE_WIDTH(SCALE_WIDTH),
   .OFFSET_WIDTH(OFFSET_WIDTH),
   .SCALE_INT_BITS(SCALE_INT_BITS),
   .AWG_DEPTH(AWG_DEPTH),
-  .TRI_PHASE_BITS(TRI_PHASE_BITS),
-  .AXI_MM_WIDTH(AXI_MM_WIDTH)
+  .TRI_PHASE_BITS(TRI_PHASE_BITS)
 ) dut_i (
   .ps_clk,
   .ps_reset,
@@ -179,18 +164,18 @@ initial begin
   dac_reset <= 1'b0;
 
   // configure the mux to select the AWG
-  for (int channel = 0; channel < CHANNELS; channel++) begin
-    ps_channel_mux_config.data[channel*$clog2(3*CHANNELS)+:$clog2(3*CHANNELS)] <= $clog2(3*CHANNELS)'(channel);
+  for (int channel = 0; channel < tx_pkg::CHANNELS; channel++) begin
+    ps_channel_mux_config.data[channel*$clog2(3*tx_pkg::CHANNELS)+:$clog2(3*tx_pkg::CHANNELS)] <= $clog2(3*tx_pkg::CHANNELS)'(channel);
   end
 
   // configure the scale factor to be 1 and offset to be 0
   // by default scale_factor = 0, so if we get the correct output we know this write worked
-  for (int channel = 0; channel < CHANNELS; channel++) begin
+  for (int channel = 0; channel < tx_pkg::CHANNELS; channel++) begin
     ps_scale_offset.data[channel*(SCALE_WIDTH+OFFSET_WIDTH)+:SCALE_WIDTH+OFFSET_WIDTH] <= {1'b1, {(SCALE_WIDTH + OFFSET_WIDTH - SCALE_INT_BITS){1'b0}}};
   end
 
   // configure the trigger manager to output a trigger from whenever awg_trigger_out[0] fires
-  ps_trigger_config.data <= {1'b0, {(CHANNELS-1){1'b0}}, 1'b1};
+  ps_trigger_config.data <= {1'b0, {(tx_pkg::CHANNELS-1){1'b0}}, 1'b1};
 
   ps_channel_mux_config.valid <= 1'b1;
   do @(posedge ps_clk); while (~ps_channel_mux_config.ok);
@@ -204,7 +189,7 @@ initial begin
 
   // configure the AWG
   // set frame depth, burst length, and output trigger configuration
-  for (int channel = 0; channel < CHANNELS; channel++) begin
+  for (int channel = 0; channel < tx_pkg::CHANNELS; channel++) begin
     write_depths[channel] = 16;
     burst_lengths[channel] = 1;
     trigger_modes[channel] = 1;
@@ -241,8 +226,8 @@ initial begin
   debug.display("finished testing AWG", sim_util_pkg::VERBOSE);
  
   // configure the mux to select the DDS
-  for (int channel = 0; channel < CHANNELS; channel++) begin
-    ps_channel_mux_config.data[channel*$clog2(3*CHANNELS)+:$clog2(3*CHANNELS)] <= $clog2(3*CHANNELS)'(channel + CHANNELS);
+  for (int channel = 0; channel < tx_pkg::CHANNELS; channel++) begin
+    ps_channel_mux_config.data[channel*$clog2(3*tx_pkg::CHANNELS)+:$clog2(3*tx_pkg::CHANNELS)] <= $clog2(3*tx_pkg::CHANNELS)'(channel + tx_pkg::CHANNELS);
   end
   ps_channel_mux_config.valid <= 1'b1;
   do @(posedge ps_clk); while (~ps_channel_mux_config.ok);
@@ -266,17 +251,17 @@ initial begin
 
   // check triangle wave generator
   // configure the mux to select the triangle wave gen
-  for (int channel = 0; channel < CHANNELS; channel++) begin
-    ps_channel_mux_config.data[channel*$clog2(3*CHANNELS)+:$clog2(3*CHANNELS)] <= $clog2(3*CHANNELS)'(channel + 2*CHANNELS);
+  for (int channel = 0; channel < tx_pkg::CHANNELS; channel++) begin
+    ps_channel_mux_config.data[channel*$clog2(3*tx_pkg::CHANNELS)+:$clog2(3*tx_pkg::CHANNELS)] <= $clog2(3*tx_pkg::CHANNELS)'(channel + 2*tx_pkg::CHANNELS);
   end
   // set phase increment
-  for (int channel = 0; channel < CHANNELS; channel++) begin
+  for (int channel = 0; channel < tx_pkg::CHANNELS; channel++) begin
     tri_phase_increment[channel] = $urandom() >> 8;
   end
 
   tri_tb_i.set_phases(debug, tri_phase_increment);
   
-  ps_trigger_config.data <= {1'b1, {CHANNELS{1'b0}}};
+  ps_trigger_config.data <= {1'b1, {tx_pkg::CHANNELS{1'b0}}};
   
   ps_channel_mux_config.valid <= 1'b1;
   do @(posedge ps_clk); while (~ps_channel_mux_config.ok);

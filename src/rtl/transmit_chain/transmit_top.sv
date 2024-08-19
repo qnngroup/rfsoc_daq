@@ -4,9 +4,6 @@
 
 `timescale 1ns/1ps
 module transmit_top #(
-  parameter int CHANNELS = 8,
-  parameter int PARALLEL_SAMPLES = 16,
-  parameter int SAMPLE_WIDTH = 16,
   // DDS parameters
   parameter int DDS_PHASE_BITS = 32,
   parameter int DDS_QUANT_BITS = 20,
@@ -16,7 +13,6 @@ module transmit_top #(
   parameter int SCALE_INT_BITS = 2,
   // AWG parameters
   parameter int AWG_DEPTH = 2048,
-  parameter int AXI_MM_WIDTH = 128,
   // Triangle wave parameters
   parameter int TRI_PHASE_BITS = 32
 ) (
@@ -25,25 +21,25 @@ module transmit_top #(
 
   // AWG PS interfaces
   Axis_If.Slave   ps_awg_dma_in, // DMA interface
-  Axis_If.Slave   ps_awg_frame_depth, // $clog2(DEPTH)*CHANNELS bits
-  Axis_If.Slave   ps_awg_trigger_out_config, // 2*CHANNELS bits
-  Axis_If.Slave   ps_awg_burst_length, // 64*CHANNELS bits
+  Axis_If.Slave   ps_awg_frame_depth, // $clog2(DEPTH)*tx_pkg::CHANNELS bits
+  Axis_If.Slave   ps_awg_trigger_out_config, // 2*tx_pkg::CHANNELS bits
+  Axis_If.Slave   ps_awg_burst_length, // 64*tx_pkg::CHANNELS bits
   Axis_If.Slave   ps_awg_start_stop, // 2 bits
   Axis_If.Master  ps_awg_dma_error, // 2 bits
 
   // DAC prescaler configuration
-  Axis_If.Slave   ps_scale_offset, // (SCALE_WIDTH+OFFSET_WIDTH)*CHANNELS
+  Axis_If.Slave   ps_scale_offset, // (SCALE_WIDTH+OFFSET_WIDTH)*tx_pkg::CHANNELS
 
   // DDS configuration
-  Axis_If.Slave   ps_dds_phase_inc, // DDS_PHASE_BITS*CHANNELS
+  Axis_If.Slave   ps_dds_phase_inc, // DDS_PHASE_BITS*tx_pkg::CHANNELS
 
   // Triangle wave configuration
-  Axis_If.Slave   ps_tri_phase_inc, // TRI_PHASE_BITS*CHANNELS
+  Axis_If.Slave   ps_tri_phase_inc, // TRI_PHASE_BITS*tx_pkg::CHANNELS
 
   // Trigger manager configuration
-  Axis_If.Slave   ps_trigger_config, // 1 + 2*CHANNELS
+  Axis_If.Slave   ps_trigger_config, // 1 + 2*tx_pkg::CHANNELS
 
-  Axis_If.Slave   ps_channel_mux_config, // $clog2(3*CHANNELS)*CHANNELS
+  Axis_If.Slave   ps_channel_mux_config, // $clog2(3*tx_pkg::CHANNELS)*tx_pkg::CHANNELS
 
   // RFDAC clock domain: 384 MHz
   input wire dac_clk, dac_reset,
@@ -56,11 +52,11 @@ module transmit_top #(
 ////////////////////////////////////////////////////////////////////////////////
 // CDC for configuration registers for DAC prescaler and DDS
 ////////////////////////////////////////////////////////////////////////////////
-Axis_If #(.DWIDTH(1+2*CHANNELS)) dac_trigger_config ();
+Axis_If #(.DWIDTH(1+2*tx_pkg::CHANNELS)) dac_trigger_config ();
 
 // synchronize trigger configuration to RFDAC clock domain
 axis_config_reg_cdc #(
-  .DWIDTH(1+2*CHANNELS)
+  .DWIDTH(1+2*tx_pkg::CHANNELS)
 ) ps_to_dac_trigger_config_cdc_i (
   .src_clk(ps_clk),
   .src_reset(ps_reset),
@@ -73,19 +69,15 @@ axis_config_reg_cdc #(
 ////////////////////////////////////////////////////////////////////////////////
 // Signal chain
 ////////////////////////////////////////////////////////////////////////////////
-Realtime_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(CHANNELS)) dac_awg_data_out ();
-Realtime_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(CHANNELS)) dac_dds_data_out ();
-Realtime_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(CHANNELS)) dac_tri_data_out ();
-Realtime_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(3*CHANNELS)) dac_mux_data_in ();
-Realtime_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(CHANNELS)) dac_mux_data_out ();
+Realtime_Parallel_If #(.DWIDTH(tx_pkg::DATA_WIDTH), .CHANNELS(tx_pkg::CHANNELS)) dac_awg_data_out ();
+Realtime_Parallel_If #(.DWIDTH(tx_pkg::DATA_WIDTH), .CHANNELS(tx_pkg::CHANNELS)) dac_dds_data_out ();
+Realtime_Parallel_If #(.DWIDTH(tx_pkg::DATA_WIDTH), .CHANNELS(tx_pkg::CHANNELS)) dac_tri_data_out ();
+Realtime_Parallel_If #(.DWIDTH(tx_pkg::DATA_WIDTH), .CHANNELS(3*tx_pkg::CHANNELS)) dac_mux_data_in ();
+Realtime_Parallel_If #(.DWIDTH(tx_pkg::DATA_WIDTH), .CHANNELS(tx_pkg::CHANNELS)) dac_mux_data_out ();
 
-logic [CHANNELS-1:0] dac_awg_triggers;
+logic [tx_pkg::CHANNELS-1:0] dac_awg_triggers;
 awg #(
-  .DEPTH(AWG_DEPTH),
-  .AXI_MM_WIDTH(AXI_MM_WIDTH),
-  .PARALLEL_SAMPLES(PARALLEL_SAMPLES),
-  .SAMPLE_WIDTH(SAMPLE_WIDTH),
-  .CHANNELS(CHANNELS)
+  .DEPTH(AWG_DEPTH)
 ) awg_i (
   .dma_clk(ps_clk),
   .dma_reset(ps_reset),
@@ -104,10 +96,7 @@ awg #(
 // dds
 dds #(
   .PHASE_BITS(DDS_PHASE_BITS),
-  .QUANT_BITS(DDS_QUANT_BITS),
-  .SAMPLE_WIDTH(SAMPLE_WIDTH),
-  .PARALLEL_SAMPLES(PARALLEL_SAMPLES),
-  .CHANNELS(CHANNELS)
+  .QUANT_BITS(DDS_QUANT_BITS)
 ) dds_i (
   .ps_clk,
   .ps_reset,
@@ -118,12 +107,12 @@ dds #(
 );
 
 // triangle wave
-logic [CHANNELS-1:0] dac_tri_triggers;
+logic [tx_pkg::CHANNELS-1:0] dac_tri_triggers;
 triangle #(
   .PHASE_BITS(TRI_PHASE_BITS),
-  .CHANNELS(CHANNELS),
-  .PARALLEL_SAMPLES(PARALLEL_SAMPLES),
-  .SAMPLE_WIDTH(SAMPLE_WIDTH)
+  .CHANNELS(tx_pkg::CHANNELS),
+  .PARALLEL_SAMPLES(tx_pkg::PARALLEL_SAMPLES),
+  .SAMPLE_WIDTH(tx_pkg::SAMPLE_WIDTH)
 ) tri_i (
   .ps_clk,
   .ps_reset,
@@ -135,10 +124,10 @@ triangle #(
 );
 
 // combine awg/tri triggers to send a single value to the ADC buffer
-logic [2*CHANNELS-1:0] dac_triggers_combined;
+logic [2*tx_pkg::CHANNELS-1:0] dac_triggers_combined;
 assign dac_triggers_combined = {dac_tri_triggers, dac_awg_triggers};
 trigger_manager #(
-  .CHANNELS(2*CHANNELS)
+  .CHANNELS(2*tx_pkg::CHANNELS)
 ) trigger_manager_i (
   .clk(dac_clk),
   .reset(dac_reset),
@@ -147,19 +136,17 @@ trigger_manager #(
   .trigger_out(dac_trigger_out)
 );
 
-assign dac_mux_data_in.data[CHANNELS-1:0] = dac_awg_data_out.data;
-assign dac_mux_data_in.valid[CHANNELS-1:0] = dac_awg_data_out.valid;
-assign dac_mux_data_in.data[2*CHANNELS-1:CHANNELS] = dac_dds_data_out.data;
-assign dac_mux_data_in.valid[2*CHANNELS-1:CHANNELS] = dac_dds_data_out.valid;
-assign dac_mux_data_in.data[3*CHANNELS-1:2*CHANNELS] = dac_tri_data_out.data;
-assign dac_mux_data_in.valid[3*CHANNELS-1:2*CHANNELS] = dac_tri_data_out.valid;
+assign dac_mux_data_in.data[tx_pkg::CHANNELS-1:0] = dac_awg_data_out.data;
+assign dac_mux_data_in.valid[tx_pkg::CHANNELS-1:0] = dac_awg_data_out.valid;
+assign dac_mux_data_in.data[2*tx_pkg::CHANNELS-1:tx_pkg::CHANNELS] = dac_dds_data_out.data;
+assign dac_mux_data_in.valid[2*tx_pkg::CHANNELS-1:tx_pkg::CHANNELS] = dac_dds_data_out.valid;
+assign dac_mux_data_in.data[3*tx_pkg::CHANNELS-1:2*tx_pkg::CHANNELS] = dac_tri_data_out.data;
+assign dac_mux_data_in.valid[3*tx_pkg::CHANNELS-1:2*tx_pkg::CHANNELS] = dac_tri_data_out.valid;
 
 // mux
-axis_channel_mux #(
-  .PARALLEL_SAMPLES(PARALLEL_SAMPLES),
-  .SAMPLE_WIDTH(SAMPLE_WIDTH),
-  .INPUT_CHANNELS(3*CHANNELS),
-  .OUTPUT_CHANNELS(CHANNELS)
+realtime_channel_mux #(
+  .INPUT_CHANNELS(3*tx_pkg::CHANNELS),
+  .OUTPUT_CHANNELS(tx_pkg::CHANNELS)
 ) channel_mux_i (
   .data_clk(dac_clk),
   .data_reset(dac_reset),
@@ -170,11 +157,11 @@ axis_channel_mux #(
   .config_in(ps_channel_mux_config)
 );
 
-// scaler
+// scale and offset
 realtime_affine #(
-  .PARALLEL_SAMPLES(PARALLEL_SAMPLES),
-  .SAMPLE_WIDTH(SAMPLE_WIDTH),
-  .CHANNELS(CHANNELS),
+  .PARALLEL_SAMPLES(tx_pkg::PARALLEL_SAMPLES),
+  .SAMPLE_WIDTH(tx_pkg::SAMPLE_WIDTH),
+  .CHANNELS(tx_pkg::CHANNELS),
   .SCALE_WIDTH(SCALE_WIDTH),
   .OFFSET_WIDTH(OFFSET_WIDTH),
   .SCALE_INT_BITS(SCALE_INT_BITS)

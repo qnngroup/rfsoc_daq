@@ -87,7 +87,7 @@ always_ff @(posedge adc_clk) begin
   end
 end
 // mux
-axis_channel_mux #(
+realtime_channel_mux #(
   .INPUT_CHANNELS(2*rx_pkg::CHANNELS),
   .OUTPUT_CHANNELS(rx_pkg::CHANNELS)
 ) channel_mux_i (

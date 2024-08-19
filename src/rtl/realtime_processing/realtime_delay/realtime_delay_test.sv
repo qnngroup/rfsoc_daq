@@ -3,7 +3,7 @@
 `timescale 1ns / 1ps
 module realtime_delay_test ();
 
-sim_util_pkg::debug debug = new(sim_util_pkg::DEBUG); // printing, error tracking
+sim_util_pkg::debug debug = new(sim_util_pkg::DEFAULT); // printing, error tracking
 
 localparam int DATA_WIDTH = 16;
 localparam int CHANNELS = 4;

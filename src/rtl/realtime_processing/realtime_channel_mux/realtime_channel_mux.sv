@@ -1,11 +1,11 @@
-// axis_channel_mux.sv - Reed Foster
+// realtime_channel_mux.sv - Reed Foster
 // Multiplexer to downselect input channels
 // - used to multiplex physical ADC channels and derived quantites from the
 //   physical ADC channels, such as finite-difference derivatives or filters
 // - used to multiplex multiple signal sources to physical DAC channels
 
 `timescale 1ns/1ps
-module axis_channel_mux #(
+module realtime_channel_mux #(
   parameter int OUTPUT_CHANNELS = 8,
   parameter int INPUT_CHANNELS = 16
 ) (

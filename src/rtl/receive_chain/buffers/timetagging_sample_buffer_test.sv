@@ -1,8 +1,11 @@
+// timetagging_sample_buffer_test.sv - Reed Foster
+// verifies combined timestamps+data sample buffer is working correctly with
+// randomly-generated timestamp and data streams
 
 `timescale 1ns/1ps
 module timetagging_sample_buffer_test ();
 
-sim_util_pkg::debug debug = new(sim_util_pkg::DEBUG);
+sim_util_pkg::debug debug = new(sim_util_pkg::DEFAULT);
 
 localparam int BUFFER_READ_LATENCY = 4;
 

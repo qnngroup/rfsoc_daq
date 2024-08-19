@@ -68,6 +68,7 @@ package sim_util_pkg;
     math #(.T(T)) math_i = new;
 
     task automatic strip_to_matching(
+      inout debug debug_i,
       inout T a_q [$],
       input T b_q [$]
     );
@@ -77,6 +78,9 @@ package sim_util_pkg;
         end else begin
           a_q.pop_back();
         end
+      end
+      if (a_q[$] !== b_q[$]) begin
+        debug_i.error($sformatf("couldn't find expected qty %x in a_q", b_q[$]));
       end
     endtask
 

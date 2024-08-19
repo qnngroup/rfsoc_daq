@@ -1,10 +1,10 @@
-// axis_channel_mux_test.sv - Reed Foster
+// realtime_channel_mux_test.sv - Reed Foster
 // Verifies operation of channel multiplexer
 // Ignore/don't check data around transients when mux selection is changed
 // through config_in interface
 
 `timescale 1ns / 1ps
-module axis_channel_mux_test ();
+module realtime_channel_mux_test ();
 
 sim_util_pkg::debug debug = new(sim_util_pkg::DEFAULT); // printing, error tracking
 
@@ -32,7 +32,7 @@ Realtime_Parallel_If #(.DWIDTH(DATA_WIDTH), .CHANNELS(OUTPUT_CHANNELS)) data_out
 
 Axis_If #(.DWIDTH(OUTPUT_CHANNELS*SELECT_BITS)) config_in ();
 
-axis_channel_mux #(
+realtime_channel_mux #(
   .INPUT_CHANNELS(INPUT_CHANNELS),
   .OUTPUT_CHANNELS(OUTPUT_CHANNELS)
 ) dut_i (
@@ -103,7 +103,7 @@ task automatic check_results(
 endtask
 
 initial begin
-  debug.display("### TESTING AXIS_CHANNEL_MUX ###", sim_util_pkg::DEFAULT);
+  debug.display("### TESTING REALTIME_CHANNEL_MUX ###", sim_util_pkg::DEFAULT);
   config_reset <= 1'b1;
   data_reset <= 1'b1;
   config_in.valid <= 1'b0;
