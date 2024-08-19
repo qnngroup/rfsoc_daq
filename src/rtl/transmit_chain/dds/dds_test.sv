@@ -12,7 +12,7 @@
 `timescale 1ns / 1ps
 module dds_test ();
 
-sim_util_pkg::debug debug = new(sim_util_pkg::DEBUG); // printing, error tracking
+sim_util_pkg::debug debug = new(sim_util_pkg::DEFAULT); // printing, error tracking
 
 localparam PHASE_BITS = 24;
 localparam QUANT_BITS = 8;
@@ -73,13 +73,14 @@ initial begin
   ps_reset <= 1'b0;
   @(posedge dac_clk);
   dac_reset <= 1'b0;
-  repeat (20) @(posedge ps_clk);
+  repeat (5) @(posedge ps_clk);
   for (int i = 0; i < 10; i++) begin
     freqs.shuffle();
     tb_i.set_phases(debug, freqs);
     repeat (5) @(posedge ps_clk);
     tb_i.clear_queues();
-    repeat (5000) @(posedge dac_clk);
+    // need a lot of samples to make sure we get a full period of the lowest frequency
+    repeat (20000) @(posedge dac_clk);
     tb_i.check_output(debug, 16'h0007);
   end
   debug.finish();

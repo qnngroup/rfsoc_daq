@@ -76,31 +76,37 @@ task automatic check_output(
   input tx_pkg::sample_t max_error
 );
   phase_t phase, dphase;
-  logic [PHASE_BITS*2-1:0] phase_corrected;
+  logic signed [PHASE_BITS*2-1:0] phase_corrected;
   int correction_bits;
+  int estimation_interval;
   tx_pkg::sample_t expected;
   tx_pkg::sample_t received [$];
   for (int channel = 0; channel < tx_pkg::CHANNELS; channel++) begin
-    debug.display($sformatf("checking output for channel %0d", channel), sim_util_pkg::DEBUG);
+    debug.display($sformatf("checking output for channel %0d", channel), sim_util_pkg::VERBOSE);
     // first convert receiver_i.data_q[channel] to samples
     data_q_util.samples_from_batches(receiver_i.data_q[channel], received, tx_pkg::SAMPLE_WIDTH, tx_pkg::PARALLEL_SAMPLES);
 
     // get close to a zero-crossing to get better estimate of the phase
-    while ((received[$] > received[$-1]) || (math.abs(received[$]) > 16'h00ff))  begin
+    while (math.abs(received[$]) > 16'h00ff)  begin
       received.pop_back();
     end
     if (received.size() < 1025) begin
       debug.error("not enough values left to test, please increase number of samples captured");
     end
     // estimate initial phase
+    // use a different interval depending on the phase increment
+    // to figure out whether we're on the left or right half-plane
+    estimation_interval = (2**PHASE_BITS)/phase_inc[channel];
+    estimation_interval = estimation_interval > 50 ? estimation_interval/50 : 1;
+    debug.display($sformatf("using estimation interval = %0d (received.size() = %0d)", estimation_interval, received.size()), sim_util_pkg::DEBUG);
     phase = estimate_phase(received[$]);
-    dphase = estimate_phase(received[$-1]) - phase;
+    dphase = (estimate_phase(received[$-estimation_interval]) - phase)/estimation_interval;
     // correct phase by averaging phase estimated from multiple samples
     // 2**correction_bits is a rough heuristic for the appropriate number of
     // samples needed to create an accurate estimate
     correction_bits = PHASE_BITS - 2 - $clog2(phase_inc[channel]);
     // clip sample count to [1,64]
-    correction_bits = (correction_bits > 8) ? 8 : ((correction_bits < 0) ? 0 : correction_bits);
+    correction_bits = (correction_bits > 10) ? 10 : ((correction_bits < 0) ? 0 : correction_bits);
     // get average phase from multiple samples
     phase_corrected = '0;
     for (int i = 0; i < 2**correction_bits; i++) begin
