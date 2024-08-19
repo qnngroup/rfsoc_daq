@@ -18,19 +18,13 @@ localparam int PS_CLK_RATE_HZ = 100_000_000;
 always #(0.5s/PS_CLK_RATE_HZ) ps_clk = ~ps_clk;
 
 parameter int PHASE_BITS = 32;
-parameter int CHANNELS = 8;
-parameter int PARALLEL_SAMPLES = 4;
-parameter int SAMPLE_WIDTH = 16;
 
-Axis_If #(.DWIDTH(PHASE_BITS*CHANNELS)) ps_phase_inc ();
-Realtime_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(CHANNELS)) dac_data_out ();
-logic [CHANNELS-1:0] dac_trigger;
+Axis_If #(.DWIDTH(PHASE_BITS*tx_pkg::CHANNELS)) ps_phase_inc ();
+Realtime_Parallel_If #(.DWIDTH(tx_pkg::DATA_WIDTH), .CHANNELS(tx_pkg::CHANNELS)) dac_data_out ();
+logic [tx_pkg::CHANNELS-1:0] dac_trigger;
 
 triangle #(
-  .PHASE_BITS(PHASE_BITS),
-  .CHANNELS(CHANNELS),
-  .PARALLEL_SAMPLES(PARALLEL_SAMPLES),
-  .SAMPLE_WIDTH(SAMPLE_WIDTH)
+  .PHASE_BITS(PHASE_BITS)
 ) dut_i (
   .ps_clk,
   .ps_reset,
@@ -42,10 +36,7 @@ triangle #(
 );
 
 triangle_tb #(
-  .PHASE_BITS(PHASE_BITS),
-  .CHANNELS(CHANNELS),
-  .PARALLEL_SAMPLES(PARALLEL_SAMPLES),
-  .SAMPLE_WIDTH(SAMPLE_WIDTH)
+  .PHASE_BITS(PHASE_BITS)
 ) tb_i (
   .ps_clk,
   .ps_phase_inc,
@@ -54,7 +45,7 @@ triangle_tb #(
   .dac_data_out
 );
 
-logic [CHANNELS-1:0][PHASE_BITS-1:0] phase_increment;
+logic [tx_pkg::CHANNELS-1:0][PHASE_BITS-1:0] phase_increment;
 
 initial begin
   debug.display("### TESTING TRIANGLE WAVE GENERATOR ###", sim_util_pkg::DEFAULT);
@@ -68,7 +59,7 @@ initial begin
   @(posedge ps_clk);
   // send some data
   repeat (10) begin
-    for (int channel = 0; channel < CHANNELS; channel++) begin
+    for (int channel = 0; channel < tx_pkg::CHANNELS; channel++) begin
       phase_increment[channel] = $urandom() >> 8;
     end
     tb_i.set_phases(debug, phase_increment);
