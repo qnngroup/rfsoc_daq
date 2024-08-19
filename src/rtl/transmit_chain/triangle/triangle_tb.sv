@@ -4,37 +4,42 @@
 `timescale 1ns/1ps
 
 module triangle_tb #(
-  parameter int PHASE_BITS = 32
+  parameter int PHASE_BITS = 32,
+  parameter int CHANNELS = 8,
+  parameter int PARALLEL_SAMPLES = 16,
+  parameter int SAMPLE_WIDTH = 16
 ) (
   input logic ps_clk,
   Axis_If.Master ps_phase_inc,
   input logic dac_clk,
-  input logic [tx_pkg::CHANNELS-1:0] dac_trigger,
+  input logic [CHANNELS-1:0] dac_trigger,
   Realtime_Parallel_If.Slave dac_data_out
 );
 
+typedef logic signed [SAMPLE_WIDTH-1:0] sample_t;
+typedef logic [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0] batch_t;
 sim_util_pkg::math #(int) math_int;
-sim_util_pkg::math #(tx_pkg::sample_t) math_samp;
-sim_util_pkg::queue #(.T(tx_pkg::sample_t), .T2(tx_pkg::batch_t)) data_q_util = new;
+sim_util_pkg::math #(sample_t) math_samp;
+sim_util_pkg::queue #(.T(sample_t), .T2(batch_t)) data_q_util = new;
 
 realtime_parallel_receiver #(
-  .DWIDTH(tx_pkg::DATA_WIDTH),
-  .CHANNELS(tx_pkg::CHANNELS)
+  .DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH),
+  .CHANNELS(CHANNELS)
 ) receiver_i (
   .clk(dac_clk),
   .intf(dac_data_out)
 );
 axis_driver #(
-  .DWIDTH(tx_pkg::CHANNELS*PHASE_BITS)
+  .DWIDTH(CHANNELS*PHASE_BITS)
 ) driver_i (
   .clk(ps_clk),
   .intf(ps_phase_inc)
 );
 
-tx_pkg::batch_t trigger_values [tx_pkg::CHANNELS][$];
+batch_t trigger_values [CHANNELS][$];
 
 always @(posedge dac_clk) begin
-  for (int channel = 0; channel < tx_pkg::CHANNELS; channel++) begin
+  for (int channel = 0; channel < CHANNELS; channel++) begin
     if (dac_trigger[channel] === 1'b1) begin
       trigger_values[channel].push_front(dac_data_out.data[channel]);
     end
@@ -43,15 +48,15 @@ end
 
 task automatic check_results (
   inout sim_util_pkg::debug debug,
-  input logic [tx_pkg::CHANNELS-1:0][PHASE_BITS-1:0] phase_increment
+  input logic [CHANNELS-1:0][PHASE_BITS-1:0] phase_increment
 );
   enum {UP, DOWN} direction;
-  tx_pkg::sample_t recv [$];
-  tx_pkg::sample_t last_sample;
+  sample_t recv [$];
+  sample_t last_sample;
   bit in_trigger_values;
   // actually check that we're producing the correct output
-  for (int channel = 0; channel < tx_pkg::CHANNELS; channel++) begin
-    data_q_util.samples_from_batches(receiver_i.data_q[channel], recv, tx_pkg::SAMPLE_WIDTH, tx_pkg::PARALLEL_SAMPLES);
+  for (int channel = 0; channel < CHANNELS; channel++) begin
+    data_q_util.samples_from_batches(receiver_i.data_q[channel], recv, SAMPLE_WIDTH, PARALLEL_SAMPLES);
     debug.display($sformatf(
       "channel %0d: trigger_values.size() = %0d",
       channel,
@@ -69,8 +74,8 @@ task automatic check_results (
       // might've missed a zero crossing and accidentally gotten a timestamp
       // for it. If so, just pop the last element in trigger_values[channel]
       in_trigger_values = 1'b0;
-      for (int sample = 0; sample < tx_pkg::PARALLEL_SAMPLES; sample++) begin
-        if (last_sample === trigger_values[channel][$][sample*tx_pkg::SAMPLE_WIDTH+:tx_pkg::SAMPLE_WIDTH]) begin
+      for (int sample = 0; sample < PARALLEL_SAMPLES; sample++) begin
+        if (last_sample === trigger_values[channel][$][sample*SAMPLE_WIDTH+:SAMPLE_WIDTH]) begin
           in_trigger_values = 1'b1;
         end
       end
@@ -78,7 +83,6 @@ task automatic check_results (
         trigger_values[channel].pop_back();
       end
     end
-    // now process remaining samples
     while (recv.size() > 0) begin
       debug.display($sformatf(
         "channel %0d: sample pair %x, %x (%0d, %0d)",
@@ -93,7 +97,7 @@ task automatic check_results (
         debug.error("recv[$] is undefined");
       end
       // extra + 2 for rounding/truncation
-      if (math_samp.abs(recv[$] - last_sample) > 2 + 2*phase_increment[channel][PHASE_BITS-1-:tx_pkg::SAMPLE_WIDTH]) begin
+      if (math_samp.abs(recv[$] - last_sample) > 2 + 2*phase_increment[channel][PHASE_BITS-1-:SAMPLE_WIDTH]) begin
         debug.error($sformatf(
         "channel %0d: sample pair with incorrect difference %x, %x; phase_inc = %x",
         channel,
@@ -106,7 +110,7 @@ task automatic check_results (
         UP: begin
           if (recv[$] < last_sample) begin
             // if we're near the edge, then that's okay
-            if (last_sample < ({1'b0, {(tx_pkg::SAMPLE_WIDTH-1){1'b1}}} - phase_increment[channel][PHASE_BITS-1-:tx_pkg::SAMPLE_WIDTH])) begin
+            if (last_sample < ({1'b0, {(SAMPLE_WIDTH-1){1'b1}}} - phase_increment[channel][PHASE_BITS-1-:SAMPLE_WIDTH])) begin
               // not okay
               debug.error($sformatf(
                 "channel %0d: samples should be increasing, but decreasing pair %x, %x",
@@ -131,8 +135,8 @@ task automatic check_results (
             // if recv[$] is in trigger_values[$], then we're good
             if (trigger_values[channel].size() > 0) begin
               in_trigger_values = 1'b0;
-              for (int sample = 0; sample < tx_pkg::PARALLEL_SAMPLES; sample++) begin
-                if (recv[$] === trigger_values[channel][$][sample*tx_pkg::SAMPLE_WIDTH+:tx_pkg::SAMPLE_WIDTH]) begin
+              for (int sample = 0; sample < PARALLEL_SAMPLES; sample++) begin
+                if (recv[$] === trigger_values[channel][$][sample*SAMPLE_WIDTH+:SAMPLE_WIDTH]) begin
                   in_trigger_values = 1'b1;
                 end
               end
@@ -156,7 +160,7 @@ task automatic check_results (
         DOWN: begin
           if (recv[$] > last_sample) begin
             // if we're near the edge, then that's okay
-            if (last_sample > ({1'b1, {(tx_pkg::SAMPLE_WIDTH-1){1'b0}}} + phase_increment[channel][PHASE_BITS-1-:tx_pkg::SAMPLE_WIDTH])) begin
+            if (last_sample > ({1'b1, {(SAMPLE_WIDTH-1){1'b0}}} + phase_increment[channel][PHASE_BITS-1-:SAMPLE_WIDTH])) begin
               // not okay
               debug.error($sformatf(
                 "channel %0d: samples should be decreasing, but increasing pair %x, %x",
@@ -188,14 +192,14 @@ endtask
 
 task automatic clear_queues();
   receiver_i.clear_queues();
-  for (int channel = 0; channel < tx_pkg::CHANNELS; channel++) begin
+  for (int channel = 0; channel < CHANNELS; channel++) begin
     while (trigger_values[channel].size() > 0) trigger_values[channel].pop_back();
   end
 endtask
 
 task automatic set_phases(
   inout sim_util_pkg::debug debug,
-  input logic [tx_pkg::CHANNELS-1:0][PHASE_BITS-1:0] phase_increment
+  input logic [CHANNELS-1:0][PHASE_BITS-1:0] phase_increment
 );
   bit success;
   driver_i.send_sample_with_timeout(10, phase_increment, success);
