@@ -133,19 +133,17 @@ receive_top #(
   .ps_capture_digital_trigger_select
 );
 
-logic [rx_pkg::CHANNELS-1:0][$clog2(2*rx_pkg::CHANNELS)-1:0] mux_channel_select;
-logic [rx_pkg::CHANNELS-1:0][rx_pkg::SAMPLE_WIDTH-1:0] low_thresholds, high_thresholds;
-logic [rx_pkg::CHANNELS-1:0] bypassed_channel_mask;
-logic [rx_pkg::CHANNELS-1:0][$clog2(rx_pkg::CHANNELS+tx_pkg::CHANNELS)-1:0] disc_trigger_sources;
-logic [rx_pkg::CHANNELS-1:0][TIMER_BITS-1:0] disc_start_delays, disc_stop_delays, disc_digital_delays;
 logic [tx_pkg::CHANNELS:0] trigger_manager_config;
 
 initial begin
   debug.display("### TESTING RECEIVE TOPLEVEL ###", sim_util_pkg::DEFAULT);
 
-  repeat (5) begin
-    adc_reset <= 1'b1;
+  repeat (2) begin
+    // wait a few clocks to make sure we don't assert reset too early for CDC
+    repeat (10) @(posedge ps_clk);
     ps_reset <= 1'b1;
+    @(posedge adc_clk);
+    adc_reset <= 1'b1;
     tb_i.init();
     repeat (10) @(posedge ps_clk);
     ps_reset <= 1'b0;
@@ -153,103 +151,19 @@ initial begin
     adc_reset <= 1'b0;
     @(posedge ps_clk);
     tb_i.setup_adc_input_gen(debug);
-    /////////////////////////////////
     // configure sample buffer
-    /////////////////////////////////
     // 4 active channels
     tb_i.buffer_tb_i.set_banking_mode(debug, 2);
-    /////////////////////////////////
     // configure channel mux
-    /////////////////////////////////
-    for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
-      if (channel % 2 == 0) begin
-        mux_channel_select[channel] = (channel >> 1);
-      end else begin
-        mux_channel_select[channel] = rx_pkg::CHANNELS + (channel >> 1);
-      end
-    end
-    tb_i.set_mux_config(debug, mux_channel_select);
-    ///////////////////////////////////
+    tb_i.setup_channel_mux(debug);
     // configure sample discriminator
-    ///////////////////////////////////
-    for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
-      case (channel)
-        0: begin
-          // save everything (should get a nice triangle wave)
-          low_thresholds[channel] = rx_pkg::MIN_SAMP;
-          high_thresholds[channel] = rx_pkg::MIN_SAMP;
-          // save triangle data, but using trigger from 1 (will only save upward slope + tails)
-          disc_trigger_sources[channel] = 1;
-          // don't bypass
-          bypassed_channel_mask[channel] = 1'b0;
-          // delays are kind of a don't care here
-          disc_start_delays[channel] = 0;
-          disc_stop_delays[channel] = 0;
-        end
-        1: begin
-          // only save if > 0 (since channel is ddt, this should give us only
-          // rising edges; however add a few stop/start delay cycles to get some
-          // tails)
-          low_thresholds[channel] = 0;
-          high_thresholds[channel] = 0;
-          // save ddt data, but using trigger from channel 0 (will save everything)
-          disc_trigger_sources[channel] = 0;
-          // don't bypass
-          bypassed_channel_mask[channel] = 1'b0;
-          // delays
-          disc_start_delays[channel] = 5;
-          disc_stop_delays[channel] = 5;
-        end
-        2: begin
-          // save everything (should get a nice, un-chopped triangle wave at a different freq)
-          low_thresholds[channel] = rx_pkg::MIN_SAMP;
-          high_thresholds[channel] = rx_pkg::MIN_SAMP;
-          // just save triangle wave
-          disc_trigger_sources[channel] = 2;
-          // don't bypass
-          bypassed_channel_mask[channel] = 1'b0;
-          // delays are kind of a don't care here
-          disc_start_delays[channel] = 0;
-          disc_stop_delays[channel] = 0;
-        end
-        3: begin
-          // don't care, since it's bypassed
-          low_thresholds[channel] = 0;
-          high_thresholds[channel] = 0;
-          // don't care, since it's bypassed
-          disc_trigger_sources[channel] = 0;
-          // 3 is bypassed
-          bypassed_channel_mask[channel] = 1'b1;
-          // don't care, since it's bypassed
-          disc_start_delays[channel] = 0;
-          disc_stop_delays[channel] = 0;
-        end
-        default: begin
-          low_thresholds[channel] = rx_pkg::MAX_SAMP;
-          high_thresholds[channel] = rx_pkg::MAX_SAMP;
-          // sources
-          disc_trigger_sources[channel] = channel;
-          // don't bypass
-          bypassed_channel_mask[channel] = 1'b0;
-          // don't care
-          disc_start_delays[channel] = 0;
-          disc_stop_delays[channel] = 0;
-        end
-      endcase
-      disc_digital_delays[channel] = 0;
-    end
-    tb_i.discriminator_tb_i.set_thresholds(debug, low_thresholds, high_thresholds);
-    tb_i.discriminator_tb_i.set_trigger_sources(debug, disc_trigger_sources);
-    tb_i.discriminator_tb_i.set_bypassed_channels(debug, bypassed_channel_mask);
-    tb_i.discriminator_tb_i.set_delays(debug, disc_start_delays, disc_stop_delays, disc_digital_delays);
-    /////////////////////////////////
+    tb_i.setup_sample_discriminator(debug);
     // configure trigger manager
-    /////////////////////////////////
     trigger_manager_config = {{tx_pkg::CHANNELS{1'b0}}, 1'b1}; // OR, only enabling TX[0] trigger
     tb_i.set_capture_trigger_cfg(debug, trigger_manager_config);
 
     for (int capture_reset = 0; capture_reset < 2; capture_reset++) begin
-      repeat (10) @(posedge ps_clk);
+      repeat (20) @(posedge ps_clk);
       // arm
       tb_i.buffer_tb_i.capture_arm_start_stop(debug, 1'b1, 1'b0, 1'b0);
       repeat (50) @(posedge adc_clk);
@@ -264,7 +178,7 @@ initial begin
       end
     end
     // wait a bit
-    repeat (100) @(posedge adc_clk);
+    repeat (1000) @(posedge adc_clk);
     // stop capture
     @(posedge ps_clk);
     tb_i.buffer_tb_i.capture_arm_start_stop(debug, 1'b0, 1'b0, 1'b1);
@@ -286,8 +200,8 @@ initial begin
     end
     // wait until readout finishes
     do @(posedge ps_clk); while (~(ps_readout_data.ok & ps_readout_data.last));
-    // check output
-    tb_i.check_output(debug);
+    // check output (4 active channels)
+    tb_i.check_output(debug, 4);
     tb_i.clear_queues();
     // repeat 5 times
   end

@@ -74,13 +74,14 @@ trigger_manager #(
 // multiplexer takes in physical ADC channels + differentiator outputs and
 // produces logical channels
 Realtime_Parallel_If #(.DWIDTH(rx_pkg::DATA_WIDTH), .CHANNELS(rx_pkg::CHANNELS)) adc_ddt ();
+Realtime_Parallel_If #(.DWIDTH(rx_pkg::DATA_WIDTH), .CHANNELS(rx_pkg::CHANNELS)) adc_delay ();
 Realtime_Parallel_If #(.DWIDTH(rx_pkg::DATA_WIDTH), .CHANNELS(2*rx_pkg::CHANNELS)) adc_mux_input ();
 Realtime_Parallel_If #(.DWIDTH(rx_pkg::DATA_WIDTH), .CHANNELS(rx_pkg::CHANNELS)) adc_mux_output ();
 // connect physical ADC channels and differentiator to mux input
 always_ff @(posedge adc_clk) begin
   for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
-    adc_mux_input.data[channel] <= adc_data_in.data[channel];
-    adc_mux_input.valid[channel] <= adc_data_in.valid[channel];
+    adc_mux_input.data[channel] <= adc_delay.data[channel];
+    adc_mux_input.valid[channel] <= adc_delay.valid[channel];
     adc_mux_input.data[channel+rx_pkg::CHANNELS] <= adc_ddt.data[channel];
     adc_mux_input.valid[channel+rx_pkg::CHANNELS] <= adc_ddt.valid[channel];
   end
@@ -109,6 +110,19 @@ realtime_differentiator #(
   .reset(adc_reset),
   .data_in(adc_data_in),
   .data_out(adc_ddt)
+);
+
+// delay
+localparam int DIFFERENTIATOR_DELAY = 5;
+realtime_delay #(
+  .DATA_WIDTH(rx_pkg::DATA_WIDTH),
+  .CHANNELS(rx_pkg::CHANNELS),
+  .DELAY(DIFFERENTIATOR_DELAY)
+) delay_i (
+  .clk(adc_clk),
+  .reset(adc_reset),
+  .data_in(adc_data_in),
+  .data_out(adc_delay)
 );
 
 // discriminator

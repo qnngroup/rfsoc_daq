@@ -262,8 +262,8 @@ task automatic check_results (
   input logic [rx_pkg::CHANNELS-1:0][$clog2(rx_pkg::CHANNELS+tx_pkg::CHANNELS)-1:0] trigger_sources,
   input logic [rx_pkg::CHANNELS-1:0] bypassed_channel_mask
 );
-  rx_pkg::batch_t expected_q [rx_pkg::CHANNELS][$];
-  logic [buffer_pkg::TSTAMP_WIDTH-1:0] timestamp_q [rx_pkg::CHANNELS][$];
+  rx_pkg::batch_t expected_samples_q [rx_pkg::CHANNELS][$];
+  logic [buffer_pkg::TSTAMP_WIDTH-1:0] expected_timestamps_q [rx_pkg::CHANNELS][$];
   logic [rx_pkg::CHANNELS-1:0][buffer_pkg::TSTAMP_WIDTH-1:0] time_init;
   for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
     time_init[channel] = adc_timestamps_out_rx_i.data_q[channel][$] >> buffer_pkg::SAMPLE_INDEX_WIDTH;
@@ -278,18 +278,18 @@ task automatic check_results (
     digital_delays,
     trigger_sources,
     bypassed_channel_mask,
-    expected_q,
-    timestamp_q
+    expected_samples_q,
+    expected_timestamps_q
   );
   for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
-    // check expected_q matches received
+    // check expected_samples_q matches received
     debug.display("checking data", sim_util_pkg::DEBUG);
-    batch_q_util.compare(debug, adc_samples_out_rx_i.data_q[channel], expected_q[channel]);
-    while (expected_q[channel].size() > 0) expected_q[channel].pop_back();
-    // check timestamp_q
-    debug.display("checking timestamp_q", sim_util_pkg::DEBUG);
-    tstamp_q_util.compare(debug, adc_timestamps_out_rx_i.data_q[channel], timestamp_q[channel]);
-    while (timestamp_q[channel].size() > 0) timestamp_q[channel].pop_back();
+    batch_q_util.compare(debug, adc_samples_out_rx_i.data_q[channel], expected_samples_q[channel]);
+    while (expected_samples_q[channel].size() > 0) expected_samples_q[channel].pop_back();
+    // check expected_timestamps_q
+    debug.display("checking expected_timestamps_q", sim_util_pkg::DEBUG);
+    tstamp_q_util.compare(debug, adc_timestamps_out_rx_i.data_q[channel], expected_timestamps_q[channel]);
+    while (expected_timestamps_q[channel].size() > 0) expected_timestamps_q[channel].pop_back();
   end
 endtask
 
@@ -300,8 +300,8 @@ task automatic generate_expected (
   input logic [rx_pkg::CHANNELS-1:0][TIMER_BITS-1:0] start_delays, stop_delays, digital_delays,
   input logic [rx_pkg::CHANNELS-1:0][$clog2(rx_pkg::CHANNELS+tx_pkg::CHANNELS)-1:0] trigger_sources,
   input logic [rx_pkg::CHANNELS-1:0] bypassed_channel_mask,
-  output rx_pkg::batch_t expected_q [rx_pkg::CHANNELS][$],
-  output logic [buffer_pkg::TSTAMP_WIDTH-1:0] timestamp_q [rx_pkg::CHANNELS][$]
+  output rx_pkg::batch_t expected_samples_q [rx_pkg::CHANNELS][$],
+  output logic [buffer_pkg::TSTAMP_WIDTH-1:0] expected_timestamps_q [rx_pkg::CHANNELS][$]
 );
   rx_pkg::batch_t trigger_q [$];
   int expected_locations [$];
@@ -323,8 +323,8 @@ task automatic generate_expected (
     debug.display($sformatf("trigger source = %0d", source), sim_util_pkg::DEBUG);
     if (bypassed_channel_mask[channel] === 1'b1) begin
       // check we got everything
-      // timestamp_q should be empty; don't do anything
-      // fill expected_q with data that was sent
+      // expected_timestamps_q should be empty; don't do anything
+      // fill expected_samples_q with data that was sent
       start_index = adc_data_in_tx_i.data_q[channel].size() - 1;
       for (int i = 0; i < LATENCY_TRIGGER_PIPELINE; i++) begin
         adc_samples_out_rx_i.data_q[channel].pop_back();
@@ -336,7 +336,7 @@ task automatic generate_expected (
         start_index--;
       end
       for (int i = start_index; i >= 0; i--) begin
-        expected_q[channel].push_front(adc_data_in_tx_i.data_q[channel][i]);
+        expected_samples_q[channel].push_front(adc_data_in_tx_i.data_q[channel][i]);
       end
     end else begin
       if (source >= rx_pkg::CHANNELS) begin
@@ -425,25 +425,25 @@ task automatic generate_expected (
         expected_locations),
         sim_util_pkg::DEBUG
       );
-      // get timestamp_q
+      // get expected_timestamps_q
       for (int i = expected_locations.size() - 1; i >= 0; i--) begin
         index = expected_locations.size() - 1 - i;
         if ((expected_locations[i+1] - 1 > expected_locations[i]) || (i == expected_locations.size() - 1)) begin
           if (source >= rx_pkg::CHANNELS) begin
-            timestamp_q[channel].push_front({trigger_time_q[channel].pop_back() + digital_delays[channel], index});
+            expected_timestamps_q[channel].push_front({trigger_time_q[channel].pop_back() + digital_delays[channel], index});
           end else begin
-            timestamp_q[channel].push_front({
+            expected_timestamps_q[channel].push_front({
               time_init[channel] + (expected_locations[$]-expected_locations[i])*adc_send_samples_decimation,
               index
             });
           end
         end
       end
-      debug.display($sformatf("expected_timestamps = %0p", timestamp_q[channel]), sim_util_pkg::DEBUG);
-      // generate expected_q data
+      debug.display($sformatf("expected_timestamps = %0p", expected_timestamps_q[channel]), sim_util_pkg::DEBUG);
+      // generate expected_samples_q data
       while (expected_locations.size() > 0) begin
         debug.display($sformatf("expected location = %d, pushing value = %x", expected_locations[$], adc_data_in_tx_i.data_q[channel][expected_locations[$]]), sim_util_pkg::DEBUG);
-        expected_q[channel].push_front(adc_data_in_tx_i.data_q[channel][expected_locations.pop_back()]);
+        expected_samples_q[channel].push_front(adc_data_in_tx_i.data_q[channel][expected_locations.pop_back()]);
       end
     end
   end

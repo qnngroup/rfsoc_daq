@@ -34,6 +34,8 @@ module receive_top_tb #(
   Axis_If.Master ps_capture_digital_trigger_select
 );
 
+localparam int TIMER_BITS = $clog2(DISCRIMINATOR_MAX_DELAY);
+
 // generate ramp with triangle
 Axis_If #(.DWIDTH(32*rx_pkg::CHANNELS)) ps_phase_inc ();
 logic [(rx_pkg::CHANNELS*32)-1:0] phase_inc_data;
@@ -180,9 +182,102 @@ task automatic setup_adc_input_gen (
   inout sim_util_pkg::debug debug
 );
   for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
-    phase_inc_data[channel*32+:32] = {channel + 1, 18'b0};
+    phase_inc_data[channel*32+:32] = {channel + 1, 22'b0};
   end
   set_tri_phase_inc(debug, phase_inc_data);
+endtask
+
+task automatic setup_channel_mux (
+  inout sim_util_pkg::debug debug
+);
+  logic [rx_pkg::CHANNELS-1:0][$clog2(2*rx_pkg::CHANNELS)-1:0] mux_channel_select;
+  for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
+    if (channel % 2 == 0) begin
+      mux_channel_select[channel] = (channel >> 1);
+    end else begin
+      mux_channel_select[channel] = rx_pkg::CHANNELS + (channel >> 1);
+    end
+  end
+  set_mux_config(debug, mux_channel_select);
+endtask
+
+task automatic setup_sample_discriminator (
+  inout sim_util_pkg::debug debug
+);
+  logic [rx_pkg::CHANNELS-1:0][rx_pkg::SAMPLE_WIDTH-1:0] low_thresholds, high_thresholds;
+  logic [rx_pkg::CHANNELS-1:0] bypassed_channel_mask;
+  logic [rx_pkg::CHANNELS-1:0][$clog2(rx_pkg::CHANNELS+tx_pkg::CHANNELS)-1:0] trigger_sources;
+  logic [rx_pkg::CHANNELS-1:0][TIMER_BITS-1:0] start_delays, stop_delays, digital_delays;
+  for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
+    case (channel)
+      0: begin
+        // always save samples (continuously trigger)
+        low_thresholds[channel] = rx_pkg::MIN_SAMP;
+        high_thresholds[channel] = rx_pkg::MIN_SAMP;
+        // save triangle data, but using trigger from 1 (will only save upward slope + tails)
+        trigger_sources[channel] = 1;
+        // don't bypass
+        bypassed_channel_mask[channel] = 1'b0;
+        // channel 1 only sends trigger signal; need to match delays
+        start_delays[channel] = 5;
+        stop_delays[channel] = 5;
+      end
+      1: begin
+        // only save if > 0 (since channel is ddt, this should give us only
+        // rising edges; however add a few stop/start delay cycles to get some
+        // tails)
+        low_thresholds[channel] = 0;
+        high_thresholds[channel] = 0;
+        // save ddt data, but using trigger from channel 0 (will save everything)
+        trigger_sources[channel] = 1;
+        // don't bypass
+        bypassed_channel_mask[channel] = 1'b0;
+        // delays
+        start_delays[channel] = 5;
+        stop_delays[channel] = 5;
+      end
+      2: begin
+        // save everything (should get a nice, un-chopped triangle wave at a different freq)
+        low_thresholds[channel] = rx_pkg::MIN_SAMP;
+        high_thresholds[channel] = rx_pkg::MIN_SAMP;
+        // just save triangle wave
+        trigger_sources[channel] = 2;
+        // don't bypass
+        bypassed_channel_mask[channel] = 1'b0;
+        // delays are kind of a don't care here
+        start_delays[channel] = 0;
+        stop_delays[channel] = 0;
+      end
+      3: begin
+        // don't care, since it's bypassed
+        low_thresholds[channel] = 0;
+        high_thresholds[channel] = 0;
+        // don't care, since it's bypassed
+        trigger_sources[channel] = 0;
+        // 3 is bypassed
+        bypassed_channel_mask[channel] = 1'b1;
+        // don't care, since it's bypassed
+        start_delays[channel] = 0;
+        stop_delays[channel] = 0;
+      end
+      default: begin
+        low_thresholds[channel] = rx_pkg::MAX_SAMP;
+        high_thresholds[channel] = rx_pkg::MAX_SAMP;
+        // sources
+        trigger_sources[channel] = channel;
+        // don't bypass
+        bypassed_channel_mask[channel] = 1'b0;
+        // don't care
+        start_delays[channel] = 0;
+        stop_delays[channel] = 0;
+      end
+    endcase
+    digital_delays[channel] = 0;
+  end
+  discriminator_tb_i.set_thresholds(debug, low_thresholds, high_thresholds);
+  discriminator_tb_i.set_trigger_sources(debug, trigger_sources);
+  discriminator_tb_i.set_bypassed_channels(debug, bypassed_channel_mask);
+  discriminator_tb_i.set_delays(debug, start_delays, stop_delays, digital_delays);
 endtask
 
 task automatic clear_queues ();
@@ -192,24 +287,114 @@ task automatic clear_queues ();
 endtask
 
 task automatic check_output (
-  inout sim_util_pkg::debug debug
+  inout sim_util_pkg::debug debug,
+  input int active_channels
 );
+  // get received data
+  buffer_pkg::tstamp_t readout_timestamps_q [rx_pkg::CHANNELS][$];
+  rx_pkg::batch_t readout_samples_q [rx_pkg::CHANNELS][$];
+  rx_pkg::sample_t sample_q [$];
+  int event_time;
+  int durations_q [$];
+  rx_pkg::sample_t slopes_q [$];
+  rx_pkg::sample_t slope;
+  logic [3:0][31:0] expected_falling_durations = {256, 256, 88, 88};
+  logic [3:0][31:0] expected_rising_durations = {256, 256, 512, 512};
+  sim_util_pkg::queue #(.T(rx_pkg::sample_t), .T2(rx_pkg::batch_t)) sample_q_util = new();
+  // get output
+  buffer_tb_i.parse_readout_data(debug, active_channels, readout_timestamps_q, readout_samples_q);
+
   debug.display("checking output", sim_util_pkg::DEBUG);
-  rx_pkg::batch_t expected_q [rx_pkg::CHANNELS][$];
-  logic [buffer_pkg::TSTAMP_WIDTH-1:0] timestamp_q [rx_pkg::CHANNELS][$];
-  discriminator_tb_i.generate_expected(
-    debug,
-    low_thresholds,
-    high_thresholds,
-    start_delays,
-    stop_delays,
-    digital_delays,
-    trigger_sources,
-    bypassed_channel_mask,
-    expected_q,
-    timestamp_q
-  );
-  // get data from buffer
+  // expected
+  // 0: rising ramp with 5-cycle-long tails
+  // 1: square wave
+  // 2: triangle wave
+  // 3: square wave
+  // 4-7: empty
+  for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
+    // convert to queue of individual samples instead of words
+    sample_q_util.samples_from_batches(
+      readout_samples_q[channel],
+      sample_q,
+      rx_pkg::SAMPLE_WIDTH,
+      rx_pkg::PARALLEL_SAMPLES
+    );
+    debug.display($sformatf("channel %0d data: %0p", channel, sample_q), sim_util_pkg::DEBUG);
+    event_time = -1;
+    durations_q.delete();
+    slopes_q.delete();
+    case (channel)
+      0,2: begin
+        slope = -1;
+        for (int i = sample_q.size() - 1; i >= 1; i--) begin
+          if ((sample_q[i-1] - sample_q[i])*slope < 0) begin
+            slope = sample_q[i-1] - sample_q[i];
+            durations_q.push_front(event_time - i);
+            slopes_q.push_front(slope);
+            event_time = i;
+          end
+        end
+      end
+      1,3: begin
+        slope = -1;
+        for (int i = sample_q.size() - 1; i >= 0; i--) begin
+          if (((sample_q[i] > 0) && (slope < 0)) || ((sample_q[i] < 0) && (slope > 0))) begin
+            slope = (sample_q[i] > 0) ? 1 : -1;
+            durations_q.push_front(event_time - i);
+            slopes_q.push_front(slope);
+            event_time = i;
+          end
+        end
+      end
+      default: begin
+        if (readout_timestamps_q[channel].size() > 0) begin
+          debug.error($sformatf(
+            "expected 0 timestamps for channel %0d, but got %0d",
+            channel,
+            readout_timestamps_q[channel].size())
+          );
+        end
+        if (readout_samples_q[channel].size() > 0) begin
+          debug.error($sformatf(
+            "expected 0 samples for channel %0d, but got %0d",
+            channel,
+            readout_samples_q[channel].size())
+          );
+        end
+      end
+    endcase
+    if (channel < 4) begin
+      debug.display($sformatf("durations_q = %0p", durations_q), sim_util_pkg::DEBUG);
+      debug.display($sformatf("slopes_q = %0p", slopes_q), sim_util_pkg::DEBUG);
+      // first two will be garbage
+      repeat (2) begin
+        durations_q.pop_back();
+        slopes_q.pop_back();
+      end
+      for (int i = durations_q.size() - 1; i >= 0; i--) begin
+        if (slopes_q[i] > 0) begin
+          if (durations_q[i] !== expected_falling_durations[channel]) begin
+            debug.error($sformatf(
+              "channel %0d: falling edge had wrong duration, expected %0d samples got %0d",
+              channel,
+              expected_falling_durations[channel],
+              durations_q[i])
+            );
+          end
+        end else begin
+          if (durations_q[i] !== expected_rising_durations[channel]) begin
+            debug.error($sformatf(
+              "channel %0d: rising edge had wrong duration, expected %0d samples got %0d",
+              channel,
+              expected_rising_durations[channel],
+              durations_q[i])
+            );
+          end
+        end
+      end
+    end
+  end
+  
 endtask
 
 endmodule

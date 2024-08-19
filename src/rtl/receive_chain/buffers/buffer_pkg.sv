@@ -7,7 +7,7 @@ package buffer_pkg;
 
   // main parameters
   localparam int TSTAMP_BUFFER_DEPTH = 16; // 512;
-  localparam int SAMPLE_BUFFER_DEPTH = 64; //2048;
+  localparam int SAMPLE_BUFFER_DEPTH = 256; //2048;
   localparam int TSTAMP_WIDTH = 64;
 
   // derived parameters

@@ -245,7 +245,6 @@ task automatic check_output (
   inout sim_util_pkg::debug debug,
   input int active_channels
 );
-  logic matched;
   buffer_pkg::tstamp_t readout_timestamps_q [rx_pkg::CHANNELS][$];
   rx_pkg::batch_t readout_samples_q [rx_pkg::CHANNELS][$];
   sim_util_pkg::queue #(.T(buffer_pkg::tstamp_t)) tstamp_q_util = new();
@@ -257,58 +256,8 @@ task automatic check_output (
     // remove extra samples from TX queues until we get something
     // that matches the DMA data since we aren't sure exactly when
     // the DUT started saving data
-    debug.display("pre-strip:", sim_util_pkg::DEBUG);
-    debug.display($sformatf(
-      "adc_timestamps_in_tx_i.data_q[%0d].size() = %0d | readout_timestamps_q[%0d].size() = %0d",
-      channel, adc_timestamps_in_tx_i.data_q[channel].size(),
-      channel, readout_timestamps_q[channel].size()),
-      sim_util_pkg::DEBUG
-    );
-    debug.display($sformatf(
-      "adc_timestamps_in_tx_i.data_q[%0d][$] = %x | readout_timestamps_q[%0d][$] = %x",
-      channel, adc_timestamps_in_tx_i.data_q[channel][$],
-      channel, readout_timestamps_q[channel][$]),
-      sim_util_pkg::DEBUG
-    );
-    debug.display($sformatf(
-      "adc_samples_in_tx_i.data_q[%0d].size() = %0d | readout_samples_q[%0d].size() = %0d",
-      channel, adc_samples_in_tx_i.data_q[channel].size(),
-      channel, readout_samples_q[channel].size()),
-      sim_util_pkg::DEBUG
-    );
-    debug.display($sformatf(
-      "adc_samples_in_tx_i.data_q[%0d][$] = %x | readout_samples_q[%0d][$] = %x",
-      channel, adc_samples_in_tx_i.data_q[channel][$],
-      channel, readout_samples_q[channel][$]),
-      sim_util_pkg::DEBUG
-    );
     tstamp_q_util.strip_to_matching(adc_timestamps_in_tx_i.data_q[channel], readout_timestamps_q[channel]);
     sample_q_util.strip_to_matching(adc_samples_in_tx_i.data_q[channel], readout_samples_q[channel]);
-    debug.display("post-strip:", sim_util_pkg::DEBUG);
-    debug.display($sformatf(
-      "adc_timestamps_in_tx_i.data_q[%0d].size() = %0d | readout_timestamps_q[%0d].size() = %0d",
-      channel, adc_timestamps_in_tx_i.data_q[channel].size(),
-      channel, readout_timestamps_q[channel].size()),
-      sim_util_pkg::DEBUG
-    );
-    debug.display($sformatf(
-      "adc_timestamps_in_tx_i.data_q[%0d][$] = %x | readout_timestamps_q[%0d][$] = %x",
-      channel, adc_timestamps_in_tx_i.data_q[channel][$],
-      channel, readout_timestamps_q[channel][$]),
-      sim_util_pkg::DEBUG
-    );
-    debug.display($sformatf(
-      "adc_samples_in_tx_i.data_q[%0d].size() = %0d | readout_samples_q[%0d].size() = %0d",
-      channel, adc_samples_in_tx_i.data_q[channel].size(),
-      channel, readout_samples_q[channel].size()),
-      sim_util_pkg::DEBUG
-    );
-    debug.display($sformatf(
-      "adc_samples_in_tx_i.data_q[%0d][$] = %x | readout_samples_q[%0d][$] = %x",
-      channel, adc_samples_in_tx_i.data_q[channel][$],
-      channel, readout_samples_q[channel][$]),
-      sim_util_pkg::DEBUG
-    );
     tstamp_q_util.compare(debug, readout_timestamps_q[channel], adc_timestamps_in_tx_i.data_q[channel]);
     sample_q_util.compare(debug, readout_samples_q[channel], adc_samples_in_tx_i.data_q[channel]);
   end
