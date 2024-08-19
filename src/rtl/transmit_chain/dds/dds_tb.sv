@@ -5,10 +5,7 @@
 
 module dds_tb #(
   parameter int PHASE_BITS = 24,
-  parameter int SAMPLE_WIDTH = 16,
-  parameter int QUANT_BITS = 8,
-  parameter int PARALLEL_SAMPLES = 4,
-  parameter int CHANNELS = 8
+  parameter int QUANT_BITS = 8
 ) (
   input logic ps_clk,
   Axis_If.Master ps_phase_inc,
@@ -18,26 +15,24 @@ module dds_tb #(
 
 localparam real PI = 3.14159265;
 
-typedef logic [CHANNELS-1:0][PHASE_BITS-1:0] multi_phase_t;
+typedef logic [tx_pkg::CHANNELS-1:0][PHASE_BITS-1:0] multi_phase_t;
 typedef logic signed [PHASE_BITS-1:0] phase_t;
-typedef logic signed [SAMPLE_WIDTH-1:0] sample_t;
-typedef logic [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0] burst_t;
-sim_util_pkg::math #(sample_t) math; // abs, max functions on sample_t
+sim_util_pkg::math #(tx_pkg::sample_t) math; // abs, max functions on sample_t
 sim_util_pkg::math #(phase_t) math_phase; // abs, max functions on phase_t
-sim_util_pkg::queue #(.T(sample_t), .T2(burst_t)) data_q_util = new;
+sim_util_pkg::queue #(.T(tx_pkg::sample_t), .T2(tx_pkg::burst_t)) data_q_util = new;
 
 multi_phase_t phase_inc;
 
 realtime_parallel_receiver #(
-  .DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH),
-  .CHANNELS(CHANNELS)
+  .DWIDTH(tx_pkg::DATA_WIDTH),
+  .CHANNELS(tx_pkg::CHANNELS)
 ) receiver_i (
   .clk(dac_clk),
   .intf(dac_data_out)
 );
 
 axis_driver #(
-  .DWIDTH(CHANNELS*PHASE_BITS)
+  .DWIDTH(tx_pkg::CHANNELS*PHASE_BITS)
 ) driver_i (
   .clk(ps_clk),
   .intf(ps_phase_inc)
@@ -57,10 +52,10 @@ endtask
 
 task automatic set_phases(
   inout sim_util_pkg::debug debug,
-  input int freqs [CHANNELS]
+  input int freqs [tx_pkg::CHANNELS]
 );
   bit success;
-  for (int channel = 0; channel < CHANNELS; channel++) begin
+  for (int channel = 0; channel < tx_pkg::CHANNELS; channel++) begin
     phase_inc[channel] = get_phase_inc_from_freq(freqs[channel]);
   end
   debug.display($sformatf("setting phase_inc = %x", phase_inc), sim_util_pkg::VERBOSE);
@@ -71,24 +66,24 @@ task automatic set_phases(
 endtask
 
 function phase_t estimate_phase(
-  input sample_t sample
+  input tx_pkg::sample_t sample
 );
-  return phase_t'($acos((real'(sample) + 0.5) / (2.0**(SAMPLE_WIDTH-1) - 0.5))/(2.0*PI)*(2.0**PHASE_BITS));
+  return phase_t'($acos((real'(sample) + 0.5) / (2.0**(tx_pkg::SAMPLE_WIDTH-1) - 0.5))/(2.0*PI)*(2.0**PHASE_BITS));
 endfunction
 
 task automatic check_output(
   inout sim_util_pkg::debug debug,
-  input sample_t max_error
+  input tx_pkg::sample_t max_error
 );
   phase_t phase, dphase;
   logic [PHASE_BITS*2-1:0] phase_corrected;
   int correction_bits;
-  sample_t expected;
-  sample_t received [$];
-  for (int channel = 0; channel < CHANNELS; channel++) begin
+  tx_pkg::sample_t expected;
+  tx_pkg::sample_t received [$];
+  for (int channel = 0; channel < tx_pkg::CHANNELS; channel++) begin
     debug.display($sformatf("checking output for channel %0d", channel), sim_util_pkg::DEBUG);
     // first convert receiver_i.data_q[channel] to samples
-    data_q_util.samples_from_batches(receiver_i.data_q[channel], received, SAMPLE_WIDTH, PARALLEL_SAMPLES);
+    data_q_util.samples_from_batches(receiver_i.data_q[channel], received, tx_pkg::SAMPLE_WIDTH, tx_pkg::PARALLEL_SAMPLES);
 
     // get close to a zero-crossing to get better estimate of the phase
     while ((received[$] > received[$-1]) || (math.abs(received[$]) > 16'h00ff))  begin
@@ -135,7 +130,7 @@ task automatic check_output(
     );
     // check data
     while (received.size() > 0) begin
-      expected = sample_t'($floor((2.0**(SAMPLE_WIDTH-1) - 0.5)*$cos(2.0*PI/real'(2.0**PHASE_BITS)*real'(phase))-0.5));
+      expected = tx_pkg::sample_t'($floor((2.0**(tx_pkg::SAMPLE_WIDTH-1) - 0.5)*$cos(2.0*PI/real'(2.0**PHASE_BITS)*real'(phase))-0.5));
       if (math.abs(received[$] - expected) > max_error) begin
         debug.error($sformatf(
           "mismatched sample value for phase = %x: expected %x got %x",
