@@ -19,7 +19,7 @@ typedef logic [tx_pkg::CHANNELS-1:0][PHASE_BITS-1:0] multi_phase_t;
 typedef logic signed [PHASE_BITS-1:0] phase_t;
 sim_util_pkg::math #(tx_pkg::sample_t) math; // abs, max functions on sample_t
 sim_util_pkg::math #(phase_t) math_phase; // abs, max functions on phase_t
-sim_util_pkg::queue #(.T(tx_pkg::sample_t), .T2(tx_pkg::burst_t)) data_q_util = new;
+sim_util_pkg::queue #(.T(tx_pkg::sample_t), .T2(tx_pkg::batch_t)) data_q_util = new;
 
 multi_phase_t phase_inc;
 
