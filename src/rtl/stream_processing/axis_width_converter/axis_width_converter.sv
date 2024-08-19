@@ -49,14 +49,14 @@ generate
       if (reset) begin
         data.valid <= 1'b0;
       end else begin
-        if (data.ready) begin
+        if (data_in.ready) begin
           data.valid <= data_in.valid;
           data.data <= data_in.data;
           data.last <= data_in.last;
         end
       end
     end
-    assign data_in.ready = data.ready;
+    assign data_in.ready = data.ready | (~data.valid);
   end
 
   if (DOWN > 1) begin
@@ -74,14 +74,14 @@ generate
       if (reset) begin
         data_out.valid <= 1'b0;
       end else begin
-        if (data_out.ready) begin
+        if (data.ready) begin
           data_out.valid <= data.valid;
           data_out.data <= data.data;
           data_out.last <= data.last;
         end
       end
     end
-    assign data.ready = data_out.ready;
+    assign data.ready = data_out.ready | (~data_out.valid);
   end
 endgenerate
 
@@ -109,6 +109,9 @@ assign read_final = counter == $clog2(DOWN)'(DOWN - 1);
 assign rollover = read_final & data_out.ready;
 
 // only accept new samples when we're done breaking up the current sample
+// bypass rollover criteria, allowing inputs as long as data_out.valid is low
+//  this allows module to be AXI-compliant; not requiring a ready signal
+//  before valid out is asserted
 assign data_in.ready = rollover | (~data_out.valid);
 
 assign data_out.data = data_reg[counter];
@@ -161,7 +164,9 @@ logic write_final;
 // the input burst size is not an integer multiple of UP)
 assign write_final = ((counter == $clog2(UP)'(UP - 1)) | data_in.last) && data_in.ok;
 
-assign data_in.ready = data_out.ready;
+// accept new data as long as output isn't valid,
+// or output is ready for new data
+assign data_in.ready = data_out.ready | (~data_out.valid);
 assign data_out.data = data_reg;
 
 always_ff @(posedge clk) begin
@@ -171,7 +176,7 @@ always_ff @(posedge clk) begin
     data_out.valid <= '0;
     data_out.last <= '0;
   end else begin
-    if ((!data_out.valid) || data_out.ready) begin
+    if (data_in.ready) begin
       data_out.valid <= write_final;
       data_out.last <= data_in.last;
     end

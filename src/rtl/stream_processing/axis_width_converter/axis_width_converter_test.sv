@@ -23,12 +23,13 @@ localparam int UP [N_UP] = {2,1};
 logic [N_DOWN-1:0][N_UP-1:0] start, done;
 
 initial begin
-  reset <= 1'b1;
   start <= '0;
-  repeat (100) @(posedge clk);
-  reset <= 1'b0;
   for (int down = 0; down < N_DOWN; down++) begin
     for (int up = 0; up < N_UP; up++) begin
+      // mid-test reset
+      reset <= 1'b1;
+      repeat (100) @(posedge clk);
+      reset <= 1'b0;
       start[down][up] <= 1'b1;
       @(posedge clk);
       start <= '0;
