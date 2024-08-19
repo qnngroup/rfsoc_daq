@@ -3,9 +3,7 @@
 
 
 `timescale 1ns/1ps
-module timetagging_sample_buffer_tb #(
-  parameter int AXI_MM_WIDTH
-) (
+module timetagging_sample_buffer_tb (
   // ADC clock, reset (512 MHz)
   input logic adc_clk, adc_reset,
   // Data
@@ -71,7 +69,7 @@ axis_driver #(
 
 // axis receiver for data
 axis_receiver #(
-  .DWIDTH(AXI_MM_WIDTH)
+  .DWIDTH(rx_pkg::AXI_MM_WIDTH)
 ) ps_readout_data_rx_i (
   .clk(ps_clk),
   .ready_rand(1'b1),
@@ -147,6 +145,11 @@ task automatic clear_write_depth();
   ps_samples_write_depth_rx_i.clear_queues();
   ps_timestamps_write_depth_rx_i.clear_queues();
 endtask
+
+int readout_data_rx_i_total_q_size;
+always_comb begin
+  readout_data_rx_i_total_q_size = ps_readout_data_rx_i.data_q.size();
+end
 
 task automatic clear_received_data();
   ps_readout_data_rx_i.clear_queues();
@@ -256,17 +259,21 @@ task automatic check_output (
     // remove extra samples from TX queues until we get something
     // that matches the DMA data since we aren't sure exactly when
     // the DUT started saving data
-    tstamp_q_util.strip_to_matching(adc_timestamps_in_tx_i.data_q[channel], readout_timestamps_q[channel]);
-    sample_q_util.strip_to_matching(adc_samples_in_tx_i.data_q[channel], readout_samples_q[channel]);
-    tstamp_q_util.compare(debug, readout_timestamps_q[channel], adc_timestamps_in_tx_i.data_q[channel]);
-    sample_q_util.compare(debug, readout_samples_q[channel], adc_samples_in_tx_i.data_q[channel]);
+    if (readout_timestamps_q[channel].size() > 0) begin
+      tstamp_q_util.strip_to_matching(debug, adc_timestamps_in_tx_i.data_q[channel], readout_timestamps_q[channel]);
+      tstamp_q_util.compare(debug, readout_timestamps_q[channel], adc_timestamps_in_tx_i.data_q[channel]);
+    end
+    if (readout_samples_q[channel].size() > 0) begin
+      sample_q_util.strip_to_matching(debug, adc_samples_in_tx_i.data_q[channel], readout_samples_q[channel]);
+      sample_q_util.compare(debug, readout_samples_q[channel], adc_samples_in_tx_i.data_q[channel]);
+    end
   end
 endtask
 
-localparam int TSTAMP_CHANNEL_SIZE = (buffer_pkg::TSTAMP_BUFFER_DEPTH*buffer_pkg::TSTAMP_WIDTH)/AXI_MM_WIDTH;
-localparam int SAMPLE_CHANNEL_SIZE = (buffer_pkg::SAMPLE_BUFFER_DEPTH*rx_pkg::DATA_WIDTH)/AXI_MM_WIDTH;
+localparam int TSTAMP_CHANNEL_SIZE = (buffer_pkg::TSTAMP_BUFFER_DEPTH*buffer_pkg::TSTAMP_WIDTH)/rx_pkg::AXI_MM_WIDTH;
+localparam int SAMPLE_CHANNEL_SIZE = (buffer_pkg::SAMPLE_BUFFER_DEPTH*rx_pkg::DATA_WIDTH)/rx_pkg::AXI_MM_WIDTH;
 localparam int READOUT_MIDPOINT = rx_pkg::CHANNELS*TSTAMP_CHANNEL_SIZE;
-typedef logic [AXI_MM_WIDTH-1:0] aximm_word_t;
+typedef logic [rx_pkg::AXI_MM_WIDTH-1:0] aximm_word_t;
 task automatic parse_readout_data (
   inout sim_util_pkg::debug debug,
   input int active_channels,
@@ -275,15 +282,15 @@ task automatic parse_readout_data (
 );
   sim_util_pkg::queue #(.T(buffer_pkg::tstamp_t), .T2(aximm_word_t)) tstamp_q_util = new();
   sim_util_pkg::queue #(.T(rx_pkg::batch_t), .T2(aximm_word_t)) sample_q_util = new();
-  logic [AXI_MM_WIDTH-1:0] wide_readout_samples_q [rx_pkg::CHANNELS][$];
-  logic [AXI_MM_WIDTH-1:0] wide_readout_timestamps_q [rx_pkg::CHANNELS][$];
+  logic [rx_pkg::AXI_MM_WIDTH-1:0] wide_readout_samples_q [rx_pkg::CHANNELS][$];
+  logic [rx_pkg::AXI_MM_WIDTH-1:0] wide_readout_timestamps_q [rx_pkg::CHANNELS][$];
   logic [rx_pkg::CHANNELS-1:0][$clog2(buffer_pkg::TSTAMP_BUFFER_DEPTH):0] timestamps_write_depths_temp;
   logic [rx_pkg::CHANNELS-1:0][$clog2(buffer_pkg::SAMPLE_BUFFER_DEPTH):0] samples_write_depths_temp;
   int destination_channel;
   int arrival_time;
   int total_timestamps;
   int total_samples;
-  // split readout data per channel into queues with element width AXI_MM_WIDTH
+  // split readout data per channel into queues with element width rx_pkg::AXI_MM_WIDTH
   for (int i = ps_readout_data_rx_i.data_q.size() - 1; i >= 0; i--) begin
     arrival_time = ps_readout_data_rx_i.data_q.size() - 1 - i;
     if (arrival_time < READOUT_MIDPOINT) begin
@@ -306,7 +313,7 @@ task automatic parse_readout_data (
       wide_readout_samples_q[destination_channel].push_front(ps_readout_data_rx_i.data_q[i]);
     end
   end
-  // convert AXI_MM_WIDTH-wide elements to respective type widths and trim invalid data
+  // convert rx_pkg::AXI_MM_WIDTH-wide elements to respective type widths and trim invalid data
   timestamps_write_depths_temp = ps_timestamps_write_depth_rx_i.data_q[0];
   samples_write_depths_temp = ps_samples_write_depth_rx_i.data_q[0];
   debug.display($sformatf(
@@ -320,13 +327,13 @@ task automatic parse_readout_data (
       wide_readout_timestamps_q[channel],
       readout_timestamps_q[channel],
       buffer_pkg::TSTAMP_WIDTH,
-      AXI_MM_WIDTH/buffer_pkg::TSTAMP_WIDTH
+      rx_pkg::AXI_MM_WIDTH/buffer_pkg::TSTAMP_WIDTH
     );
     sample_q_util.samples_from_batches(
       wide_readout_samples_q[channel],
       readout_samples_q[channel],
       rx_pkg::DATA_WIDTH,
-      AXI_MM_WIDTH/rx_pkg::DATA_WIDTH
+      rx_pkg::AXI_MM_WIDTH/rx_pkg::DATA_WIDTH
     );
     total_timestamps = 0;
     total_samples = 0;

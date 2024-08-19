@@ -5,7 +5,7 @@
 // - adc_samples_in: incoming sample data
 // - adc_timestamps_in: incoming timestamp data
 // - ps_readout_data:
-//    - AXI_MM_WIDTH-wide bus for DMA readout of buffers
+//    - rx_pkg::AXI_MM_WIDTH-wide bus for DMA readout of buffers
 //    - First outputs timestamps, then samples
 //    - Transfer size (and order) is fixed; use write_depth registers to
 //      determine number of valid samples
@@ -51,8 +51,7 @@
 
 `timescale 1ns/1ps
 module timetagging_sample_buffer #(
-  parameter int BUFFER_READ_LATENCY, // default 4 to permit UltraRAM inference
-  parameter int AXI_MM_WIDTH // 128 bits
+  parameter int BUFFER_READ_LATENCY // default 4 to permit UltraRAM inference
 ) (
   // ADC clock, reset (512 MHz)
   input logic adc_clk, adc_reset,
@@ -82,9 +81,9 @@ module timetagging_sample_buffer #(
 );
 
 Axis_If #(.DWIDTH(rx_pkg::DATA_WIDTH)) ps_samples ();
-Axis_If #(.DWIDTH(AXI_MM_WIDTH)) ps_samples_resized ();
+Axis_If #(.DWIDTH(rx_pkg::AXI_MM_WIDTH)) ps_samples_resized ();
 Axis_If #(.DWIDTH(buffer_pkg::TSTAMP_WIDTH)) ps_timestamps ();
-Axis_If #(.DWIDTH(AXI_MM_WIDTH)) ps_timestamps_resized ();
+Axis_If #(.DWIDTH(rx_pkg::AXI_MM_WIDTH)) ps_timestamps_resized ();
 
 // only allow start_stop when both buffers are not in HOLD_SAMPLES state
 logic [1:0] adc_capture_ready;
@@ -188,7 +187,7 @@ assign ps_samples_capture_sw_reset.last = ps_capture_sw_reset.last;
 assign ps_timestamps_capture_sw_reset.last = ps_capture_sw_reset.last;
 
 // readout_sw_reset
-assign ps_readout_sw_reset.ready = ps_samples_readout_sw_reset.ready & ps_timestamps_readout_sw_reset.ready;
+assign ps_readout_sw_reset.ready = ps_samples_readout_sw_reset.ready | ps_timestamps_readout_sw_reset.ready;
 assign ps_samples_readout_sw_reset.data = ps_readout_sw_reset.data;
 assign ps_timestamps_readout_sw_reset.data = ps_readout_sw_reset.data;
 assign ps_samples_readout_sw_reset.valid = ps_readout_sw_reset.valid;
@@ -270,7 +269,7 @@ end
 
 axis_width_converter #(
   .DWIDTH_IN(buffer_pkg::TSTAMP_WIDTH),
-  .DWIDTH_OUT(AXI_MM_WIDTH)
+  .DWIDTH_OUT(rx_pkg::AXI_MM_WIDTH)
 ) timestamp_width_converter_i (
   .clk(ps_clk),
   .reset(ps_reset | ps_readout_sw_reset_d),
@@ -280,7 +279,7 @@ axis_width_converter #(
 
 axis_width_converter #(
   .DWIDTH_IN(rx_pkg::DATA_WIDTH),
-  .DWIDTH_OUT(AXI_MM_WIDTH)
+  .DWIDTH_OUT(rx_pkg::AXI_MM_WIDTH)
 ) data_width_converter_i (
   .clk(ps_clk),
   .reset(ps_reset | ps_readout_sw_reset_d),
@@ -298,10 +297,14 @@ always_ff @(posedge ps_clk) begin
   if (ps_reset) begin
     ps_buffer_select <= TIMESTAMP;
   end else begin
-    unique case (ps_buffer_select)
-      TIMESTAMP: if (ps_timestamps_resized.last && ps_timestamps_resized.ok) ps_buffer_select <= DATA;
-      DATA: if (ps_samples_resized.last && ps_samples_resized.ok) ps_buffer_select <= TIMESTAMP;
-    endcase
+    if (ps_readout_sw_reset.ok) begin
+      ps_buffer_select <= TIMESTAMP;
+    end else begin
+      unique case (ps_buffer_select)
+        TIMESTAMP: if (ps_timestamps_resized.last && ps_timestamps_resized.ok) ps_buffer_select <= DATA;
+        DATA: if (ps_samples_resized.last && ps_samples_resized.ok) ps_buffer_select <= TIMESTAMP;
+      endcase
+    end
   end
 end
 

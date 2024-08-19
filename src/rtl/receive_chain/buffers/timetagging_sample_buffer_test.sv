@@ -5,7 +5,6 @@ module timetagging_sample_buffer_test ();
 sim_util_pkg::debug debug = new(sim_util_pkg::DEBUG);
 
 localparam int BUFFER_READ_LATENCY = 4;
-localparam int AXI_MM_WIDTH = 128;
 
 logic adc_reset;
 logic adc_clk = 0;
@@ -26,7 +25,7 @@ logic adc_digital_trigger;
 logic adc_discriminator_reset;
 
 // data out
-Axis_If #(.DWIDTH(AXI_MM_WIDTH)) ps_readout_data ();
+Axis_If #(.DWIDTH(rx_pkg::AXI_MM_WIDTH)) ps_readout_data ();
 // status
 Axis_If #(.DWIDTH(rx_pkg::CHANNELS*($clog2(buffer_pkg::SAMPLE_BUFFER_DEPTH)+1))) ps_samples_write_depth ();
 Axis_If #(.DWIDTH(rx_pkg::CHANNELS*($clog2(buffer_pkg::TSTAMP_BUFFER_DEPTH)+1))) ps_timestamps_write_depth ();
@@ -38,8 +37,7 @@ Axis_If #(.DWIDTH(1)) ps_readout_sw_reset ();
 Axis_If #(.DWIDTH(1)) ps_readout_start ();
 
 timetagging_sample_buffer #(
-  .BUFFER_READ_LATENCY(BUFFER_READ_LATENCY),
-  .AXI_MM_WIDTH(AXI_MM_WIDTH)
+  .BUFFER_READ_LATENCY(BUFFER_READ_LATENCY)
 ) dut_i (
   .adc_clk,
   .adc_reset,
@@ -59,9 +57,7 @@ timetagging_sample_buffer #(
   .ps_readout_start
 );
 
-timetagging_sample_buffer_tb #(
-  .AXI_MM_WIDTH(AXI_MM_WIDTH)
-) tb_i (
+timetagging_sample_buffer_tb tb_i (
   .adc_clk,
   .adc_reset,
   .adc_samples_in,
@@ -82,7 +78,8 @@ timetagging_sample_buffer_tb #(
 
 enum {CAPTURE_NO_RESET, CAPTURE_RESET} capture_reset;
 //enum {READOUT_NO_RESET, READOUT_TSTAMP_RESET, READOUT_SAMPLE_RESET} readout_reset;
-enum {READOUT_TSTAMP_RESET, READOUT_SAMPLE_RESET, READOUT_NO_RESET} readout_reset;
+//enum {READOUT_TSTAMP_RESET, READOUT_SAMPLE_RESET, READOUT_NO_RESET} readout_reset;
+enum {READOUT_SAMPLE_RESET, READOUT_TSTAMP_RESET, READOUT_NO_RESET} readout_reset;
 enum {SW_START, HW_START} start_mode;
 enum {MANUAL_STOP, FULL} stop_mode;
 enum {ONLY_TIMESTAMPS, ONLY_SAMPLES, BOTH} input_mode;
@@ -93,6 +90,7 @@ always_comb begin
 end
 
 int timeout;
+int readout_reset_delay;
 
 initial begin
   debug.display("### TESTING SEGMENTED BUFFER TOPLEVEL ###", sim_util_pkg::DEFAULT);
@@ -214,10 +212,13 @@ initial begin
                 tb_i.start_readout(debug);
                 // only do part of readout
                 if (readout_reset != READOUT_NO_RESET) begin
-                  repeat ((readout_reset == READOUT_TSTAMP_RESET) ?
-                      buffer_pkg::TSTAMP_BUFFER_DEPTH*buffer_pkg::TSTAMP_WIDTH/AXI_MM_WIDTH/2 :
-                      (buffer_pkg::TSTAMP_BUFFER_DEPTH*buffer_pkg::TSTAMP_WIDTH +
-                        buffer_pkg::SAMPLE_BUFFER_DEPTH*rx_pkg::DATA_WIDTH/2)/AXI_MM_WIDTH) begin
+                  if (readout_reset == READOUT_TSTAMP_RESET) begin
+                    readout_reset_delay = (buffer_pkg::TSTAMP_BUFFER_DEPTH*buffer_pkg::TSTAMP_WIDTH)/(rx_pkg::AXI_MM_WIDTH*2);
+                  end else begin
+                    readout_reset_delay = (buffer_pkg::TSTAMP_BUFFER_DEPTH*buffer_pkg::TSTAMP_WIDTH
+                                            + buffer_pkg::SAMPLE_BUFFER_DEPTH*rx_pkg::DATA_WIDTH/2)/rx_pkg::AXI_MM_WIDTH;
+                  end
+                  repeat (readout_reset_delay) begin
                     do @(posedge ps_clk); while (~ps_readout_data.ok);
                   end
                   if (readout_iter == 0) begin

@@ -72,7 +72,7 @@ generate
   end else begin
     always_ff @(posedge clk) begin
       if (reset) begin
-        data_out.valid <= data.valid;
+        data_out.valid <= 1'b0;
       end else begin
         if (data_out.ready) begin
           data_out.valid <= data.valid;

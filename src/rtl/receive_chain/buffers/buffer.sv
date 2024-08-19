@@ -424,7 +424,7 @@ enum {DMA_IDLE, DMA_READY, DMA_ACTIVE} ps_readout_state;
 
 // software reset
 // only allow reset during DMA transfer
-assign ps_readout_sw_reset.ready = ps_readout_state == DMA_ACTIVE;
+assign ps_readout_sw_reset.ready = 1'b1;//ps_readout_state == DMA_ACTIVE;
 logic ps_readout_reset;
 assign ps_readout_reset = (ps_readout_sw_reset.data == 1) & ps_readout_sw_reset.ok;
 
@@ -569,19 +569,15 @@ always_ff @(posedge ps_clk) begin
   if (ps_reset) begin
     ps_readout_state <= DMA_IDLE;
   end else begin
-    unique case (ps_readout_state)
-      DMA_IDLE: if (ps_capture_done_pls) ps_readout_state <= DMA_READY;
-      DMA_READY: if (ps_readout_start_pls) ps_readout_state <= DMA_ACTIVE;
-      DMA_ACTIVE: begin
-        if (ps_readout_reset) begin
-          ps_readout_state <= DMA_READY;
-        end else begin
-          if (ps_readout_done_pls) begin
-            ps_readout_state <= DMA_IDLE;
-          end
-        end
-      end
-    endcase
+    if (ps_readout_reset) begin
+      ps_readout_state <= DMA_READY;
+    end else begin
+      unique case (ps_readout_state)
+        DMA_IDLE: if (ps_capture_done_pls) ps_readout_state <= DMA_READY;
+        DMA_READY: if (ps_readout_start_pls) ps_readout_state <= DMA_ACTIVE;
+        DMA_ACTIVE: if (ps_readout_done_pls) ps_readout_state <= DMA_IDLE;
+      endcase
+    end
   end
 end
 
