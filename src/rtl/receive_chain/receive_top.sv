@@ -5,8 +5,7 @@
 `timescale 1ns/1ps
 module receive_top #(
   parameter int DISCRIMINATOR_MAX_DELAY, // 64 -> 128 ns @ 512 MHz
-  parameter int BUFFER_READ_LATENCY, // 4 -> permit UltraRAM inference
-  parameter int AXI_MM_WIDTH // 128
+  parameter int BUFFER_READ_LATENCY // 4 -> permit UltraRAM inference
 ) (
   /////////////////////////////////
   // ADC clock, reset (512 MHz)
@@ -149,8 +148,7 @@ sample_discriminator #(
 
 // timetagging buffer
 timetagging_sample_buffer #(
-  .BUFFER_READ_LATENCY(BUFFER_READ_LATENCY),
-  .AXI_MM_WIDTH(AXI_MM_WIDTH)
+  .BUFFER_READ_LATENCY(BUFFER_READ_LATENCY)
 ) buffer_i (
   .adc_clk,
   .adc_reset,

@@ -4,8 +4,7 @@
 `timescale 1ns/1ps
 module receive_top_tb #(
   parameter int DISCRIMINATOR_MAX_DELAY, // 64 -> 128 ns @ 512 MHz
-  parameter int BUFFER_READ_LATENCY, // 4 -> permit UltraRAM inference
-  parameter int AXI_MM_WIDTH // 128
+  parameter int BUFFER_READ_LATENCY // 4 -> permit UltraRAM inference
 ) (
   input logic adc_clk, adc_reset,
   Realtime_Parallel_If.Master adc_data_in,
@@ -58,9 +57,7 @@ triangle #(
 // used for writing configuration regs and readout
 Realtime_Parallel_If #(.DWIDTH(rx_pkg::DATA_WIDTH), .CHANNELS(rx_pkg::CHANNELS)) adc_buff_sample_dummy ();
 Realtime_Parallel_If #(.DWIDTH(buffer_pkg::TSTAMP_WIDTH), .CHANNELS(rx_pkg::CHANNELS)) adc_buff_tstamp_dummy ();
-timetagging_sample_buffer_tb #(
-  .AXI_MM_WIDTH(AXI_MM_WIDTH)
-) buffer_tb_i (
+timetagging_sample_buffer_tb buffer_tb_i (
   .adc_clk,
   .adc_reset,
   .adc_samples_in(adc_buff_sample_dummy),

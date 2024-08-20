@@ -41,15 +41,15 @@ Axis_If #(.DWIDTH((SCALE_WIDTH+OFFSET_WIDTH)*tx_pkg::CHANNELS)) ps_scale_offset 
 // DDS interface
 Axis_If #(.DWIDTH(DDS_PHASE_BITS*tx_pkg::CHANNELS)) ps_dds_phase_inc ();
 Axis_If #(.DWIDTH(TRI_PHASE_BITS*tx_pkg::CHANNELS)) ps_tri_phase_inc ();
-// Trigger manager interface
-Axis_If #(.DWIDTH(1+2*tx_pkg::CHANNELS)) ps_trigger_config ();
 // Channel mux interface
 Axis_If #(.DWIDTH($clog2(3*tx_pkg::CHANNELS)*tx_pkg::CHANNELS)) ps_channel_mux_config ();
 // Outputs
 Realtime_Parallel_If #(.DWIDTH(tx_pkg::DATA_WIDTH), .CHANNELS(tx_pkg::CHANNELS)) dac_data_out ();
-logic dac_trigger_out;
+logic [tx_pkg::CHANNELS-1:0] dac_triggers_out;
 
 // pull out awg_trigger/tri_trigger output and match latency of dac_prescaler/mux
+// this way the awg_tb and tri_tb can check the triggers are generated
+// correctly
 logic [5:0][tx_pkg::CHANNELS-1:0] dac_awg_triggers_pipe;
 logic [5:0][tx_pkg::CHANNELS-1:0] dac_tri_triggers_pipe;
 logic [tx_pkg::CHANNELS-1:0] dac_awg_trigger;
@@ -57,8 +57,8 @@ logic [tx_pkg::CHANNELS-1:0] dac_tri_trigger;
 assign dac_awg_trigger = dac_awg_triggers_pipe[5];
 assign dac_tri_trigger = dac_tri_triggers_pipe[5];
 always @(posedge dac_clk) begin
-  dac_awg_triggers_pipe <= {dac_awg_triggers_pipe[4:0], dut_i.dac_awg_triggers};
-  dac_tri_triggers_pipe <= {dac_tri_triggers_pipe[4:0], dut_i.dac_tri_triggers};
+  dac_awg_triggers_pipe <= {dac_awg_triggers_pipe[4:0], dac_triggers_out};
+  dac_tri_triggers_pipe <= {dac_tri_triggers_pipe[4:0], dut_i.tri_i.dac_trigger};
 end
 
 // AWG testing
@@ -136,12 +136,11 @@ transmit_top #(
   .ps_scale_offset,
   .ps_dds_phase_inc,
   .ps_tri_phase_inc,
-  .ps_trigger_config,
   .ps_channel_mux_config,
   .dac_clk,
   .dac_reset,
   .dac_data_out,
-  .dac_trigger_out
+  .dac_triggers_out
 );
 
 initial begin
@@ -174,18 +173,12 @@ initial begin
     ps_scale_offset.data[channel*(SCALE_WIDTH+OFFSET_WIDTH)+:SCALE_WIDTH+OFFSET_WIDTH] <= {1'b1, {(SCALE_WIDTH + OFFSET_WIDTH - SCALE_INT_BITS){1'b0}}};
   end
 
-  // configure the trigger manager to output a trigger from whenever awg_trigger_out[0] fires
-  ps_trigger_config.data <= {1'b0, {(tx_pkg::CHANNELS-1){1'b0}}, 1'b1};
-
   ps_channel_mux_config.valid <= 1'b1;
   do @(posedge ps_clk); while (~ps_channel_mux_config.ok);
   ps_channel_mux_config.valid <= 1'b0;
   ps_scale_offset.valid <= 1'b1;
   do @(posedge ps_clk); while (~ps_scale_offset.ok);
   ps_scale_offset.valid <= 1'b0;
-  ps_trigger_config.valid <= 1'b1;
-  do @(posedge ps_clk); while (~ps_trigger_config.ok);
-  ps_trigger_config.valid <= 1'b0;
 
   // configure the AWG
   // set frame depth, burst length, and output trigger configuration
@@ -261,20 +254,16 @@ initial begin
 
   tri_tb_i.set_phases(debug, tri_phase_increment);
   
-  ps_trigger_config.data <= {1'b1, {tx_pkg::CHANNELS{1'b0}}};
-  
   ps_channel_mux_config.valid <= 1'b1;
   do @(posedge ps_clk); while (~ps_channel_mux_config.ok);
   ps_channel_mux_config.valid <= 1'b0;
-  ps_trigger_config.valid <= 1'b1;
-  do @(posedge ps_clk); while (~ps_trigger_config.ok);
-  ps_trigger_config.valid <= 1'b0;
 
   debug.display("finished configuring triangle wave generator", sim_util_pkg::VERBOSE);
-  while (dac_trigger_out !== 1'b1) @(posedge dac_clk);
+  // wait for a trigger
+  while (dac_tri_trigger[0] !== 1'b1) @(posedge dac_clk);
   tri_tb_i.clear_queues();
   repeat (20) begin
-    do @(posedge dac_clk); while (dac_trigger_out !== 1'b1);
+    do @(posedge dac_clk); while (dac_tri_trigger[0] !== 1'b1);
   end
   tri_tb_i.check_results(debug, tri_phase_increment);
   debug.display("finished checking triangle wave generator", sim_util_pkg::VERBOSE);

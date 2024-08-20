@@ -46,7 +46,6 @@ localparam PS_CLK_RATE_HZ = 100_000_000;
 always #(0.5s/PS_CLK_RATE_HZ) ps_clk = ~ps_clk;
 
 // DUT parameters
-localparam int AXI_MM_WIDTH = 128;
 localparam int DISCRIMINATOR_MAX_DELAY = 64;
 localparam int BUFFER_READ_LATENCY = 4;
 
@@ -54,7 +53,7 @@ localparam int TIMER_BITS = $clog2(DISCRIMINATOR_MAX_DELAY);
 
 // DUT data interfaces
 Realtime_Parallel_If #(.DWIDTH(rx_pkg::DATA_WIDTH), .CHANNELS(rx_pkg::CHANNELS)) adc_data_in ();
-Axis_If #(.DWIDTH(AXI_MM_WIDTH)) ps_readout_data ();
+Axis_If #(.DWIDTH(rx_pkg::AXI_MM_WIDTH)) ps_readout_data ();
 // buffer status interfaces
 Axis_If #(.DWIDTH(rx_pkg::CHANNELS*($clog2(buffer_pkg::SAMPLE_BUFFER_DEPTH)+1))) ps_samples_write_depth ();
 Axis_If #(.DWIDTH(rx_pkg::CHANNELS*($clog2(buffer_pkg::TSTAMP_BUFFER_DEPTH)+1))) ps_timestamps_write_depth ();
@@ -81,8 +80,7 @@ logic [tx_pkg::CHANNELS-1:0] adc_digital_triggers;
 
 receive_top_tb #(
   .DISCRIMINATOR_MAX_DELAY(DISCRIMINATOR_MAX_DELAY),
-  .BUFFER_READ_LATENCY(BUFFER_READ_LATENCY),
-  .AXI_MM_WIDTH(AXI_MM_WIDTH)
+  .BUFFER_READ_LATENCY(BUFFER_READ_LATENCY)
 ) tb_i (
   .adc_clk,
   .adc_reset,
@@ -108,8 +106,7 @@ receive_top_tb #(
 
 receive_top #(
   .DISCRIMINATOR_MAX_DELAY(DISCRIMINATOR_MAX_DELAY),
-  .BUFFER_READ_LATENCY(BUFFER_READ_LATENCY),
-  .AXI_MM_WIDTH(AXI_MM_WIDTH)
+  .BUFFER_READ_LATENCY(BUFFER_READ_LATENCY)
 ) dut_i (
   .adc_clk,
   .adc_reset,

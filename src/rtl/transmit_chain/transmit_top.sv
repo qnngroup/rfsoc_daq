@@ -36,9 +36,7 @@ module transmit_top #(
   // Triangle wave configuration
   Axis_If.Slave   ps_tri_phase_inc, // TRI_PHASE_BITS*tx_pkg::CHANNELS
 
-  // Trigger manager configuration
-  Axis_If.Slave   ps_trigger_config, // 1 + 2*tx_pkg::CHANNELS
-
+  // Select which signal generator is in use
   Axis_If.Slave   ps_channel_mux_config, // $clog2(3*tx_pkg::CHANNELS)*tx_pkg::CHANNELS
 
   // RFDAC clock domain: 384 MHz
@@ -47,23 +45,7 @@ module transmit_top #(
   Realtime_Parallel_If.Master dac_data_out,
 
   // Trigger output
-  output logic dac_trigger_out
-);
-////////////////////////////////////////////////////////////////////////////////
-// CDC for configuration registers for DAC prescaler and DDS
-////////////////////////////////////////////////////////////////////////////////
-Axis_If #(.DWIDTH(1+2*tx_pkg::CHANNELS)) dac_trigger_config ();
-
-// synchronize trigger configuration to RFDAC clock domain
-axis_config_reg_cdc #(
-  .DWIDTH(1+2*tx_pkg::CHANNELS)
-) ps_to_dac_trigger_config_cdc_i (
-  .src_clk(ps_clk),
-  .src_reset(ps_reset),
-  .src(ps_trigger_config),
-  .dest_clk(dac_clk),
-  .dest_reset(dac_reset),
-  .dest(dac_trigger_config)
+  output logic [tx_pkg::CHANNELS-1:0] dac_triggers_out
 );
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -107,7 +89,6 @@ dds #(
 );
 
 // triangle wave
-logic [tx_pkg::CHANNELS-1:0] dac_tri_triggers;
 triangle #(
   .PHASE_BITS(TRI_PHASE_BITS),
   .CHANNELS(tx_pkg::CHANNELS),
@@ -120,22 +101,13 @@ triangle #(
   .dac_clk,
   .dac_reset,
   .dac_data_out(dac_tri_data_out),
-  .dac_trigger(dac_tri_triggers)
+  .dac_trigger() // don't use triangle triggers for now
 );
 
-// combine awg/tri triggers to send a single value to the ADC buffer
-logic [2*tx_pkg::CHANNELS-1:0] dac_triggers_combined;
-assign dac_triggers_combined = {dac_tri_triggers, dac_awg_triggers};
-trigger_manager #(
-  .CHANNELS(2*tx_pkg::CHANNELS)
-) trigger_manager_i (
-  .clk(dac_clk),
-  .reset(dac_reset),
-  .triggers_in(dac_triggers_combined),
-  .trigger_config(dac_trigger_config),
-  .trigger_out(dac_trigger_out)
-);
+// just send awg trigger out
+assign dac_triggers_out = dac_awg_triggers;
 
+// mux awg/dds/tri data
 assign dac_mux_data_in.data[tx_pkg::CHANNELS-1:0] = dac_awg_data_out.data;
 assign dac_mux_data_in.valid[tx_pkg::CHANNELS-1:0] = dac_awg_data_out.valid;
 assign dac_mux_data_in.data[2*tx_pkg::CHANNELS-1:tx_pkg::CHANNELS] = dac_dds_data_out.data;
