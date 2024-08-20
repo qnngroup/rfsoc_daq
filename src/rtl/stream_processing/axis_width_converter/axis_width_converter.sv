@@ -19,13 +19,15 @@ module axis_width_converter #(
 // merge both buffer outputs into a word that is AXI_MM_WIDTH bits
 // first step down/up the width of the outputs
 function automatic int GCD(input int A, input int B);
-  int T;
-  while (B != 0) begin
-    T = B;
-    B = A % B;
-    A = T;
+  int t, a, b;
+  a = A;
+  b = B;
+  while (b != 0) begin
+    t = b;
+    b = a % b;
+    a = t;
   end
-  return A;
+  return a;
 endfunction
 
 localparam int IN_OUT_GCD = GCD(DWIDTH_IN, DWIDTH_OUT);

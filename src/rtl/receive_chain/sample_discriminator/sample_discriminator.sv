@@ -344,7 +344,7 @@ generate
     ) adc_start_pulse_delay_i (
       .clk(adc_clk),
       .reset(adc_reset | adc_reset_state),
-      .delay(adc_total_delay[channel] - 1),
+      .delay($clog2(2*MAX_DELAY_CYCLES)'(adc_total_delay[channel] - 1)),
       .in_pls(adc_fsm_start[channel]),
       .out_pls(adc_fsm_start_d[channel])
     );

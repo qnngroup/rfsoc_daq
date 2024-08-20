@@ -1,0 +1,535 @@
+
+****** Vivado v2022.2 (64-bit)
+  **** SW Build 3671981 on Fri Oct 14 04:59:54 MDT 2022
+  **** IP Build 3669848 on Fri Oct 14 08:30:02 MDT 2022
+    ** Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+
+source /home/reedf/Documents/Xilinx/rfsoc_daq/script/run_synth.tcl -notrace
+Scanning sources...
+Finished scanning sources
+INFO: [IP_Flow 19-234] Refreshing IP repositories
+INFO: [IP_Flow 19-1704] No user IP repositories specified
+INFO: [IP_Flow 19-2313] Loaded Vivado IP repository '/opt/Xilinx/Vivado/2022.2/data/ip'.
+open_project: Time (s): cpu = 00:00:10 ; elapsed = 00:00:10 . Memory (MB): peak = 1383.590 ; gain = 122.836 ; free physical = 17926 ; free virtual = 40482
+INFO: Ultrascale+ RF Data Converter instance: Clock port 'adc0_clk' frequency is set to 256000000
+INFO: Ultrascale+ RF Data Converter instance: Clock port 'adc1_clk' frequency is set to 32000000
+INFO: Ultrascale+ RF Data Converter instance: Clock port 'adc2_clk' frequency is set to 32000000
+INFO: Ultrascale+ RF Data Converter instance: Clock port 'adc3_clk' frequency is set to 32000000
+INFO: Ultrascale+ RF Data Converter instance: Clock port 'dac0_clk' frequency is set to 384000000
+INFO: Ultrascale+ RF Data Converter instance: Clock port 'dac1_clk' frequency is set to 48000000
+WARNING: [BD 41-1282] Ignoring parameter HAS_BURST
+WARNING: [BD 41-1281] Parameter HAS_BURST is not defined on /dma/awg_dma/M_AXIS_MM2S. Setting parameter on /dma/awg_dma/M_AXIS_MM2S failed
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_HIGH from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_LOW from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_QSPI from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_HIGH from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_LOW from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_QSPI from address space /dma/awg_dma/Data_MM2S.
+WARNING: [BD 41-1629] Slave segment </zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_HIGH> is excluded from all addressing paths.
+WARNING: [BD 41-1629] Slave segment </zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_LOW> is excluded from all addressing paths.
+WARNING: [BD 41-1629] Slave segment </zynq_ultra_ps_e_0/SAXIGP4/HP2_QSPI> is excluded from all addressing paths.
+WARNING: [BD 41-1629] Slave segment </zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_HIGH> is excluded from all addressing paths.
+WARNING: [BD 41-1629] Slave segment </zynq_ultra_ps_e_0/SAXIGP2/HP0_QSPI> is excluded from all addressing paths.
+WARNING: [BD 41-1629] Slave segment </zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_LOW> is excluded from all addressing paths.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_HIGH from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_LOW from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_QSPI from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_HIGH from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_LOW from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_QSPI from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_HIGH from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_LOW from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_QSPI from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_HIGH from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_LOW from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_QSPI from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_HIGH from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_LOW from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_QSPI from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_HIGH from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_LOW from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_QSPI from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_HIGH from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_LOW from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_QSPI from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_HIGH from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_LOW from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_QSPI from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_HIGH from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_LOW from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_QSPI from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_HIGH from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_LOW from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_QSPI from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_HIGH from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_LOW from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_QSPI from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_HIGH from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_LOW from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_QSPI from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_HIGH from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_LOW from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_QSPI from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_HIGH from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_LOW from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_QSPI from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_HIGH from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_LOW from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_QSPI from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_HIGH from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_LOW from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_QSPI from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_HIGH from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_LOW from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_QSPI from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_HIGH from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_LOW from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_QSPI from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_HIGH from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_LOW from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_QSPI from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_HIGH from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_LOW from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_QSPI from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_HIGH from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_LOW from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_QSPI from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_HIGH from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_LOW from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_QSPI from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_HIGH from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_LOW from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_QSPI from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_HIGH from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_LOW from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_QSPI from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_HIGH from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_LOW from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_QSPI from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_HIGH from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_LOW from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_QSPI from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_HIGH from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_LOW from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_QSPI from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_HIGH from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_LOW from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_QSPI from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_HIGH from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_LOW from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_QSPI from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_HIGH from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_LOW from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_QSPI from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_HIGH from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_LOW from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_QSPI from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_HIGH from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_LOW from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_QSPI from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_HIGH from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_LOW from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_QSPI from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_HIGH from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_LOW from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_QSPI from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_HIGH from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_LOW from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_QSPI from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_HIGH from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_LOW from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_QSPI from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_HIGH from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_LOW from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_QSPI from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_HIGH from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_LOW from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_QSPI from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_HIGH from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_LOW from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_QSPI from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_HIGH from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_LOW from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_QSPI from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_HIGH from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_LOW from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_QSPI from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_HIGH from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_LOW from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_QSPI from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_HIGH from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_LOW from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_QSPI from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_HIGH from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_LOW from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_QSPI from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_HIGH from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_LOW from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_QSPI from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_HIGH from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_LOW from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_QSPI from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_HIGH from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_LOW from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_QSPI from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_HIGH from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_LOW from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_QSPI from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_HIGH from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_LOW from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_QSPI from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_HIGH from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_LOW from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_QSPI from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_HIGH from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_LOW from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_QSPI from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_HIGH from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_LOW from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_QSPI from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_HIGH from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_LOW from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_QSPI from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_HIGH from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_LOW from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_QSPI from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_HIGH from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_LOW from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_QSPI from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_HIGH from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_LOW from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_QSPI from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_HIGH from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_LOW from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_QSPI from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_HIGH from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_LOW from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_QSPI from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_HIGH from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_LOW from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_QSPI from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_HIGH from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_LOW from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_QSPI from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_HIGH from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_LOW from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_QSPI from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_HIGH from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_LOW from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_QSPI from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_HIGH from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_LOW from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_QSPI from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_HIGH from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_LOW from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_QSPI from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_HIGH from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_LOW from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_QSPI from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_HIGH from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_LOW from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_QSPI from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_HIGH from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_LOW from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_QSPI from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_HIGH from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_LOW from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_QSPI from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_HIGH from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_LOW from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_QSPI from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_HIGH from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_LOW from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_QSPI from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_HIGH from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_LOW from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_QSPI from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_HIGH from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_LOW from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_QSPI from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_HIGH from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_LOW from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_QSPI from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_HIGH from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_LOW from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_QSPI from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_HIGH from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_LOW from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_QSPI from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_HIGH from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_LOW from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_QSPI from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_HIGH from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_LOW from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_QSPI from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_HIGH from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_LOW from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_QSPI from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_HIGH from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_LOW from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_QSPI from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_HIGH from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_LOW from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_QSPI from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_HIGH from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_LOW from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_QSPI from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_HIGH from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_LOW from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_QSPI from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_HIGH from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_LOW from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_QSPI from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_HIGH from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_LOW from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_QSPI from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_HIGH from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_LOW from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_QSPI from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_HIGH from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_LOW from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_QSPI from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_HIGH from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_LOW from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_QSPI from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_HIGH from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_LOW from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_QSPI from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_HIGH from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_LOW from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_QSPI from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_HIGH from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_LOW from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_QSPI from address space /dma/awg_dma/Data_MM2S.
+INFO: [xilinx.com:ip:smartconnect:1.0-1] top_axi_smc_0: SmartConnect top_axi_smc_0 is in High-performance Mode.
+INFO: [xilinx.com:ip:smartconnect:1.0-1] top_axi_smc_1_0: SmartConnect top_axi_smc_1_0 is in High-performance Mode.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_HIGH from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_LOW from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_QSPI from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_HIGH from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_LOW from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_QSPI from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_HIGH from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_LOW from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_QSPI from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_HIGH from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_LOW from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_QSPI from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_HIGH from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_LOW from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_QSPI from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_HIGH from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_LOW from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_QSPI from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_HIGH from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_LOW from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_QSPI from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_HIGH from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_LOW from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_QSPI from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_HIGH from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_LOW from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_QSPI from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_HIGH from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_LOW from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_QSPI from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_HIGH from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_LOW from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_QSPI from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_HIGH from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_LOW from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_QSPI from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_HIGH from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_DDR_LOW from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP2/HP0_QSPI from address space /dma/adc_dma/Data_S2MM.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_HIGH from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_DDR_LOW from address space /dma/awg_dma/Data_MM2S.
+Excluding slave segment /zynq_ultra_ps_e_0/SAXIGP4/HP2_QSPI from address space /dma/awg_dma/Data_MM2S.
+INFO: [xilinx.com:ip:clk_wiz:6.0-1] /rfdc_axis_clocking_and_reset/adc_clk_512 clk_wiz propagate
+WARNING: [BD 41-237] Bus Interface property AWUSER_WIDTH does not match between /dma/axi_lite_interconnect/s00_couplers/auto_ds/S_AXI(0) and /zynq_ultra_ps_e_0/M_AXI_HPM0_FPD(16)
+WARNING: [BD 41-237] Bus Interface property ARUSER_WIDTH does not match between /dma/axi_lite_interconnect/s00_couplers/auto_ds/S_AXI(0) and /zynq_ultra_ps_e_0/M_AXI_HPM0_FPD(16)
+WARNING: [BD 41-237] Bus Interface property AWUSER_WIDTH does not match between /daq/axi_interconnect/s00_couplers/auto_ds/S_AXI(0) and /zynq_ultra_ps_e_0/M_AXI_HPM1_FPD(16)
+WARNING: [BD 41-237] Bus Interface property ARUSER_WIDTH does not match between /daq/axi_interconnect/s00_couplers/auto_ds/S_AXI(0) and /zynq_ultra_ps_e_0/M_AXI_HPM1_FPD(16)
+WARNING: [BD 41-237] Bus Interface property AWUSER_WIDTH does not match between /zynq_ultra_ps_e_0/S_AXI_HP0_FPD(1) and /dma/axi_smc/M00_AXI(0)
+WARNING: [BD 41-237] Bus Interface property ARUSER_WIDTH does not match between /zynq_ultra_ps_e_0/S_AXI_HP0_FPD(1) and /dma/axi_smc/M00_AXI(0)
+WARNING: [BD 41-237] Bus Interface property AWUSER_WIDTH does not match between /zynq_ultra_ps_e_0/S_AXI_HP2_FPD(1) and /dma/axi_smc_1/M00_AXI(0)
+WARNING: [BD 41-237] Bus Interface property ARUSER_WIDTH does not match between /zynq_ultra_ps_e_0/S_AXI_HP2_FPD(1) and /dma/axi_smc_1/M00_AXI(0)
+Wrote  : </home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.srcs/sources_1/bd/top/top.bd> 
+Verilog Output written to : /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/synth/top.v
+Verilog Output written to : /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/sim/top.v
+Verilog Output written to : /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/hdl/top_wrapper.v
+INFO: [BD 41-1029] Generation completed for the IP Integrator block daq/daq_axis_0 .
+Exporting to file /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_axi_smc_0/bd_0/hw_handoff/top_axi_smc_0.hwh
+Generated Hardware Definition File /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_axi_smc_0/bd_0/synth/top_axi_smc_0.hwdef
+INFO: [BD 41-1029] Generation completed for the IP Integrator block dma/axi_smc .
+Exporting to file /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_axi_smc_1_0/bd_0/hw_handoff/top_axi_smc_1_0.hwh
+Generated Hardware Definition File /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_axi_smc_1_0/bd_0/synth/top_axi_smc_1_0.hwdef
+INFO: [BD 41-1029] Generation completed for the IP Integrator block dma/axi_smc_1 .
+INFO: [BD 41-1029] Generation completed for the IP Integrator block daq/axi_interconnect/tier2_xbar_0 .
+INFO: [BD 41-1029] Generation completed for the IP Integrator block daq/axi_interconnect/tier2_xbar_1 .
+INFO: [BD 41-1029] Generation completed for the IP Integrator block daq/axi_interconnect/tier2_xbar_2 .
+INFO: [BD 41-1029] Generation completed for the IP Integrator block daq/axi_interconnect/tier2_xbar_3 .
+WARNING: [IP_Flow 19-4994] Overwriting existing constraint file '/home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_auto_ds_0/top_auto_ds_0_ooc.xdc'
+INFO: [IP_Flow 19-5611] Unable to find an associated reset port for the interface 'S_AXI'. A default connection has been created.
+INFO: [IP_Flow 19-5611] Unable to find an associated reset port for the interface 'M_AXI'. A default connection has been created.
+INFO: [BD 41-1029] Generation completed for the IP Integrator block daq/axi_interconnect/s00_couplers/auto_ds .
+WARNING: [IP_Flow 19-4994] Overwriting existing constraint file '/home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_auto_pc_0/top_auto_pc_0_ooc.xdc'
+INFO: [BD 41-1029] Generation completed for the IP Integrator block daq/axi_interconnect/s00_couplers/auto_pc .
+WARNING: [IP_Flow 19-4994] Overwriting existing constraint file '/home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_auto_ds_1/top_auto_ds_1_ooc.xdc'
+INFO: [IP_Flow 19-5611] Unable to find an associated reset port for the interface 'S_AXI'. A default connection has been created.
+INFO: [IP_Flow 19-5611] Unable to find an associated reset port for the interface 'M_AXI'. A default connection has been created.
+INFO: [BD 41-1029] Generation completed for the IP Integrator block dma/axi_lite_interconnect/s00_couplers/auto_ds .
+WARNING: [IP_Flow 19-4994] Overwriting existing constraint file '/home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_auto_pc_1/top_auto_pc_1_ooc.xdc'
+INFO: [BD 41-1029] Generation completed for the IP Integrator block dma/axi_lite_interconnect/s00_couplers/auto_pc .
+Exporting to file /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/hw_handoff/top.hwh
+Generated Hardware Definition File /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/synth/top.hwdef
+INFO: [IP_Flow 19-6930] IPCACHE: runCacheChecks() number of threads = 8
+INFO: [IP_Flow 19-6921] IPCACHE: Adding cache check func to thread queue for IP top_auto_ds_0
+INFO: [IP_Flow 19-6921] IPCACHE: Adding cache check func to thread queue for IP top_auto_ds_1
+INFO: [IP_Flow 19-6921] IPCACHE: Adding cache check func to thread queue for IP top_auto_pc_0
+INFO: [IP_Flow 19-6921] IPCACHE: Adding cache check func to thread queue for IP top_auto_pc_1
+INFO: [IP_Flow 19-6921] IPCACHE: Adding cache check func to thread queue for IP top_axi_smc_0
+INFO: [IP_Flow 19-6921] IPCACHE: Adding cache check func to thread queue for IP top_axi_smc_1_0
+INFO: [IP_Flow 19-6921] IPCACHE: Adding cache check func to thread queue for IP top_daq_axis_0_0
+INFO: [IP_Flow 19-6921] IPCACHE: Adding cache check func to thread queue for IP top_tier2_xbar_0_0
+INFO: [IP_Flow 19-6921] IPCACHE: Adding cache check func to thread queue for IP top_tier2_xbar_1_0
+INFO: [IP_Flow 19-6921] IPCACHE: Adding cache check func to thread queue for IP top_tier2_xbar_2_0
+INFO: [IP_Flow 19-6921] IPCACHE: Adding cache check func to thread queue for IP top_tier2_xbar_3_0
+INFO: [IP_Flow 19-8020] IPCACHE: runCacheChecks() calling threadPool finishWork()
+INFO: [IP_Flow 19-6924] IPCACHE: Running cache check for IP inst: top_auto_ds_0
+INFO: [IP_Flow 19-6922] IPCACHE: Exporting cached entry 95511e19f1f0a249 to dir: /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_auto_ds_0
+INFO: [IP_Flow 19-6928] IPCACHE: copied cached file /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.cache/ip/2022.2/9/5/95511e19f1f0a249/top_auto_ds_0.dcp to /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_auto_ds_0/top_auto_ds_0.dcp.
+INFO: [IP_Flow 19-6926] IPCACHE: added file to list for BOM: /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_auto_ds_0/top_auto_ds_0.dcp
+INFO: [IP_Flow 19-6928] IPCACHE: copied cached file /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.cache/ip/2022.2/9/5/95511e19f1f0a249/top_auto_ds_0_stub.vhdl to /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_auto_ds_0/top_auto_ds_0_stub.vhdl.
+INFO: [IP_Flow 19-6926] IPCACHE: added file to list for BOM: /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_auto_ds_0/top_auto_ds_0_stub.vhdl
+INFO: [IP_Flow 19-6928] IPCACHE: copied cached file /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.cache/ip/2022.2/9/5/95511e19f1f0a249/top_auto_ds_0_sim_netlist.v to /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_auto_ds_0/top_auto_ds_0_sim_netlist.v.
+INFO: [IP_Flow 19-6926] IPCACHE: added file to list for BOM: /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_auto_ds_0/top_auto_ds_0_sim_netlist.v
+INFO: [IP_Flow 19-6928] IPCACHE: copied cached file /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.cache/ip/2022.2/9/5/95511e19f1f0a249/top_auto_ds_0_stub.v to /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_auto_ds_0/top_auto_ds_0_stub.v.
+INFO: [IP_Flow 19-6926] IPCACHE: added file to list for BOM: /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_auto_ds_0/top_auto_ds_0_stub.v
+INFO: [IP_Flow 19-6928] IPCACHE: copied cached file /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.cache/ip/2022.2/9/5/95511e19f1f0a249/top_auto_ds_0_sim_netlist.vhdl to /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_auto_ds_0/top_auto_ds_0_sim_netlist.vhdl.
+INFO: [IP_Flow 19-6926] IPCACHE: added file to list for BOM: /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_auto_ds_0/top_auto_ds_0_sim_netlist.vhdl
+INFO: [IP_Flow 19-4993] Using cached IP synthesis design for IP top_auto_ds_0, cache-ID = 95511e19f1f0a249; cache size = 236.027 MB.
+INFO: [IP_Flow 19-6924] IPCACHE: Running cache check for IP inst: top_auto_ds_1
+INFO: [IP_Flow 19-6922] IPCACHE: Exporting cached entry 95511e19f1f0a249 to dir: /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_auto_ds_1
+INFO: [IP_Flow 19-6928] IPCACHE: copied cached file /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.cache/ip/2022.2/9/5/95511e19f1f0a249/top_auto_ds_0.dcp to /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_auto_ds_1/top_auto_ds_1.dcp.
+INFO: [IP_Flow 19-6926] IPCACHE: added file to list for BOM: /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_auto_ds_1/top_auto_ds_1.dcp
+INFO: [IP_Flow 19-6928] IPCACHE: copied cached file /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.cache/ip/2022.2/9/5/95511e19f1f0a249/top_auto_ds_0_stub.vhdl to /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_auto_ds_1/top_auto_ds_1_stub.vhdl.
+INFO: [IP_Flow 19-6926] IPCACHE: added file to list for BOM: /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_auto_ds_1/top_auto_ds_1_stub.vhdl
+INFO: [IP_Flow 19-6928] IPCACHE: copied cached file /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.cache/ip/2022.2/9/5/95511e19f1f0a249/top_auto_ds_0_sim_netlist.v to /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_auto_ds_1/top_auto_ds_1_sim_netlist.v.
+INFO: [IP_Flow 19-6926] IPCACHE: added file to list for BOM: /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_auto_ds_1/top_auto_ds_1_sim_netlist.v
+INFO: [IP_Flow 19-6928] IPCACHE: copied cached file /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.cache/ip/2022.2/9/5/95511e19f1f0a249/top_auto_ds_0_stub.v to /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_auto_ds_1/top_auto_ds_1_stub.v.
+INFO: [IP_Flow 19-6926] IPCACHE: added file to list for BOM: /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_auto_ds_1/top_auto_ds_1_stub.v
+INFO: [IP_Flow 19-6928] IPCACHE: copied cached file /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.cache/ip/2022.2/9/5/95511e19f1f0a249/top_auto_ds_0_sim_netlist.vhdl to /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_auto_ds_1/top_auto_ds_1_sim_netlist.vhdl.
+INFO: [IP_Flow 19-6926] IPCACHE: added file to list for BOM: /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_auto_ds_1/top_auto_ds_1_sim_netlist.vhdl
+INFO: [IP_Flow 19-4993] Using cached IP synthesis design for IP top_auto_ds_1, cache-ID = 95511e19f1f0a249; cache size = 236.027 MB.
+INFO: [IP_Flow 19-6924] IPCACHE: Running cache check for IP inst: top_auto_pc_0
+INFO: [IP_Flow 19-6922] IPCACHE: Exporting cached entry 274e5e43d03bb07c to dir: /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_auto_pc_0
+INFO: [IP_Flow 19-6928] IPCACHE: copied cached file /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.cache/ip/2022.2/2/7/274e5e43d03bb07c/top_auto_pc_1.dcp to /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_auto_pc_0/top_auto_pc_0.dcp.
+INFO: [IP_Flow 19-6926] IPCACHE: added file to list for BOM: /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_auto_pc_0/top_auto_pc_0.dcp
+INFO: [IP_Flow 19-6928] IPCACHE: copied cached file /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.cache/ip/2022.2/2/7/274e5e43d03bb07c/top_auto_pc_1_stub.vhdl to /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_auto_pc_0/top_auto_pc_0_stub.vhdl.
+INFO: [IP_Flow 19-6926] IPCACHE: added file to list for BOM: /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_auto_pc_0/top_auto_pc_0_stub.vhdl
+INFO: [IP_Flow 19-6928] IPCACHE: copied cached file /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.cache/ip/2022.2/2/7/274e5e43d03bb07c/top_auto_pc_1_sim_netlist.v to /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_auto_pc_0/top_auto_pc_0_sim_netlist.v.
+INFO: [IP_Flow 19-6926] IPCACHE: added file to list for BOM: /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_auto_pc_0/top_auto_pc_0_sim_netlist.v
+INFO: [IP_Flow 19-6928] IPCACHE: copied cached file /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.cache/ip/2022.2/2/7/274e5e43d03bb07c/top_auto_pc_1_sim_netlist.vhdl to /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_auto_pc_0/top_auto_pc_0_sim_netlist.vhdl.
+INFO: [IP_Flow 19-6926] IPCACHE: added file to list for BOM: /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_auto_pc_0/top_auto_pc_0_sim_netlist.vhdl
+INFO: [IP_Flow 19-6928] IPCACHE: copied cached file /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.cache/ip/2022.2/2/7/274e5e43d03bb07c/top_auto_pc_1_stub.v to /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_auto_pc_0/top_auto_pc_0_stub.v.
+INFO: [IP_Flow 19-6926] IPCACHE: added file to list for BOM: /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_auto_pc_0/top_auto_pc_0_stub.v
+INFO: [IP_Flow 19-4993] Using cached IP synthesis design for IP top_auto_pc_0, cache-ID = 274e5e43d03bb07c; cache size = 236.027 MB.
+INFO: [IP_Flow 19-6924] IPCACHE: Running cache check for IP inst: top_auto_pc_1
+INFO: [IP_Flow 19-6922] IPCACHE: Exporting cached entry 274e5e43d03bb07c to dir: /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_auto_pc_1
+INFO: [IP_Flow 19-6928] IPCACHE: copied cached file /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.cache/ip/2022.2/2/7/274e5e43d03bb07c/top_auto_pc_1.dcp to /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_auto_pc_1/top_auto_pc_1.dcp.
+INFO: [IP_Flow 19-6926] IPCACHE: added file to list for BOM: /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_auto_pc_1/top_auto_pc_1.dcp
+INFO: [IP_Flow 19-6928] IPCACHE: copied cached file /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.cache/ip/2022.2/2/7/274e5e43d03bb07c/top_auto_pc_1_stub.vhdl to /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_auto_pc_1/top_auto_pc_1_stub.vhdl.
+INFO: [IP_Flow 19-6926] IPCACHE: added file to list for BOM: /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_auto_pc_1/top_auto_pc_1_stub.vhdl
+INFO: [IP_Flow 19-6928] IPCACHE: copied cached file /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.cache/ip/2022.2/2/7/274e5e43d03bb07c/top_auto_pc_1_sim_netlist.v to /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_auto_pc_1/top_auto_pc_1_sim_netlist.v.
+INFO: [IP_Flow 19-6926] IPCACHE: added file to list for BOM: /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_auto_pc_1/top_auto_pc_1_sim_netlist.v
+INFO: [IP_Flow 19-6928] IPCACHE: copied cached file /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.cache/ip/2022.2/2/7/274e5e43d03bb07c/top_auto_pc_1_sim_netlist.vhdl to /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_auto_pc_1/top_auto_pc_1_sim_netlist.vhdl.
+INFO: [IP_Flow 19-6926] IPCACHE: added file to list for BOM: /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_auto_pc_1/top_auto_pc_1_sim_netlist.vhdl
+INFO: [IP_Flow 19-6928] IPCACHE: copied cached file /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.cache/ip/2022.2/2/7/274e5e43d03bb07c/top_auto_pc_1_stub.v to /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_auto_pc_1/top_auto_pc_1_stub.v.
+INFO: [IP_Flow 19-6926] IPCACHE: added file to list for BOM: /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_auto_pc_1/top_auto_pc_1_stub.v
+INFO: [IP_Flow 19-4993] Using cached IP synthesis design for IP top_auto_pc_1, cache-ID = 274e5e43d03bb07c; cache size = 236.027 MB.
+INFO: [IP_Flow 19-6924] IPCACHE: Running cache check for IP inst: top_axi_smc_0
+INFO: [IP_Flow 19-6922] IPCACHE: Exporting cached entry 5c5f156d2b1e2d38 to dir: /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_axi_smc_0
+INFO: [IP_Flow 19-6928] IPCACHE: copied cached file /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.cache/ip/2022.2/5/c/5c5f156d2b1e2d38/top_axi_smc_0_sim_netlist.vhdl to /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_axi_smc_0/top_axi_smc_0_sim_netlist.vhdl.
+INFO: [IP_Flow 19-6926] IPCACHE: added file to list for BOM: /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_axi_smc_0/top_axi_smc_0_sim_netlist.vhdl
+INFO: [IP_Flow 19-6928] IPCACHE: copied cached file /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.cache/ip/2022.2/5/c/5c5f156d2b1e2d38/top_axi_smc_0_stub.vhdl to /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_axi_smc_0/top_axi_smc_0_stub.vhdl.
+INFO: [IP_Flow 19-6926] IPCACHE: added file to list for BOM: /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_axi_smc_0/top_axi_smc_0_stub.vhdl
+INFO: [IP_Flow 19-6928] IPCACHE: copied cached file /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.cache/ip/2022.2/5/c/5c5f156d2b1e2d38/top_axi_smc_0_sim_netlist.v to /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_axi_smc_0/top_axi_smc_0_sim_netlist.v.
+INFO: [IP_Flow 19-6926] IPCACHE: added file to list for BOM: /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_axi_smc_0/top_axi_smc_0_sim_netlist.v
+INFO: [IP_Flow 19-6928] IPCACHE: copied cached file /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.cache/ip/2022.2/5/c/5c5f156d2b1e2d38/top_axi_smc_0.dcp to /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_axi_smc_0/top_axi_smc_0.dcp.
+INFO: [IP_Flow 19-6926] IPCACHE: added file to list for BOM: /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_axi_smc_0/top_axi_smc_0.dcp
+INFO: [IP_Flow 19-6928] IPCACHE: copied cached file /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.cache/ip/2022.2/5/c/5c5f156d2b1e2d38/top_axi_smc_0_stub.v to /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_axi_smc_0/top_axi_smc_0_stub.v.
+INFO: [IP_Flow 19-6926] IPCACHE: added file to list for BOM: /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_axi_smc_0/top_axi_smc_0_stub.v
+INFO: [IP_Flow 19-4993] Using cached IP synthesis design for IP top_axi_smc_0, cache-ID = 5c5f156d2b1e2d38; cache size = 236.027 MB.
+INFO: [IP_Flow 19-6924] IPCACHE: Running cache check for IP inst: top_axi_smc_1_0
+INFO: [IP_Flow 19-6922] IPCACHE: Exporting cached entry eb3fc2cb41adac20 to dir: /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_axi_smc_1_0
+INFO: [IP_Flow 19-6928] IPCACHE: copied cached file /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.cache/ip/2022.2/e/b/eb3fc2cb41adac20/top_axi_smc_1_0_stub.v to /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_axi_smc_1_0/top_axi_smc_1_0_stub.v.
+INFO: [IP_Flow 19-6926] IPCACHE: added file to list for BOM: /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_axi_smc_1_0/top_axi_smc_1_0_stub.v
+INFO: [IP_Flow 19-6928] IPCACHE: copied cached file /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.cache/ip/2022.2/e/b/eb3fc2cb41adac20/top_axi_smc_1_0_sim_netlist.v to /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_axi_smc_1_0/top_axi_smc_1_0_sim_netlist.v.
+INFO: [IP_Flow 19-6926] IPCACHE: added file to list for BOM: /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_axi_smc_1_0/top_axi_smc_1_0_sim_netlist.v
+INFO: [IP_Flow 19-6928] IPCACHE: copied cached file /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.cache/ip/2022.2/e/b/eb3fc2cb41adac20/top_axi_smc_1_0.dcp to /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_axi_smc_1_0/top_axi_smc_1_0.dcp.
+INFO: [IP_Flow 19-6926] IPCACHE: added file to list for BOM: /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_axi_smc_1_0/top_axi_smc_1_0.dcp
+INFO: [IP_Flow 19-6928] IPCACHE: copied cached file /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.cache/ip/2022.2/e/b/eb3fc2cb41adac20/top_axi_smc_1_0_sim_netlist.vhdl to /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_axi_smc_1_0/top_axi_smc_1_0_sim_netlist.vhdl.
+INFO: [IP_Flow 19-6926] IPCACHE: added file to list for BOM: /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_axi_smc_1_0/top_axi_smc_1_0_sim_netlist.vhdl
+INFO: [IP_Flow 19-6928] IPCACHE: copied cached file /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.cache/ip/2022.2/e/b/eb3fc2cb41adac20/top_axi_smc_1_0_stub.vhdl to /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_axi_smc_1_0/top_axi_smc_1_0_stub.vhdl.
+INFO: [IP_Flow 19-6926] IPCACHE: added file to list for BOM: /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_axi_smc_1_0/top_axi_smc_1_0_stub.vhdl
+INFO: [IP_Flow 19-4993] Using cached IP synthesis design for IP top_axi_smc_1_0, cache-ID = eb3fc2cb41adac20; cache size = 236.027 MB.
+INFO: [IP_Flow 19-6924] IPCACHE: Running cache check for IP inst: top_daq_axis_0_0
+INFO: [IP_Flow 19-6924] IPCACHE: Running cache check for IP inst: top_tier2_xbar_0_0
+INFO: [IP_Flow 19-6922] IPCACHE: Exporting cached entry e1a3d5ca09dbdc59 to dir: /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_tier2_xbar_0_0
+INFO: [IP_Flow 19-6928] IPCACHE: copied cached file /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.cache/ip/2022.2/e/1/e1a3d5ca09dbdc59/top_tier2_xbar_0_0_stub.vhdl to /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_tier2_xbar_0_0/top_tier2_xbar_0_0_stub.vhdl.
+INFO: [IP_Flow 19-6926] IPCACHE: added file to list for BOM: /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_tier2_xbar_0_0/top_tier2_xbar_0_0_stub.vhdl
+INFO: [IP_Flow 19-6928] IPCACHE: copied cached file /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.cache/ip/2022.2/e/1/e1a3d5ca09dbdc59/top_tier2_xbar_0_0_stub.v to /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_tier2_xbar_0_0/top_tier2_xbar_0_0_stub.v.
+INFO: [IP_Flow 19-6926] IPCACHE: added file to list for BOM: /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_tier2_xbar_0_0/top_tier2_xbar_0_0_stub.v
+INFO: [IP_Flow 19-6928] IPCACHE: copied cached file /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.cache/ip/2022.2/e/1/e1a3d5ca09dbdc59/top_tier2_xbar_0_0_sim_netlist.v to /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_tier2_xbar_0_0/top_tier2_xbar_0_0_sim_netlist.v.
+INFO: [IP_Flow 19-6926] IPCACHE: added file to list for BOM: /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_tier2_xbar_0_0/top_tier2_xbar_0_0_sim_netlist.v
+INFO: [IP_Flow 19-6928] IPCACHE: copied cached file /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.cache/ip/2022.2/e/1/e1a3d5ca09dbdc59/top_tier2_xbar_0_0.dcp to /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_tier2_xbar_0_0/top_tier2_xbar_0_0.dcp.
+INFO: [IP_Flow 19-6926] IPCACHE: added file to list for BOM: /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_tier2_xbar_0_0/top_tier2_xbar_0_0.dcp
+INFO: [IP_Flow 19-6928] IPCACHE: copied cached file /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.cache/ip/2022.2/e/1/e1a3d5ca09dbdc59/top_tier2_xbar_0_0_sim_netlist.vhdl to /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_tier2_xbar_0_0/top_tier2_xbar_0_0_sim_netlist.vhdl.
+INFO: [IP_Flow 19-6926] IPCACHE: added file to list for BOM: /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_tier2_xbar_0_0/top_tier2_xbar_0_0_sim_netlist.vhdl
+INFO: [IP_Flow 19-4993] Using cached IP synthesis design for IP top_tier2_xbar_0_0, cache-ID = e1a3d5ca09dbdc59; cache size = 236.027 MB.
+INFO: [IP_Flow 19-6924] IPCACHE: Running cache check for IP inst: top_tier2_xbar_1_0
+INFO: [IP_Flow 19-6922] IPCACHE: Exporting cached entry ce8626d52a70c451 to dir: /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_tier2_xbar_1_0
+INFO: [IP_Flow 19-6928] IPCACHE: copied cached file /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.cache/ip/2022.2/c/e/ce8626d52a70c451/top_tier2_xbar_1_0_stub.vhdl to /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_tier2_xbar_1_0/top_tier2_xbar_1_0_stub.vhdl.
+INFO: [IP_Flow 19-6926] IPCACHE: added file to list for BOM: /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_tier2_xbar_1_0/top_tier2_xbar_1_0_stub.vhdl
+INFO: [IP_Flow 19-6928] IPCACHE: copied cached file /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.cache/ip/2022.2/c/e/ce8626d52a70c451/top_tier2_xbar_1_0_sim_netlist.v to /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_tier2_xbar_1_0/top_tier2_xbar_1_0_sim_netlist.v.
+INFO: [IP_Flow 19-6926] IPCACHE: added file to list for BOM: /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_tier2_xbar_1_0/top_tier2_xbar_1_0_sim_netlist.v
+INFO: [IP_Flow 19-6928] IPCACHE: copied cached file /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.cache/ip/2022.2/c/e/ce8626d52a70c451/top_tier2_xbar_1_0_sim_netlist.vhdl to /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_tier2_xbar_1_0/top_tier2_xbar_1_0_sim_netlist.vhdl.
+INFO: [IP_Flow 19-6926] IPCACHE: added file to list for BOM: /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_tier2_xbar_1_0/top_tier2_xbar_1_0_sim_netlist.vhdl
+INFO: [IP_Flow 19-6928] IPCACHE: copied cached file /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.cache/ip/2022.2/c/e/ce8626d52a70c451/top_tier2_xbar_1_0_stub.v to /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_tier2_xbar_1_0/top_tier2_xbar_1_0_stub.v.
+INFO: [IP_Flow 19-6926] IPCACHE: added file to list for BOM: /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_tier2_xbar_1_0/top_tier2_xbar_1_0_stub.v
+INFO: [IP_Flow 19-6928] IPCACHE: copied cached file /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.cache/ip/2022.2/c/e/ce8626d52a70c451/top_tier2_xbar_1_0.dcp to /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_tier2_xbar_1_0/top_tier2_xbar_1_0.dcp.
+INFO: [IP_Flow 19-6926] IPCACHE: added file to list for BOM: /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_tier2_xbar_1_0/top_tier2_xbar_1_0.dcp
+INFO: [IP_Flow 19-4993] Using cached IP synthesis design for IP top_tier2_xbar_1_0, cache-ID = ce8626d52a70c451; cache size = 236.027 MB.
+INFO: [IP_Flow 19-6924] IPCACHE: Running cache check for IP inst: top_tier2_xbar_2_0
+INFO: [IP_Flow 19-6922] IPCACHE: Exporting cached entry 9c95fe6f75ccc6aa to dir: /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_tier2_xbar_2_0
+INFO: [IP_Flow 19-6928] IPCACHE: copied cached file /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.cache/ip/2022.2/9/c/9c95fe6f75ccc6aa/top_tier2_xbar_2_0_stub.v to /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_tier2_xbar_2_0/top_tier2_xbar_2_0_stub.v.
+INFO: [IP_Flow 19-6926] IPCACHE: added file to list for BOM: /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_tier2_xbar_2_0/top_tier2_xbar_2_0_stub.v
+INFO: [IP_Flow 19-6928] IPCACHE: copied cached file /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.cache/ip/2022.2/9/c/9c95fe6f75ccc6aa/top_tier2_xbar_2_0_stub.vhdl to /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_tier2_xbar_2_0/top_tier2_xbar_2_0_stub.vhdl.
+INFO: [IP_Flow 19-6926] IPCACHE: added file to list for BOM: /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_tier2_xbar_2_0/top_tier2_xbar_2_0_stub.vhdl
+INFO: [IP_Flow 19-6928] IPCACHE: copied cached file /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.cache/ip/2022.2/9/c/9c95fe6f75ccc6aa/top_tier2_xbar_2_0.dcp to /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_tier2_xbar_2_0/top_tier2_xbar_2_0.dcp.
+INFO: [IP_Flow 19-6926] IPCACHE: added file to list for BOM: /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_tier2_xbar_2_0/top_tier2_xbar_2_0.dcp
+INFO: [IP_Flow 19-6928] IPCACHE: copied cached file /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.cache/ip/2022.2/9/c/9c95fe6f75ccc6aa/top_tier2_xbar_2_0_sim_netlist.v to /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_tier2_xbar_2_0/top_tier2_xbar_2_0_sim_netlist.v.
+INFO: [IP_Flow 19-6926] IPCACHE: added file to list for BOM: /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_tier2_xbar_2_0/top_tier2_xbar_2_0_sim_netlist.v
+INFO: [IP_Flow 19-6928] IPCACHE: copied cached file /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.cache/ip/2022.2/9/c/9c95fe6f75ccc6aa/top_tier2_xbar_2_0_sim_netlist.vhdl to /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_tier2_xbar_2_0/top_tier2_xbar_2_0_sim_netlist.vhdl.
+INFO: [IP_Flow 19-6926] IPCACHE: added file to list for BOM: /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_tier2_xbar_2_0/top_tier2_xbar_2_0_sim_netlist.vhdl
+INFO: [IP_Flow 19-4993] Using cached IP synthesis design for IP top_tier2_xbar_2_0, cache-ID = 9c95fe6f75ccc6aa; cache size = 236.027 MB.
+INFO: [IP_Flow 19-6924] IPCACHE: Running cache check for IP inst: top_tier2_xbar_3_0
+INFO: [IP_Flow 19-6922] IPCACHE: Exporting cached entry 6ca7830ee0c03867 to dir: /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_tier2_xbar_3_0
+INFO: [IP_Flow 19-6928] IPCACHE: copied cached file /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.cache/ip/2022.2/6/c/6ca7830ee0c03867/top_tier2_xbar_3_0_stub.vhdl to /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_tier2_xbar_3_0/top_tier2_xbar_3_0_stub.vhdl.
+INFO: [IP_Flow 19-6926] IPCACHE: added file to list for BOM: /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_tier2_xbar_3_0/top_tier2_xbar_3_0_stub.vhdl
+INFO: [IP_Flow 19-6928] IPCACHE: copied cached file /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.cache/ip/2022.2/6/c/6ca7830ee0c03867/top_tier2_xbar_3_0.dcp to /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_tier2_xbar_3_0/top_tier2_xbar_3_0.dcp.
+INFO: [IP_Flow 19-6926] IPCACHE: added file to list for BOM: /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_tier2_xbar_3_0/top_tier2_xbar_3_0.dcp
+INFO: [IP_Flow 19-6928] IPCACHE: copied cached file /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.cache/ip/2022.2/6/c/6ca7830ee0c03867/top_tier2_xbar_3_0_sim_netlist.vhdl to /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_tier2_xbar_3_0/top_tier2_xbar_3_0_sim_netlist.vhdl.
+INFO: [IP_Flow 19-6926] IPCACHE: added file to list for BOM: /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_tier2_xbar_3_0/top_tier2_xbar_3_0_sim_netlist.vhdl
+INFO: [IP_Flow 19-6928] IPCACHE: copied cached file /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.cache/ip/2022.2/6/c/6ca7830ee0c03867/top_tier2_xbar_3_0_sim_netlist.v to /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_tier2_xbar_3_0/top_tier2_xbar_3_0_sim_netlist.v.
+INFO: [IP_Flow 19-6926] IPCACHE: added file to list for BOM: /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_tier2_xbar_3_0/top_tier2_xbar_3_0_sim_netlist.v
+INFO: [IP_Flow 19-6928] IPCACHE: copied cached file /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.cache/ip/2022.2/6/c/6ca7830ee0c03867/top_tier2_xbar_3_0_stub.v to /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_tier2_xbar_3_0/top_tier2_xbar_3_0_stub.v.
+INFO: [IP_Flow 19-6926] IPCACHE: added file to list for BOM: /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.gen/sources_1/bd/top/ip/top_tier2_xbar_3_0/top_tier2_xbar_3_0_stub.v
+INFO: [IP_Flow 19-4993] Using cached IP synthesis design for IP top_tier2_xbar_3_0, cache-ID = 6ca7830ee0c03867; cache size = 236.027 MB.
+[Tue Aug 20 19:05:04 2024] Launched top_daq_axis_0_0_synth_1...
+Run output will be captured here: /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.runs/top_daq_axis_0_0_synth_1/runme.log
+[Tue Aug 20 19:05:04 2024] Launched synth_1...
+Run output will be captured here: /home/reedf/Documents/Xilinx/rfsoc_daq/build/proj_synth/proj_synth.runs/synth_1/runme.log
+launch_runs: Time (s): cpu = 00:00:41 ; elapsed = 00:00:40 . Memory (MB): peak = 2313.957 ; gain = 930.367 ; free physical = 17486 ; free virtual = 40070
+INFO: [Common 17-206] Exiting Vivado at Tue Aug 20 19:05:04 2024...

@@ -6,427 +6,483 @@
 
 `timescale 1ns/1ps
 module daq_axis_sv #(
-  // Shared parameters
-  parameter int SAMPLE_WIDTH = 16, // width in bits of each sample
-  parameter int PARALLEL_SAMPLES = 16, // number of parallel samples per clock cycle per channel
-  parameter int CHANNELS = 8, // number of input channels
-  parameter int AXI_MM_WIDTH = 128, // width of DMA AXI-stream interface
-
-  // Sparse sample buffer parameters
-  parameter int TSTAMP_BUFFER_DEPTH = 1024, // depth of timestamp buffer
-  parameter int DATA_BUFFER_DEPTH = 16384, // depth of data/sample buffer
-  // Sample discriminator parameters
-  parameter int APPROX_CLOCK_WIDTH = 48, // requested width of timestamp
-
   // DDS parameters
-  parameter int DDS_PHASE_BITS = 32,
-  parameter int DDS_QUANT_BITS = 20,
+  parameter int DDS_PHASE_BITS, // default 32
+  parameter int DDS_QUANT_BITS, // default 20
   // DAC prescaler parameters
-  parameter int SCALE_WIDTH = 18,
-  parameter int OFFSET_WIDTH = 14,
-  parameter int SCALE_INT_BITS = 2,
+  parameter int SCALE_WIDTH, // default 18
+  parameter int OFFSET_WIDTH, // default 14
+  parameter int SCALE_INT_BITS, // default 2
   // AWG parameters
-  parameter int AWG_DEPTH = 2048,
+  parameter int AWG_DEPTH, // default 2048
   // Triangle wave parameters
-  parameter int TRI_PHASE_BITS = 32
+  parameter int TRI_PHASE_BITS, // default 32
+ 
+  // Sample discriminator parameters
+  parameter int DISCRIMINATOR_MAX_DELAY, // default 64
+  parameter int BUFFER_READ_LATENCY // default 4
 ) (
-  input wire ps_clk, ps_reset,
+  input logic ps_clk,
+  input logic ps_reset,
 
-  // dma input (AWG)
-  input   wire [AXI_MM_WIDTH-1:0] s_axis_dma_tdata,
-  input   wire                    s_axis_dma_tvalid,
-  input   wire                    s_axis_dma_tlast,
-  input   wire             [15:0] s_axis_dma_tkeep,
-  output  wire                    s_axis_dma_tready,
+  //////////////////////////////////////////////////////
+  // DMA DATASTREAMS
+  //////////////////////////////////////////////////////
+  // Timetagging sample buffer DMA output
+  output  logic [rx_pkg::AXI_MM_WIDTH-1:0] m_axis_adc_dma_tdata,
+  output  logic                            m_axis_adc_dma_tvalid,
+  output  logic                            m_axis_adc_dma_tlast,
+  output  logic                     [15:0] m_axis_adc_dma_tkeep,
+  input   logic                            m_axis_adc_dma_tready,
+  // AWG DMA input
+  input   logic [tx_pkg::AXI_MM_WIDTH-1:0] s_axis_awg_dma_tdata,
+  input   logic                            s_axis_awg_dma_tvalid,
+  input   logic                            s_axis_awg_dma_tlast,
+  input   logic                     [15:0] s_axis_awg_dma_tkeep,
+  output  logic                            s_axis_awg_dma_tready,
 
+  //////////////////////////////////////////////////////
+  // ADC STATUS
+  //////////////////////////////////////////////////////
+  // sample write depth
+  output  logic [rx_pkg::CHANNELS*($clog2(buffer_pkg::SAMPLE_BUFFER_DEPTH)+1)-1:0]  m_axis_samples_write_depth_tdata,
+  output  logic                                                                     m_axis_samples_write_depth_tvalid,
+  output  logic                                                                     m_axis_samples_write_depth_tlast,
+  input   logic                                                                     m_axis_samples_write_depth_tready,
+  // timestamp write depth
+  output  logic [rx_pkg::CHANNELS*($clog2(buffer_pkg::TSTAMP_BUFFER_DEPTH)+1)-1:0]  m_axis_timestamps_write_depth_tdata,
+  output  logic                                                                     m_axis_timestamps_write_depth_tvalid,
+  output  logic                                                                     m_axis_timestamps_write_depth_tlast,
+  input   logic                                                                     m_axis_timestamps_write_depth_tready,
   //////////////////////////////////////////////////////
   // ADC CONFIGURATION
   //////////////////////////////////////////////////////
-  // sample discriminator config
-  input   wire [2*CHANNELS*SAMPLE_WIDTH-1:0]      s_axis_sample_discriminator_config_tdata,
-  input   wire                                    s_axis_sample_discriminator_config_tvalid,
-  output  wire                                    s_axis_sample_discriminator_config_tready,
-  // sparse buffer config
-  input   wire [$clog2($clog2(CHANNELS)+1)-1:0]   s_axis_buffer_config_tdata,
-  input   wire                                    s_axis_buffer_config_tvalid,
-  output  wire                                    s_axis_buffer_config_tready,
-  // buffer capture start/stop
-  input   wire [1:0]                              s_axis_buffer_start_stop_tdata,
-  input   wire                                    s_axis_buffer_start_stop_tvalid,
-  output  wire                                    s_axis_buffer_start_stop_tready,
-  // RX channel mux config
-  input   wire [$clog2(2*CHANNELS)*CHANNELS-1:0]  s_axis_adc_mux_config_tdata,
-  input   wire                                    s_axis_adc_mux_config_tvalid,
-  output  wire                                    s_axis_adc_mux_config_tready,
-  // buffer timestamp width out
-  output  wire [31:0]                             m_axis_buffer_timestamp_width_tdata,
-  output  wire                                    m_axis_buffer_timestamp_width_tvalid,
-  output  wire                                    m_axis_buffer_timestamp_width_tlast,
-  input   wire                                    m_axis_buffer_timestamp_width_tready,
-  // buffer capture done out
-  output  wire                                    m_axis_buffer_capture_done_tdata,
-  output  wire                                    m_axis_buffer_capture_done_tvalid,
-  output  wire                                    m_axis_buffer_capture_done_tlast,
-  input   wire                                    m_axis_buffer_capture_done_tready,
+  // buffer capture arm/start/stop
+  input   logic [2:0]                                 s_axis_capture_arm_start_stop_tdata,
+  input   logic                                       s_axis_capture_arm_start_stop_tvalid,
+  output  logic                                       s_axis_capture_arm_start_stop_tready,
+  // buffer banking mode
+  input   logic [buffer_pkg::BANKING_MODE_WIDTH-1:0]  s_axis_capture_banking_mode_tdata,
+  input   logic                                       s_axis_capture_banking_mode_tvalid,
+  output  logic                                       s_axis_capture_banking_mode_tready,
+  // buffer capture reset
+  input   logic                                       s_axis_capture_sw_reset_tdata,
+  input   logic                                       s_axis_capture_sw_reset_tvalid,
+  output  logic                                       s_axis_capture_sw_reset_tready,
+  // buffer readout reset
+  input   logic                                       s_axis_readout_sw_reset_tdata,
+  input   logic                                       s_axis_readout_sw_reset_tvalid,
+  output  logic                                       s_axis_readout_sw_reset_tready,
+  // buffer readout start
+  input   logic                                       s_axis_readout_start_tdata,
+  input   logic                                       s_axis_readout_start_tvalid,
+  output  logic                                       s_axis_readout_start_tready,
+  // sample discriminator thresholds
+  input   logic [2*rx_pkg::CHANNELS*rx_pkg::SAMPLE_WIDTH-1:0]                     s_axis_discriminator_thresholds_tdata,
+  input   logic                                                                   s_axis_discriminator_thresholds_tvalid,
+  output  logic                                                                   s_axis_discriminator_thresholds_tready,
+  // sample discriminator delays
+  input   logic [3*rx_pkg::CHANNELS*$clog2(DISCRIMINATOR_MAX_DELAY)-1:0]          s_axis_discriminator_delays_tdata,
+  input   logic                                                                   s_axis_discriminator_delays_tvalid,
+  output  logic                                                                   s_axis_discriminator_delays_tready,
+  // sample discriminator trigger select
+  input   logic [rx_pkg::CHANNELS*$clog2(rx_pkg::CHANNELS+tx_pkg::CHANNELS)-1:0]  s_axis_discriminator_trigger_source_tdata,
+  input   logic                                                                   s_axis_discriminator_trigger_source_tvalid,
+  output  logic                                                                   s_axis_discriminator_trigger_source_tready,
+  // sample discriminator bypass
+  input   logic [rx_pkg::CHANNELS-1:0]                                            s_axis_discriminator_bypass_tdata,
+  input   logic                                                                   s_axis_discriminator_bypass_tvalid,
+  output  logic                                                                   s_axis_discriminator_bypass_tready,
+  // channel mux config
+  input   logic [$clog2(2*rx_pkg::CHANNELS)*rx_pkg::CHANNELS-1:0] s_axis_receive_channel_mux_config_tdata,
+  input   logic                                                   s_axis_receive_channel_mux_config_tvalid,
+  output  logic                                                   s_axis_receive_channel_mux_config_tready,
+  // capture trigger config
+  input   logic [1+tx_pkg::CHANNELS-1:0]  s_axis_capture_trigger_config_tdata,
+  input   logic                           s_axis_capture_trigger_config_tvalid,
+  output  logic                           s_axis_capture_trigger_config_tready,
   // LMH6401 configuration
-  input   wire [16+$clog2(CHANNELS)-1:0]          s_axis_lmh6401_config_tdata,
-  input   wire                                    s_axis_lmh6401_config_tvalid,
-  output  wire                                    s_axis_lmh6401_config_tready,
+  input   logic [16+$clog2(rx_pkg::CHANNELS)-1:0] s_axis_lmh6401_config_tdata,
+  input   logic                                   s_axis_lmh6401_config_tvalid,
+  output  logic                                   s_axis_lmh6401_config_tready,
+
+  //////////////////////////////////////////////////////
+  // DAC STATUS
+  //////////////////////////////////////////////////////
+  // DMA error
+  output  logic [1:0] m_axis_awg_dma_error_tdata,
+  output  logic       m_axis_awg_dma_error_tvalid,
+  output  logic       m_axis_awg_dma_error_tlast,
+  input   logic       m_axis_awg_dma_error_tready,
 
   //////////////////////////////////////////////////////
   // DAC CONFIGURATION
   //////////////////////////////////////////////////////
-  // awg frame depth
-  input   wire [$clog2(AWG_DEPTH)*CHANNELS-1:0]           s_axis_awg_frame_depth_tdata,
-  input   wire                                            s_axis_awg_frame_depth_tvalid,
-  output  wire                                            s_axis_awg_frame_depth_tready,
-  // awg burst length
-  input   wire [64*CHANNELS-1:0]                          s_axis_awg_burst_length_tdata,
-  input   wire                                            s_axis_awg_burst_length_tvalid,
-  output  wire                                            s_axis_awg_burst_length_tready,
-  // awg trigger output config
-  input   wire [2*CHANNELS-1:0]                           s_axis_awg_trigger_out_config_tdata,
-  input   wire                                            s_axis_awg_trigger_out_config_tvalid,
-  output  wire                                            s_axis_awg_trigger_out_config_tready,
-  // awg start/stop
-  input   wire [1:0]                                      s_axis_awg_start_stop_tdata,
-  input   wire                                            s_axis_awg_start_stop_tvalid,
-  output  wire                                            s_axis_awg_start_stop_tready,
-  // awg dma error
-  output  wire [1:0]                                      m_axis_awg_dma_error_tdata,
-  output  wire                                            m_axis_awg_dma_error_tvalid,
-  output  wire                                            m_axis_awg_dma_error_tlast,
-  input   wire                                            m_axis_awg_dma_error_tready,
-  // dac scale factor
-  input   wire [(SCALE_WIDTH+OFFSET_WIDTH)*CHANNELS-1:0]  s_axis_dac_scale_offset_config_tdata,
-  input   wire                                            s_axis_dac_scale_offset_config_tvalid,
-  output  wire                                            s_axis_dac_scale_offset_config_tready,
-  // dds phase increment
-  input   wire [DDS_PHASE_BITS*CHANNELS-1:0]              s_axis_dds_phase_inc_tdata,
-  input   wire                                            s_axis_dds_phase_inc_tvalid,
-  output  wire                                            s_axis_dds_phase_inc_tready,
-  // triangle wave phase increment
-  input   wire [TRI_PHASE_BITS*CHANNELS-1:0]              s_axis_tri_phase_inc_tdata,
-  input   wire                                            s_axis_tri_phase_inc_tvalid,
-  output  wire                                            s_axis_tri_phase_inc_tready,
-  // trigger manager config
-  input   wire [2*CHANNELS:0]                             s_axis_trigger_manager_config_tdata,
-  input   wire                                            s_axis_trigger_manager_config_tvalid,
-  output  wire                                            s_axis_trigger_manager_config_tready,
-  // TX channel mux config
-  input   wire [$clog2(3*CHANNELS)*CHANNELS-1:0]          s_axis_dac_mux_config_tdata,
-  input   wire                                            s_axis_dac_mux_config_tvalid,
-  output  wire                                            s_axis_dac_mux_config_tready,
+  // AWG frame depth
+  input   logic [$clog2(AWG_DEPTH)*tx_pkg::CHANNELS-1:0]  s_axis_awg_frame_depth_tdata,
+  input   logic                                           s_axis_awg_frame_depth_tvalid,
+  output  logic                                           s_axis_awg_frame_depth_tready,
+  // AWG trigger output config
+  input   logic [2*tx_pkg::CHANNELS-1:0]                  s_axis_awg_trigger_config_tdata,
+  input   logic                                           s_axis_awg_trigger_config_tvalid,
+  output  logic                                           s_axis_awg_trigger_config_tready,
+  // AWG burst length
+  input   logic [64*tx_pkg::CHANNELS-1:0]                 s_axis_awg_burst_length_tdata,
+  input   logic                                           s_axis_awg_burst_length_tvalid,
+  output  logic                                           s_axis_awg_burst_length_tready,
+  // AWG start/stop
+  input   logic [1:0]                                     s_axis_awg_start_stop_tdata,
+  input   logic                                           s_axis_awg_start_stop_tvalid,
+  output  logic                                           s_axis_awg_start_stop_tready,
+  // DAC scale/offset
+  input   logic [(SCALE_WIDTH+OFFSET_WIDTH)*tx_pkg::CHANNELS-1:0] s_axis_dac_scale_offset_tdata,
+  input   logic                                                   s_axis_dac_scale_offset_tvalid,
+  output  logic                                                   s_axis_dac_scale_offset_tready,
+  // DDS phase increment
+  input   logic [DDS_PHASE_BITS*tx_pkg::CHANNELS-1:0] s_axis_dds_phase_inc_tdata,
+  input   logic                                       s_axis_dds_phase_inc_tvalid,
+  output  logic                                       s_axis_dds_phase_inc_tready,
+  // Triangle-wave phase increment
+  input   logic [TRI_PHASE_BITS*tx_pkg::CHANNELS-1:0] s_axis_tri_phase_inc_tdata,
+  input   logic                                       s_axis_tri_phase_inc_tvalid,
+  output  logic                                       s_axis_tri_phase_inc_tready,
+  // DAC siggen source mux
+  input   logic [$clog2(3*tx_pkg::CHANNELS)*tx_pkg::CHANNELS-1:0] s_axis_transmit_channel_mux_tdata,
+  input   logic                                                   s_axis_transmit_channel_mux_tvalid,
+  output  logic                                                   s_axis_transmit_channel_mux_tready,
 
   //////////////////////////////////////////////////////
   // ADC SIGNAL PATH
   //////////////////////////////////////////////////////
-  input wire adc_clk, adc_reset,
+  input logic adc_clk,
+  input logic adc_reset,
   // adc data in
-  input   wire [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0]  s00_axis_adc_tdata,
-  input   wire                                      s00_axis_adc_tvalid,
-  input   wire [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0]  s02_axis_adc_tdata,
-  input   wire                                      s02_axis_adc_tvalid,
-  input   wire [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0]  s10_axis_adc_tdata,
-  input   wire                                      s10_axis_adc_tvalid,
-  input   wire [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0]  s12_axis_adc_tdata,
-  input   wire                                      s12_axis_adc_tvalid,
-  input   wire [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0]  s20_axis_adc_tdata,
-  input   wire                                      s20_axis_adc_tvalid,
-  input   wire [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0]  s22_axis_adc_tdata,
-  input   wire                                      s22_axis_adc_tvalid,
-  input   wire [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0]  s30_axis_adc_tdata,
-  input   wire                                      s30_axis_adc_tvalid,
-  input   wire [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0]  s32_axis_adc_tdata,
-  input   wire                                      s32_axis_adc_tvalid,
-
-  // dma output (Sparse sample buffer -- TODO rewrite with split clock domains
-  // for buffer write and read so that this doesn't need an external CDC FIFO)
-  output  wire [AXI_MM_WIDTH-1:0] m_axis_dma_tdata,
-  output  wire                    m_axis_dma_tvalid,
-  output  wire                    m_axis_dma_tlast,
-  output  wire             [15:0] m_axis_dma_tkeep,
-  input   wire                    m_axis_dma_tready,
+  input   logic [rx_pkg::DATA_WIDTH-1:0]  s00_axis_adc_tdata,
+  input   logic                           s00_axis_adc_tvalid,
+  input   logic [rx_pkg::DATA_WIDTH-1:0]  s02_axis_adc_tdata,
+  input   logic                           s02_axis_adc_tvalid,
+  input   logic [rx_pkg::DATA_WIDTH-1:0]  s10_axis_adc_tdata,
+  input   logic                           s10_axis_adc_tvalid,
+  input   logic [rx_pkg::DATA_WIDTH-1:0]  s12_axis_adc_tdata,
+  input   logic                           s12_axis_adc_tvalid,
+  input   logic [rx_pkg::DATA_WIDTH-1:0]  s20_axis_adc_tdata,
+  input   logic                           s20_axis_adc_tvalid,
+  input   logic [rx_pkg::DATA_WIDTH-1:0]  s22_axis_adc_tdata,
+  input   logic                           s22_axis_adc_tvalid,
+  input   logic [rx_pkg::DATA_WIDTH-1:0]  s30_axis_adc_tdata,
+  input   logic                           s30_axis_adc_tvalid,
+  input   logic [rx_pkg::DATA_WIDTH-1:0]  s32_axis_adc_tdata,
+  input   logic                           s32_axis_adc_tvalid,
 
   //////////////////////////////////////////////////////
   // DAC SIGNAL PATH
   //////////////////////////////////////////////////////
-  input wire dac_clk, dac_reset,
+  input logic dac_clk,
+  input logic dac_reset,
   // dac data out
-  output  wire [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0]  m00_axis_dac_tdata,
-  output  wire                                      m00_axis_dac_tvalid,
-  output  wire [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0]  m01_axis_dac_tdata,
-  output  wire                                      m01_axis_dac_tvalid,
-  output  wire [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0]  m02_axis_dac_tdata,
-  output  wire                                      m02_axis_dac_tvalid,
-  output  wire [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0]  m03_axis_dac_tdata,
-  output  wire                                      m03_axis_dac_tvalid,
-  output  wire [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0]  m10_axis_dac_tdata,
-  output  wire                                      m10_axis_dac_tvalid,
-  output  wire [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0]  m11_axis_dac_tdata,
-  output  wire                                      m11_axis_dac_tvalid,
-  output  wire [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0]  m12_axis_dac_tdata,
-  output  wire                                      m12_axis_dac_tvalid,
-  output  wire [PARALLEL_SAMPLES*SAMPLE_WIDTH-1:0]  m13_axis_dac_tdata,
-  output  wire                                      m13_axis_dac_tvalid,
+  output  logic [tx_pkg::DATA_WIDTH-1:0]  m00_axis_dac_tdata,
+  output  logic                           m00_axis_dac_tvalid,
+  output  logic [tx_pkg::DATA_WIDTH-1:0]  m01_axis_dac_tdata,
+  output  logic                           m01_axis_dac_tvalid,
+  output  logic [tx_pkg::DATA_WIDTH-1:0]  m02_axis_dac_tdata,
+  output  logic                           m02_axis_dac_tvalid,
+  output  logic [tx_pkg::DATA_WIDTH-1:0]  m03_axis_dac_tdata,
+  output  logic                           m03_axis_dac_tvalid,
+  output  logic [tx_pkg::DATA_WIDTH-1:0]  m10_axis_dac_tdata,
+  output  logic                           m10_axis_dac_tvalid,
+  output  logic [tx_pkg::DATA_WIDTH-1:0]  m11_axis_dac_tdata,
+  output  logic                           m11_axis_dac_tvalid,
+  output  logic [tx_pkg::DATA_WIDTH-1:0]  m12_axis_dac_tdata,
+  output  logic                           m12_axis_dac_tvalid,
+  output  logic [tx_pkg::DATA_WIDTH-1:0]  m13_axis_dac_tdata,
+  output  logic                           m13_axis_dac_tvalid,
 
   //////////////////////////////////////////////////////
   // SPI
   //////////////////////////////////////////////////////
-  output wire [CHANNELS-1:0]  lmh6401_cs_n,
-  output wire                 lmh6401_sck,
-  output wire                 lmh6401_sdi
+  output logic [rx_pkg::CHANNELS-1:0] lmh6401_cs_n,
+  output logic                        lmh6401_sck,
+  output logic                        lmh6401_sdi
 );
 
-//////////////////////////////////////////////////////
-// TRANSMIT TOP
-//////////////////////////////////////////////////////
-// AWG interfaces
-Axis_If #(.DWIDTH(AXI_MM_WIDTH)) ps_awg_dma_in ();
-Axis_If #(.DWIDTH($clog2(AWG_DEPTH)*CHANNELS)) ps_awg_frame_depth ();
-Axis_If #(.DWIDTH(64*CHANNELS)) ps_awg_burst_length ();
-Axis_If #(.DWIDTH(2*CHANNELS)) ps_awg_trigger_out_config ();
-Axis_If #(.DWIDTH(2)) ps_awg_start_stop ();
-Axis_If #(.DWIDTH(2)) ps_awg_dma_error ();
-// DAC prescaler interface
-Axis_If #(.DWIDTH((SCALE_WIDTH+OFFSET_WIDTH)*CHANNELS)) ps_dac_scale_offset ();
-// DDS interface
-Axis_If #(.DWIDTH(DDS_PHASE_BITS*CHANNELS)) ps_dds_phase_inc ();
-// Tri interface
-Axis_If #(.DWIDTH(TRI_PHASE_BITS*CHANNELS)) ps_tri_phase_inc ();
-// Trigger manager interface
-Axis_If #(.DWIDTH(1+2*CHANNELS)) ps_trigger_manager_config ();
-// Channel mux interface
-Axis_If #(.DWIDTH($clog2(3*CHANNELS)*CHANNELS)) ps_dac_mux_config ();
-// Outputs
-Realtime_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(CHANNELS)) dac_data_out ();
-logic dac_trigger_out, adc_trigger_in;
+///////////////////////////
+// DMA interfaces
+///////////////////////////
+// ADC
+Axis_If #(.DWIDTH(rx_pkg::AXI_MM_WIDTH)) m_axis_adc_dma ();
+assign m_axis_adc_dma_tdata   = m_axis_adc_dma.data;
+assign m_axis_adc_dma_tvalid  = m_axis_adc_dma.valid;
+assign m_axis_adc_dma_tlast   = m_axis_adc_dma.last;
+assign m_axis_adc_dma_tkeep   = '1;
+assign m_axis_adc_dma.ready   = m_axis_adc_dma_tready;
+// AWG
+Axis_If #(.DWIDTH(tx_pkg::AXI_MM_WIDTH)) s_axis_awg_dma ();
+assign s_axis_awg_dma.data   = s_axis_awg_dma_tdata;
+assign s_axis_awg_dma.valid  = s_axis_awg_dma_tvalid;
+assign s_axis_awg_dma.last   = s_axis_awg_dma_tlast;
+assign s_axis_awg_dma_tready = s_axis_awg_dma.ready;
 
-// connect DMA interface
-assign ps_awg_dma_in.data = s_axis_dma_tdata;
-assign ps_awg_dma_in.valid = s_axis_dma_tvalid;
-assign ps_awg_dma_in.last = s_axis_dma_tlast;
-assign s_axis_dma_tready = ps_awg_dma_in.ready;
+///////////////////////////
+// ADC status: write depth
+///////////////////////////
+Axis_If #(.DWIDTH(rx_pkg::CHANNELS*($clog2(buffer_pkg::SAMPLE_BUFFER_DEPTH)+1)))  m_axis_samples_write_depth ();
+assign m_axis_samples_write_depth_tdata   = m_axis_samples_write_depth.data;
+assign m_axis_samples_write_depth_tvalid  = m_axis_samples_write_depth.valid;
+assign m_axis_samples_write_depth_tlast   = m_axis_samples_write_depth.last;
+assign m_axis_samples_write_depth.ready   = m_axis_samples_write_depth_tready;
+Axis_If #(.DWIDTH(rx_pkg::CHANNELS*($clog2(buffer_pkg::TSTAMP_BUFFER_DEPTH)+1)))  m_axis_timestamps_write_depth ();
+assign m_axis_timestamps_write_depth_tdata   = m_axis_timestamps_write_depth.data;
+assign m_axis_timestamps_write_depth_tvalid  = m_axis_timestamps_write_depth.valid;
+assign m_axis_timestamps_write_depth_tlast   = m_axis_timestamps_write_depth.last;
+assign m_axis_timestamps_write_depth.ready   = m_axis_timestamps_write_depth_tready;
+///////////////////////////
+// ADC configuration
+///////////////////////////
+// buffer capture arm/start/stop
+Axis_If #(.DWIDTH(3)) s_axis_capture_arm_start_stop ();
+assign s_axis_capture_arm_start_stop.data   = s_axis_capture_arm_start_stop_tdata;
+assign s_axis_capture_arm_start_stop.valid  = s_axis_capture_arm_start_stop_tvalid;
+assign s_axis_capture_arm_start_stop_tready = s_axis_capture_arm_start_stop.ready;
+// buffer banking mode
+Axis_If #(.DWIDTH(buffer_pkg::BANKING_MODE_WIDTH)) s_axis_capture_banking_mode ();
+assign s_axis_capture_banking_mode.data   = s_axis_capture_banking_mode_tdata;
+assign s_axis_capture_banking_mode.valid  = s_axis_capture_banking_mode_tvalid;
+assign s_axis_capture_banking_mode_tready = s_axis_capture_banking_mode.ready;
+// buffer capture reset
+Axis_If #(.DWIDTH(1)) s_axis_capture_sw_reset ();
+assign s_axis_capture_sw_reset.data   = s_axis_capture_sw_reset_tdata;
+assign s_axis_capture_sw_reset.valid  = s_axis_capture_sw_reset_tvalid;
+assign s_axis_capture_sw_reset_tready = s_axis_capture_sw_reset.ready;
+// buffer readout reset
+Axis_If #(.DWIDTH(1)) s_axis_readout_sw_reset ();
+assign s_axis_readout_sw_reset.data   = s_axis_readout_sw_reset_tdata;
+assign s_axis_readout_sw_reset.valid  = s_axis_readout_sw_reset_tvalid;
+assign s_axis_readout_sw_reset_tready = s_axis_readout_sw_reset.ready;
+// buffer readout start
+Axis_If #(.DWIDTH(1)) s_axis_readout_start ();
+assign s_axis_readout_start.data   = s_axis_readout_start_tdata;
+assign s_axis_readout_start.valid  = s_axis_readout_start_tvalid;
+assign s_axis_readout_start_tready = s_axis_readout_start.ready;
+// sample discriminator thresholds
+Axis_If #(.DWIDTH(2*rx_pkg::CHANNELS*rx_pkg::SAMPLE_WIDTH)) s_axis_discriminator_thresholds ();
+assign s_axis_discriminator_thresholds.data   = s_axis_discriminator_thresholds_tdata;
+assign s_axis_discriminator_thresholds.valid  = s_axis_discriminator_thresholds_tvalid;
+assign s_axis_discriminator_thresholds_tready = s_axis_discriminator_thresholds.ready;
+// sample discriminator delays
+Axis_If #(.DWIDTH(3*rx_pkg::CHANNELS*$clog2(DISCRIMINATOR_MAX_DELAY))) s_axis_discriminator_delays ();
+assign s_axis_discriminator_delays.data   = s_axis_discriminator_delays_tdata;
+assign s_axis_discriminator_delays.valid  = s_axis_discriminator_delays_tvalid;
+assign s_axis_discriminator_delays_tready = s_axis_discriminator_delays.ready;
+// sample discriminator trigger select
+Axis_If #(.DWIDTH(rx_pkg::CHANNELS*$clog2(rx_pkg::CHANNELS+tx_pkg::CHANNELS))) s_axis_discriminator_trigger_source ();
+assign s_axis_discriminator_trigger_source.data   = s_axis_discriminator_trigger_source_tdata;
+assign s_axis_discriminator_trigger_source.valid  = s_axis_discriminator_trigger_source_tvalid;
+assign s_axis_discriminator_trigger_source_tready = s_axis_discriminator_trigger_source.ready;
+// sample discriminator bypass
+Axis_If #(.DWIDTH(rx_pkg::CHANNELS)) s_axis_discriminator_bypass ();
+assign s_axis_discriminator_bypass.data   = s_axis_discriminator_bypass_tdata;
+assign s_axis_discriminator_bypass.valid  = s_axis_discriminator_bypass_tvalid;
+assign s_axis_discriminator_bypass_tready = s_axis_discriminator_bypass.ready;
+// channel mux config
+Axis_If #(.DWIDTH($clog2(2*rx_pkg::CHANNELS)*rx_pkg::CHANNELS)) s_axis_receive_channel_mux_config ();
+assign s_axis_receive_channel_mux_config.data   = s_axis_receive_channel_mux_config_tdata;
+assign s_axis_receive_channel_mux_config.valid  = s_axis_receive_channel_mux_config_tvalid;
+assign s_axis_receive_channel_mux_config_tready = s_axis_receive_channel_mux_config.ready;
+// capture trigger config
+Axis_If #(.DWIDTH(1+tx_pkg::CHANNELS)) s_axis_capture_trigger_config ();
+assign s_axis_capture_trigger_config.data   = s_axis_capture_trigger_config_tdata;
+assign s_axis_capture_trigger_config.valid  = s_axis_capture_trigger_config_tvalid;
+assign s_axis_capture_trigger_config_tready = s_axis_capture_trigger_config.ready;
 
-// connect configuration register interfaces
-assign ps_awg_frame_depth.data = s_axis_awg_frame_depth_tdata;
-assign ps_awg_frame_depth.valid = s_axis_awg_frame_depth_tvalid;
-assign s_axis_awg_frame_depth_tready = ps_awg_frame_depth.ready;
+///////////////////////////
+// LMH6401 configuration
+///////////////////////////
+Axis_If #(.DWIDTH(16+$clog2(tx_pkg::CHANNELS))) s_axis_lmh6401_config ();
+assign s_axis_lmh6401_config.data   = s_axis_lmh6401_config_tdata;
+assign s_axis_lmh6401_config.valid  = s_axis_lmh6401_config_tvalid;
+assign s_axis_lmh6401_config_tready = s_axis_lmh6401_config.ready;
 
-assign ps_awg_burst_length.data = s_axis_awg_burst_length_tdata;
-assign ps_awg_burst_length.valid = s_axis_awg_burst_length_tvalid;
-assign s_axis_awg_burst_length_tready = ps_awg_burst_length.ready;
+SPI_Parallel_If #(.CHANNELS(rx_pkg::CHANNELS)) lmh6401_spi ();
+assign lmh6401_cs_n = lmh6401_spi.cs_n;
+assign lmh6401_sck = lmh6401_spi.sck;
+assign lmh6401_sdi = lmh6401_spi.sdi;
 
-assign ps_awg_trigger_out_config.data = s_axis_awg_trigger_out_config_tdata;
-assign ps_awg_trigger_out_config.valid = s_axis_awg_trigger_out_config_tvalid;
-assign s_axis_awg_trigger_out_config_tready = ps_awg_trigger_out_config.ready;
+///////////////////////////
+// DAC status: DMA error
+///////////////////////////
+Axis_If #(.DWIDTH(2)) m_axis_awg_dma_error ();
+assign m_axis_awg_dma_error_tdata   = m_axis_awg_dma_error.data;
+assign m_axis_awg_dma_error_tvalid  = m_axis_awg_dma_error.valid;
+assign m_axis_awg_dma_error_tlast   = m_axis_awg_dma_error.last;
+assign m_axis_awg_dma_error.ready   = m_axis_awg_dma_error_tready;
 
-assign ps_awg_start_stop.data = s_axis_awg_start_stop_tdata;
-assign ps_awg_start_stop.valid = s_axis_awg_start_stop_tvalid;
-assign s_axis_awg_start_stop_tready = ps_awg_start_stop.ready;
+///////////////////////////
+// DAC configuration
+///////////////////////////
+// AWG frame depth
+Axis_If #(.DWIDTH($clog2(AWG_DEPTH)*tx_pkg::CHANNELS)) s_axis_awg_frame_depth ();
+assign s_axis_awg_frame_depth.data   = s_axis_awg_frame_depth_tdata;
+assign s_axis_awg_frame_depth.valid  = s_axis_awg_frame_depth_tvalid;
+assign s_axis_awg_frame_depth_tready = s_axis_awg_frame_depth.ready;
+// AWG trigger output config
+Axis_If #(.DWIDTH(2*tx_pkg::CHANNELS)) s_axis_awg_trigger_config ();
+assign s_axis_awg_trigger_config.data   = s_axis_awg_trigger_config_tdata;
+assign s_axis_awg_trigger_config.valid  = s_axis_awg_trigger_config_tvalid;
+assign s_axis_awg_trigger_config_tready = s_axis_awg_trigger_config.ready;
+// AWG burst length
+Axis_If #(.DWIDTH(64*tx_pkg::CHANNELS)) s_axis_awg_burst_length ();
+assign s_axis_awg_burst_length.data   = s_axis_awg_burst_length_tdata;
+assign s_axis_awg_burst_length.valid  = s_axis_awg_burst_length_tvalid;
+assign s_axis_awg_burst_length_tready = s_axis_awg_burst_length.ready;
+// AWG start/stop
+Axis_If #(.DWIDTH(2)) s_axis_awg_start_stop ();
+assign s_axis_awg_start_stop.data   = s_axis_awg_start_stop_tdata;
+assign s_axis_awg_start_stop.valid  = s_axis_awg_start_stop_tvalid;
+assign s_axis_awg_start_stop_tready = s_axis_awg_start_stop.ready;
+// DAC scale/offset
+Axis_If #(.DWIDTH((SCALE_WIDTH+OFFSET_WIDTH)*tx_pkg::CHANNELS)) s_axis_dac_scale_offset ();
+assign s_axis_dac_scale_offset.data   = s_axis_dac_scale_offset_tdata;
+assign s_axis_dac_scale_offset.valid  = s_axis_dac_scale_offset_tvalid;
+assign s_axis_dac_scale_offset_tready = s_axis_dac_scale_offset.ready;
+// DDS phase increment
+Axis_If #(.DWIDTH(DDS_PHASE_BITS*tx_pkg::CHANNELS)) s_axis_dds_phase_inc ();
+assign s_axis_dds_phase_inc.data   = s_axis_dds_phase_inc_tdata;
+assign s_axis_dds_phase_inc.valid  = s_axis_dds_phase_inc_tvalid;
+assign s_axis_dds_phase_inc_tready = s_axis_dds_phase_inc.ready;
+// Triangle-wave phase increment
+Axis_If #(.DWIDTH(TRI_PHASE_BITS*tx_pkg::CHANNELS)) s_axis_tri_phase_inc ();
+assign s_axis_tri_phase_inc.data   = s_axis_tri_phase_inc_tdata;
+assign s_axis_tri_phase_inc.valid  = s_axis_tri_phase_inc_tvalid;
+assign s_axis_tri_phase_inc_tready = s_axis_tri_phase_inc.ready;
+// DAC siggen source mux
+Axis_If #(.DWIDTH($clog2(3*tx_pkg::CHANNELS)*tx_pkg::CHANNELS)) s_axis_transmit_channel_mux ();
+assign s_axis_transmit_channel_mux.data   = s_axis_transmit_channel_mux_tdata;
+assign s_axis_transmit_channel_mux.valid  = s_axis_transmit_channel_mux_tvalid;
+assign s_axis_transmit_channel_mux_tready = s_axis_transmit_channel_mux.ready;
 
-assign m_axis_awg_dma_error_tdata = ps_awg_dma_error.data;
-assign m_axis_awg_dma_error_tvalid = ps_awg_dma_error.valid;
-assign m_axis_awg_dma_error_tlast = ps_awg_dma_error.last;
-assign ps_awg_dma_error.ready = m_axis_awg_dma_error_tready;
+Realtime_Parallel_If #(.DWIDTH(tx_pkg::DATA_WIDTH), .CHANNELS(tx_pkg::CHANNELS)) m_dac_data ();
+assign m00_axis_dac_tdata = m_dac_data.data[0];
+assign m01_axis_dac_tdata = m_dac_data.data[1];
+assign m02_axis_dac_tdata = m_dac_data.data[2];
+assign m03_axis_dac_tdata = m_dac_data.data[3];
+assign m10_axis_dac_tdata = m_dac_data.data[4];
+assign m11_axis_dac_tdata = m_dac_data.data[5];
+assign m12_axis_dac_tdata = m_dac_data.data[6];
+assign m13_axis_dac_tdata = m_dac_data.data[7];
+assign m00_axis_dac_tvalid = m_dac_data.valid[0];
+assign m01_axis_dac_tvalid = m_dac_data.valid[1];
+assign m02_axis_dac_tvalid = m_dac_data.valid[2];
+assign m03_axis_dac_tvalid = m_dac_data.valid[3];
+assign m10_axis_dac_tvalid = m_dac_data.valid[4];
+assign m11_axis_dac_tvalid = m_dac_data.valid[5];
+assign m12_axis_dac_tvalid = m_dac_data.valid[6];
+assign m13_axis_dac_tvalid = m_dac_data.valid[7];
+Realtime_Parallel_If #(.DWIDTH(rx_pkg::DATA_WIDTH), .CHANNELS(rx_pkg::CHANNELS)) s_adc_data ();
+assign s_adc_data.data[0] = s00_axis_adc_tdata;
+assign s_adc_data.data[1] = s02_axis_adc_tdata;
+assign s_adc_data.data[2] = s10_axis_adc_tdata;
+assign s_adc_data.data[3] = s12_axis_adc_tdata;
+assign s_adc_data.data[4] = s20_axis_adc_tdata;
+assign s_adc_data.data[5] = s22_axis_adc_tdata;
+assign s_adc_data.data[6] = s30_axis_adc_tdata;
+assign s_adc_data.data[7] = s32_axis_adc_tdata;
+assign s_adc_data.valid[0] = s00_axis_adc_tvalid;
+assign s_adc_data.valid[1] = s02_axis_adc_tvalid;
+assign s_adc_data.valid[2] = s10_axis_adc_tvalid;
+assign s_adc_data.valid[3] = s12_axis_adc_tvalid;
+assign s_adc_data.valid[4] = s20_axis_adc_tvalid;
+assign s_adc_data.valid[5] = s22_axis_adc_tvalid;
+assign s_adc_data.valid[6] = s30_axis_adc_tvalid;
+assign s_adc_data.valid[7] = s32_axis_adc_tvalid;
 
-assign ps_dac_scale_offset.data = s_axis_dac_scale_offset_config_tdata;
-assign ps_dac_scale_offset.valid = s_axis_dac_scale_offset_config_tvalid;
-assign s_axis_dac_scale_offset_config_tready = ps_dac_scale_offset.ready;
-
-assign ps_dds_phase_inc.data = s_axis_dds_phase_inc_tdata;
-assign ps_dds_phase_inc.valid = s_axis_dds_phase_inc_tvalid;
-assign s_axis_dds_phase_inc_tready = ps_dds_phase_inc.ready;
-
-assign ps_tri_phase_inc.data = s_axis_tri_phase_inc_tdata;
-assign ps_tri_phase_inc.valid = s_axis_tri_phase_inc_tvalid;
-assign s_axis_tri_phase_inc_tready = ps_tri_phase_inc.ready;
-
-assign ps_trigger_manager_config.data = s_axis_trigger_manager_config_tdata;
-assign ps_trigger_manager_config.valid = s_axis_trigger_manager_config_tvalid;
-assign s_axis_trigger_manager_config_tready = ps_trigger_manager_config.ready;
-
-assign ps_dac_mux_config.data = s_axis_dac_mux_config_tdata;
-assign ps_dac_mux_config.valid = s_axis_dac_mux_config_tvalid;
-assign s_axis_dac_mux_config_tready = ps_dac_mux_config.ready;
-
-// connect dac output
-assign m00_axis_dac_tdata = dac_data_out.data[0];
-assign m01_axis_dac_tdata = dac_data_out.data[1];
-assign m02_axis_dac_tdata = dac_data_out.data[2];
-assign m03_axis_dac_tdata = dac_data_out.data[3];
-assign m10_axis_dac_tdata = dac_data_out.data[4];
-assign m11_axis_dac_tdata = dac_data_out.data[5];
-assign m12_axis_dac_tdata = dac_data_out.data[6];
-assign m13_axis_dac_tdata = dac_data_out.data[7];
-assign m00_axis_dac_tvalid = dac_data_out.valid[0];
-assign m01_axis_dac_tvalid = dac_data_out.valid[1];
-assign m02_axis_dac_tvalid = dac_data_out.valid[2];
-assign m03_axis_dac_tvalid = dac_data_out.valid[3];
-assign m10_axis_dac_tvalid = dac_data_out.valid[4];
-assign m11_axis_dac_tvalid = dac_data_out.valid[5];
-assign m12_axis_dac_tvalid = dac_data_out.valid[6];
-assign m13_axis_dac_tvalid = dac_data_out.valid[7];
-
-// CDC to pass trigger to ADC
-xpm_cdc_pulse #(
-  .DEST_SYNC_FF(4), // 4 synchronization stages
-  .INIT_SYNC_FF(0), // don't allow behavioral initialization
-  .REG_OUTPUT(1), // register the output
-  .RST_USED(1), // use resets
-  .SIM_ASSERT_CHK(1) // report potential violations
-) start_cdc_i (
-  .src_clk(dac_clk),
-  .src_rst(dac_reset),
-  .src_pulse(dac_trigger_out),
+// CDC triggers from AWG -> sample buffer
+// TODO actually implement proper deterministic-delay triggering
+logic [tx_pkg::CHANNELS-1:0] adc_digital_triggers;
+logic [tx_pkg::CHANNELS-1:0] dac_digital_triggers;
+xpm_cdc_array_single #(
+  .DEST_SYNC_FF(4), // number of registers used to sync to dest_clk
+  .INIT_SYNC_FF(0), // disable simulation initialization of sync regs
+  .SIM_ASSERT_CHK(1), // report potential misuse
+  .SRC_INPUT_REG(1), // register input with src_clk
+  .WIDTH(tx_pkg::CHANNELS)
+) trigger_cdc_i (
   .dest_clk(adc_clk),
-  .dest_rst(adc_reset),
-  .dest_pulse(adc_trigger_in)
+  .dest_out(adc_digital_triggers),
+  .src_clk(dac_clk),
+  .src_in(dac_digital_triggers)
 );
 
+///////////////////////////////////////////
+// Receive top
+///////////////////////////////////////////
+receive_top #(
+  .DISCRIMINATOR_MAX_DELAY(DISCRIMINATOR_MAX_DELAY),
+  .BUFFER_READ_LATENCY(BUFFER_READ_LATENCY)
+) rx_top_i (
+  .adc_clk,
+  .adc_reset,
+  .adc_data_in(s_adc_data),
+  .adc_digital_triggers,
+  .ps_clk,
+  .ps_reset,
+  .ps_readout_data(m_axis_adc_dma),
+  .ps_samples_write_depth(m_axis_samples_write_depth),
+  .ps_timestamps_write_depth(m_axis_timestamps_write_depth),
+  .ps_capture_arm_start_stop(s_axis_capture_arm_start_stop),
+  .ps_capture_banking_mode(s_axis_capture_banking_mode),
+  .ps_capture_sw_reset(s_axis_capture_sw_reset),
+  .ps_readout_sw_reset(s_axis_readout_sw_reset),
+  .ps_readout_start(s_axis_readout_start),
+  .ps_discriminator_thresholds(s_axis_discriminator_thresholds),
+  .ps_discriminator_delays(s_axis_discriminator_delays),
+  .ps_discriminator_trigger_select(s_axis_discriminator_trigger_source),
+  .ps_discriminator_bypass(s_axis_discriminator_bypass),
+  .ps_channel_mux_config(s_axis_receive_channel_mux_config),
+  .ps_capture_digital_trigger_select(s_axis_capture_trigger_config)
+);
+
+///////////////////////////////////////////
+// SPI
+///////////////////////////////////////////
+lmh6401_spi #(
+  .AXIS_CLK_FREQ(100_000_000),
+  .SPI_CLK_FREQ(1_000_000),
+  .NUM_CHANNELS(rx_pkg::CHANNELS)
+) lmh6401_spi_i (
+  .clk(ps_clk),
+  .reset(ps_reset),
+  .command_in(s_axis_lmh6401_config),
+  .spi(lmh6401_spi)
+);
+
+///////////////////////////////////////////
+// Transmit top
+///////////////////////////////////////////
 transmit_top #(
-  .CHANNELS(CHANNELS),
-  .PARALLEL_SAMPLES(PARALLEL_SAMPLES),
-  .SAMPLE_WIDTH(SAMPLE_WIDTH),
   .DDS_PHASE_BITS(DDS_PHASE_BITS),
   .DDS_QUANT_BITS(DDS_QUANT_BITS),
   .SCALE_WIDTH(SCALE_WIDTH),
   .OFFSET_WIDTH(OFFSET_WIDTH),
   .SCALE_INT_BITS(SCALE_INT_BITS),
   .AWG_DEPTH(AWG_DEPTH),
-  .TRI_PHASE_BITS(TRI_PHASE_BITS),
-  .AXI_MM_WIDTH(AXI_MM_WIDTH)
-) transmit_top_i (
-  .ps_clk,
-  .ps_reset,
-  .ps_awg_dma_in,
-  .ps_awg_frame_depth,
-  .ps_awg_burst_length,
-  .ps_awg_trigger_out_config,
-  .ps_awg_start_stop,
-  .ps_awg_dma_error,
-  .ps_scale_offset(ps_dac_scale_offset),
-  .ps_dds_phase_inc,
-  .ps_tri_phase_inc,
-  .ps_trigger_config(ps_trigger_manager_config),
-  .ps_channel_mux_config(ps_dac_mux_config),
+  .TRI_PHASE_BITS(TRI_PHASE_BITS)
+) tx_top_i (
   .dac_clk,
   .dac_reset,
-  .dac_data_out,
-  .dac_trigger_out
-);
-
-//////////////////////////////////////////////////////
-// RECEIVE TOP
-//////////////////////////////////////////////////////
-Realtime_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(CHANNELS)) adc_data_in ();
-Axis_If #(.DWIDTH(AXI_MM_WIDTH)) adc_dma_out ();
-// DUT configuration interfaces
-Axis_If #(.DWIDTH(CHANNELS*SAMPLE_WIDTH*2)) ps_sample_discriminator_config ();
-Axis_If #(.DWIDTH($clog2($clog2(CHANNELS)+1))) ps_buffer_config ();
-Axis_If #(.DWIDTH(2)) ps_buffer_start_stop ();
-Axis_If #(.DWIDTH(CHANNELS*$clog2(2*CHANNELS))) ps_channel_mux_config ();
-Axis_If #(.DWIDTH(32)) ps_buffer_timestamp_width ();
-Axis_If #(.DWIDTH(1)) ps_buffer_capture_done ();
-Axis_If #(.DWIDTH(16+$clog2(CHANNELS))) ps_lmh6401_config ();
-
-// connect DMA interface
-assign m_axis_dma_tdata = adc_dma_out.data;
-assign m_axis_dma_tvalid = adc_dma_out.valid;
-assign m_axis_dma_tlast = adc_dma_out.last;
-assign m_axis_dma_tkeep = 16'hffff;
-assign adc_dma_out.ready = m_axis_dma_tready;
-
-// connect configuration register interfaces
-assign ps_sample_discriminator_config.data = s_axis_sample_discriminator_config_tdata;
-assign ps_sample_discriminator_config.valid = s_axis_sample_discriminator_config_tvalid;
-assign s_axis_sample_discriminator_config_tready = ps_sample_discriminator_config.ready;
-
-assign ps_buffer_config.data = s_axis_buffer_config_tdata;
-assign ps_buffer_config.valid = s_axis_buffer_config_tvalid;
-assign s_axis_buffer_config_tready = ps_buffer_config.ready;
-
-assign ps_buffer_start_stop.data = s_axis_buffer_start_stop_tdata;
-assign ps_buffer_start_stop.valid = s_axis_buffer_start_stop_tvalid;
-assign s_axis_buffer_start_stop_tready = ps_buffer_start_stop.ready;
-
-assign ps_channel_mux_config.data = s_axis_adc_mux_config_tdata;
-assign ps_channel_mux_config.valid = s_axis_adc_mux_config_tvalid;
-assign s_axis_adc_mux_config_tready = ps_channel_mux_config.ready;
-
-assign m_axis_buffer_timestamp_width_tdata = ps_buffer_timestamp_width.data;
-assign m_axis_buffer_timestamp_width_tvalid = ps_buffer_timestamp_width.valid;
-assign m_axis_buffer_timestamp_width_tlast = ps_buffer_timestamp_width.last;
-assign ps_buffer_timestamp_width.ready = m_axis_buffer_timestamp_width_tready;
-
-assign m_axis_buffer_capture_done_tdata = ps_buffer_capture_done.data;
-assign m_axis_buffer_capture_done_tvalid = ps_buffer_capture_done.valid;
-assign m_axis_buffer_capture_done_tlast = ps_buffer_capture_done.last;
-assign ps_buffer_capture_done.ready = m_axis_buffer_capture_done_tready;
-
-assign ps_lmh6401_config.data = s_axis_lmh6401_config_tdata;
-assign ps_lmh6401_config.valid = s_axis_lmh6401_config_tvalid;
-assign s_axis_lmh6401_config_tready = ps_lmh6401_config.ready;
-
-// connect datastream interface
-assign adc_data_in.data[0] = s00_axis_adc_tdata;
-assign adc_data_in.data[1] = s02_axis_adc_tdata;
-assign adc_data_in.data[2] = s10_axis_adc_tdata;
-assign adc_data_in.data[3] = s12_axis_adc_tdata;
-assign adc_data_in.data[4] = s20_axis_adc_tdata;
-assign adc_data_in.data[5] = s22_axis_adc_tdata;
-assign adc_data_in.data[6] = s30_axis_adc_tdata;
-assign adc_data_in.data[7] = s32_axis_adc_tdata;
-assign adc_data_in.valid[0] = s00_axis_adc_tvalid;
-assign adc_data_in.valid[1] = s02_axis_adc_tvalid;
-assign adc_data_in.valid[2] = s10_axis_adc_tvalid;
-assign adc_data_in.valid[3] = s12_axis_adc_tvalid;
-assign adc_data_in.valid[4] = s20_axis_adc_tvalid;
-assign adc_data_in.valid[5] = s22_axis_adc_tvalid;
-assign adc_data_in.valid[6] = s30_axis_adc_tvalid;
-assign adc_data_in.valid[7] = s32_axis_adc_tvalid;
-
-receive_top #(
-  .CHANNELS(CHANNELS),
-  .PARALLEL_SAMPLES(PARALLEL_SAMPLES),
-  .SAMPLE_WIDTH(SAMPLE_WIDTH),
-  .AXI_MM_WIDTH(AXI_MM_WIDTH),
-  .TSTAMP_BUFFER_DEPTH(TSTAMP_BUFFER_DEPTH),
-  .DATA_BUFFER_DEPTH(DATA_BUFFER_DEPTH),
-  .APPROX_CLOCK_WIDTH(APPROX_CLOCK_WIDTH)
-) receive_top_i (
+  .dac_data_out(m_dac_data),
+  .dac_triggers_out(dac_digital_triggers),
   .ps_clk,
   .ps_reset,
-  .ps_sample_discriminator_config,
-  .ps_buffer_config,
-  .ps_buffer_start_stop,
-  .ps_channel_mux_config,
-  .ps_buffer_timestamp_width,
-  .ps_buffer_capture_done,
-  .adc_clk,
-  .adc_reset,
-  .adc_data_in,
-  .adc_dma_out,
-  .adc_trigger_in
+  .ps_awg_dma_in(s_axis_awg_dma),
+  .ps_awg_frame_depth(s_axis_awg_frame_depth),
+  .ps_awg_trigger_out_config(s_axis_awg_trigger_config),
+  .ps_awg_burst_length(s_axis_awg_burst_length),
+  .ps_awg_start_stop(s_axis_awg_start_stop),
+  .ps_awg_dma_error(m_axis_awg_dma_error),
+  .ps_scale_offset(s_axis_dac_scale_offset),
+  .ps_dds_phase_inc(s_axis_dds_phase_inc),
+  .ps_tri_phase_inc(s_axis_tri_phase_inc),
+  .ps_channel_mux_config(s_axis_transmit_channel_mux)
 );
-
-SPI_Parallel_If #(.CHANNELS(CHANNELS)) spi ();
-
-assign lmh6401_cs_n = spi.cs_n;
-assign lmh6401_sck = spi.sck;
-assign lmh6401_sdi = spi.sdi;
-
-// LMH6401 SPI interface
-lmh6401_spi #(
-  .AXIS_CLK_FREQ(100_000_000),
-  .SPI_CLK_FREQ(1_000_000),
-  .NUM_CHANNELS(CHANNELS)
-) lmh6401_spi_i (
-  .clk(ps_clk),
-  .reset(ps_reset),
-  .command_in(ps_lmh6401_config),
-  .spi
-);
-
 
 endmodule

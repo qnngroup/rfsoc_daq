@@ -33,7 +33,7 @@ axis_config_reg_cdc #(
 assign dac_phase_inc.ready = 1'b1; // always accept new phase inc
 
 logic [CHANNELS-1:0][PARALLEL_SAMPLES-1:0][PHASE_BITS-1:0] dac_phase_inc_reg;
-logic [CHANNELS-1:0][PARALLEL_SAMPLES-1:0][PHASE_BITS-1:0] dac_sample_phase, dac_sample_phase_d;
+logic [CHANNELS-1:0][PARALLEL_SAMPLES-1:0][PHASE_BITS-1:0] dac_sample_phase;
 logic [CHANNELS-1:0][PHASE_BITS-1:0] dac_cycle_phase;
 
 localparam int LATENCY = 2;
@@ -45,7 +45,6 @@ always_ff @(posedge dac_clk) begin
     dac_phase_inc_reg <= '0;
     dac_cycle_phase <= '0;
     dac_sample_phase <= '0;
-    dac_sample_phase_d <= '0;
     dac_data_valid <= '0;
   end else begin
     // load new phase_inc
@@ -72,7 +71,6 @@ always_ff @(posedge dac_clk) begin
       end
     end
     dac_data_valid <= {dac_data_valid[LATENCY-2:0], 1'b1};
-    dac_sample_phase_d <= dac_sample_phase;
   end
 end
 

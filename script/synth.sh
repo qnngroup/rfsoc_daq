@@ -1,9 +1,9 @@
 #!/usr/bin/bash
 
 # to rerun project setup:
-# run ./bitstream.sh 1
+# run ./synth.sh 1
 # to use existing project state:
-# run ./bitstream.sh
+# run ./synth.sh
 
 script_dir=$(dirname "$(realpath $0)")
 
@@ -14,4 +14,4 @@ if [[ $# -ne 0 ]]; then
   fi
 fi
 
-vivado -mode batch -source $script_dir/make_bitstream.tcl -notrace
+vivado -mode batch -source $script_dir/run_synth.tcl -notrace

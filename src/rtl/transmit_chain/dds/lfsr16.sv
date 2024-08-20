@@ -12,7 +12,7 @@ module lfsr16 #(
 
 localparam [15:0] LFSR_POLY = 16'hb400;
 
-function automatic logic [15:0] lfsr_step(input logic [15:0] state, input int N);
+function automatic logic [15:0] lfsr_step(input logic [15:0] state_init, input int N);
   // Galois right-shift LFSR: https://en.wikipedia.org/wiki/Linear-feedback_shift_register
   // equivalent C program:
   //    unsigned state;
@@ -20,6 +20,7 @@ function automatic logic [15:0] lfsr_step(input logic [15:0] state, input int N)
   //    state >>= state;
   //    if (lsb)
   //      state ^= LFSR_POLY; // 0xb400
+  logic [15:0] state = state_init;
   for (int i = 0; i < N; i++) begin
     state = ({16{state[0]}} & LFSR_POLY) ^ {1'b0, state[15:1]};
   end
