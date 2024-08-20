@@ -77,7 +77,7 @@ module daq_axis #(
   output wire s_axis_awg_dma_tready,
 
   (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 m_axis_samples_write_depth TDATA" *)
-  output wire [`ROUNDUP32(8*14)-1:0] m_axis_samples_write_depth_tdata,
+  output wire [`ROUNDUP32(8*12)-1:0] m_axis_samples_write_depth_tdata,
   (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 m_axis_samples_write_depth TVALID" *)
   output wire m_axis_samples_write_depth_tvalid,
   (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 m_axis_samples_write_depth TLAST" *)
