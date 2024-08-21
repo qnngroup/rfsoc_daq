@@ -407,8 +407,8 @@ assign s_adc_data.valid[6] = s30_axis_adc_tvalid;
 assign s_adc_data.valid[7] = s32_axis_adc_tvalid;
 Realtime_Parallel_If #(.DWIDTH(rx_pkg::DATA_WIDTH), .CHANNELS(rx_pkg::CHANNELS)) s_adc_data_d ();
 realtime_delay #(
-  .DATA_WIDTH(tx_pkg::DATA_WIDTH),
-  .CHANNELS(tx_pkg::CHANNELS),
+  .DATA_WIDTH(rx_pkg::DATA_WIDTH),
+  .CHANNELS(rx_pkg::CHANNELS),
   .DELAY(2)
 ) s_adc_delay_i (
   .clk(adc_clk),
