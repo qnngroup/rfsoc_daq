@@ -111,7 +111,7 @@ generate
           driver_i.send_samples($urandom_range(3,100), 1'b1, 1'b1);
           // send last signal
           driver_i.send_last();
-          do begin @(posedge clk); end while (!(data_out.last && data_out.ok));
+          do begin @(posedge clk); end while (~(data_out.last & data_out.valid & data_out.ready));
           // check the output data matches the input
           repeat (100) @(posedge clk);
           debug.display($sformatf(

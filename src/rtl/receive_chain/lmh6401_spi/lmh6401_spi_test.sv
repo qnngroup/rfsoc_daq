@@ -50,7 +50,7 @@ always @(posedge clk) begin
   if (reset) begin
     {addr_in, data_in} <= '0;
   end else begin
-    if (command_in.ok) begin
+    if (command_in.valid & command_in.ready) begin
       // send new random data and address
       data_in <= $urandom_range(0, 15'h7fff);
       addr_in <= $urandom_range(0, NUM_CHANNELS-1);
@@ -131,7 +131,7 @@ initial begin
   repeat (500) begin
     command_in.valid <= $urandom() & 1'b1;
     @(posedge clk);
-    if (command_in.ok) begin
+    if (command_in.valid & command_in.ready) begin
       // wait 16 cycles of SCK
       repeat (16) @(negedge spi.sck);
     end

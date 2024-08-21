@@ -211,7 +211,7 @@ initial begin
                 repeat (10) @(posedge ps_clk);
                 tb_i.start_readout(debug, 1'b1);
                 repeat (BUFFER_DEPTH*rx_pkg::CHANNELS/2) begin
-                  do @(posedge ps_clk); while (~ps_readout_data.ok);
+                  do @(posedge ps_clk); while (~(ps_readout_data.valid & ps_readout_data.ready));
                 end
                 if ((readout_reset_mode == READOUT_RESET) && (reset_during_readout == 0)) begin
                   // send reset in the middle of readout
@@ -225,7 +225,7 @@ initial begin
                 end else begin
                   // finish readout
                   debug.display("waiting for readout to finish", sim_util_pkg::DEBUG);
-                  do @(posedge ps_clk); while (~(ps_readout_data.ok & ps_readout_data.last));
+                  do @(posedge ps_clk); while (~(ps_readout_data.valid & ps_readout_data.ready & ps_readout_data.last));
                 end
               end
               // extra clock cycle to make sure we get the last sample

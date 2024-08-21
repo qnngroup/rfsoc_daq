@@ -19,7 +19,7 @@ logic [DWIDTH-1:0] data_q [$];
 int last_q [$];
 
 always @(posedge clk) begin
-  if (intf.ok) begin
+  if (intf.valid & intf.ready) begin
     data_q.push_front(intf.data);
     if (intf.last) begin
       last_q.push_front(data_q.size());

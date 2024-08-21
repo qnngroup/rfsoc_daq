@@ -51,7 +51,7 @@ always_ff @(posedge clk) begin
     spi.sdi <= 1'b0;
   end else begin
     unique case (state)
-      IDLE: if (command_in.ok) begin 
+      IDLE: if (command_in.valid & command_in.ready) begin 
         state <= SENDING;
         addr <= command_in.data[16+:$clog2(NUM_CHANNELS)];
         // only perform writes, so set MSB of data to 0 so we don't

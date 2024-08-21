@@ -196,7 +196,7 @@ initial begin
       end
     end
     // wait until readout finishes
-    do @(posedge ps_clk); while (~(ps_readout_data.ok & ps_readout_data.last));
+    do @(posedge ps_clk); while (~(ps_readout_data.valid & ps_readout_data.ready & ps_readout_data.last));
     // check output (4 active channels)
     tb_i.check_output(debug, 4);
     tb_i.clear_queues();

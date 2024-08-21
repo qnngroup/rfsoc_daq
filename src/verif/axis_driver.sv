@@ -18,7 +18,7 @@ logic [DWIDTH-1:0] data_q [$];
 int last_q [$];
 
 always @(posedge clk) begin
-  if (intf.ok) begin
+  if (intf.valid & intf.ready) begin
     data_q.push_front(intf.data);
     if (intf.last) begin
       last_q.push_front(data_q.size());
@@ -77,7 +77,7 @@ task automatic send_queue(
     do begin
       intf.valid <= $urandom() | (~rand_arrivals);
       @(posedge clk);
-    end while (~intf.ok);
+    end while (~(intf.valid & intf.ready));
     samples_sent = samples_sent + 1;
   end
   if (last) begin
@@ -92,7 +92,7 @@ endtask
 task automatic send_last();
   intf.valid <= 1'b1;
   intf.last <= 1'b1;
-  do begin @(posedge clk); end while (~intf.ok);
+  do begin @(posedge clk); end while (~(intf.valid & intf.ready));
   intf.valid <= 1'b0;
   intf.last <= 1'b0;
 endtask
@@ -113,8 +113,8 @@ task automatic send_sample_with_timeout(
   do begin
     @(posedge clk);
     timer = timer + 1;
-    success = intf.ok;
-  end while ((timer < timeout) & (~intf.ok));
+    success = intf.valid & intf.ready;
+  end while ((timer < timeout) & (~(intf.valid & intf.ready)));
   intf.valid <= 1'b0;
 endtask
 

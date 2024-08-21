@@ -45,7 +45,7 @@ always_ff @(posedge data_clk) begin
       data_source_select[out_channel] <= SELECT_BITS'(out_channel); // map raw physical channels directly to logical channels
     end
   end else begin
-    if (data_config_sync.ok) begin
+    if (data_config_sync.valid & data_config_sync.ready) begin
       data_source_select <= data_config_sync.data;
     end
   end

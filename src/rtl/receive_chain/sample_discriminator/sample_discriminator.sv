@@ -107,7 +107,7 @@ always_ff @(posedge adc_clk) begin
     adc_thresholds_low <= '0;
     adc_thresholds_high <= '0;
   end else begin
-    if (adc_thresholds_sync.ok) begin
+    if (adc_thresholds_sync.valid & adc_thresholds_sync.ready) begin
       for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
         adc_thresholds_low[channel] <= adc_thresholds_sync.data[(2*channel)*rx_pkg::SAMPLE_WIDTH+:rx_pkg::SAMPLE_WIDTH];
         adc_thresholds_high[channel] <= adc_thresholds_sync.data[(2*channel+1)*rx_pkg::SAMPLE_WIDTH+:rx_pkg::SAMPLE_WIDTH];
@@ -140,7 +140,7 @@ always_ff @(posedge adc_clk) begin
     adc_total_delay <= '0;
     adc_digital_delay <= '0;
   end else begin
-    if (adc_delays_sync.ok) begin
+    if (adc_delays_sync.valid & adc_delays_sync.ready) begin
       for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
         // just start delay for data/valid pipeline delay
         adc_pipe_delay[channel] <= adc_delays_sync.data[(3*channel)*TIMER_BITS+:TIMER_BITS] + DISC_LATENCY;
@@ -177,7 +177,7 @@ always_ff @(posedge adc_clk) begin
     end
     adc_trigger_is_digital <= '0;
   end else begin
-    if (adc_trigger_select_sync.ok) begin
+    if (adc_trigger_select_sync.valid & adc_trigger_select_sync.ready) begin
       adc_trigger_source <= adc_trigger_select_sync.data;
       for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
         adc_trigger_is_digital[channel] <= adc_trigger_select_sync.data[channel*TRIGGER_SELECT_WIDTH+:TRIGGER_SELECT_WIDTH] >= rx_pkg::CHANNELS;
@@ -203,7 +203,7 @@ always_ff @(posedge adc_clk) begin
   if (adc_reset) begin
     adc_active_mask <= '0;
   end else begin
-    if (adc_bypass_sync.ok) begin
+    if (adc_bypass_sync.valid & adc_bypass_sync.ready) begin
       adc_active_mask <= adc_bypass_sync.data;
     end
   end

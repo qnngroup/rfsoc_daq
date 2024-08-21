@@ -132,7 +132,7 @@ always_ff @(posedge clk) begin
       valid_reg <= data_in.valid;
       last_reg <= data_in.last;
     end
-    if (data_out.ok) begin
+    if (data_out.valid & data_out.ready) begin
       if (read_final) begin
         counter <= '0;
       end else begin
@@ -164,7 +164,7 @@ logic write_final;
 // finish assembling the large word when its full or if the last value
 // from data_in arrives (the MSBs of the final word will be invalid if
 // the input burst size is not an integer multiple of UP)
-assign write_final = ((counter == $clog2(UP)'(UP - 1)) | data_in.last) && data_in.ok;
+assign write_final = ((counter == $clog2(UP)'(UP - 1)) | data_in.last) & data_in.valid & data_in.ready;
 
 // accept new data as long as output isn't valid,
 // or output is ready for new data
@@ -182,7 +182,7 @@ always_ff @(posedge clk) begin
       data_out.valid <= write_final;
       data_out.last <= data_in.last;
     end
-    if (data_in.ok) begin
+    if (data_in.valid & data_in.ready) begin
       data_reg[counter] <= data_in.data;
       if (write_final) begin
         // reset counter when we get the last word

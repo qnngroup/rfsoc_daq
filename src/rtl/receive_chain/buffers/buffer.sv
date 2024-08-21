@@ -105,7 +105,7 @@ always_ff @(posedge adc_clk) begin
   if (adc_reset) begin
     adc_active_channels <= $clog2(rx_pkg::CHANNELS+1)'(rx_pkg::CHANNELS);
   end else begin
-    if (adc_capture_banking_mode_sync.ok) begin
+    if (adc_capture_banking_mode_sync.valid & adc_capture_banking_mode_sync.ready) begin
       adc_active_channels <= 1 << adc_capture_banking_mode_sync.data;
     end
   end
@@ -128,7 +128,7 @@ axis_config_reg_cdc #(
 logic adc_capture_reset;
 Axis_If #(.DWIDTH(1)) adc_capture_reset_sync ();
 assign adc_capture_reset_sync.ready = 1'b1; // always accept sw_reset
-assign adc_capture_reset = (adc_capture_reset_sync.data == 1) & adc_capture_reset_sync.ok;
+assign adc_capture_reset = (adc_capture_reset_sync.data == 1) & adc_capture_reset_sync.valid & adc_capture_reset_sync.ready;
 // CDC for capture sw_reset
 axis_config_reg_cdc #(
   .DWIDTH(1)
@@ -148,7 +148,7 @@ logic adc_capture_arm;
 Axis_If #(.DWIDTH(1)) adc_capture_arm_sync ();
 assign adc_capture_ready = (adc_capture_state != HOLD_SAMPLES);
 assign adc_capture_arm_sync.ready = adc_capture_ready;
-assign adc_capture_arm = adc_capture_arm_sync.ok ? adc_capture_arm_sync.data : 1'b0;
+assign adc_capture_arm = (adc_capture_arm_sync.valid & adc_capture_arm_sync.ready) ? adc_capture_arm_sync.data : 1'b0;
 // CDC for capture arm/start/stop
 axis_config_reg_cdc #(
   .DWIDTH(1)
@@ -426,7 +426,7 @@ enum {DMA_IDLE, DMA_READY, DMA_ACTIVE} ps_readout_state;
 // only allow reset during DMA transfer
 assign ps_readout_sw_reset.ready = 1'b1;//ps_readout_state == DMA_ACTIVE;
 logic ps_readout_reset;
-assign ps_readout_reset = (ps_readout_sw_reset.data == 1) & ps_readout_sw_reset.ok;
+assign ps_readout_reset = (ps_readout_sw_reset.data == 1) & ps_readout_sw_reset.valid & ps_readout_sw_reset.ready;
 
 // readout start
 // only allow DMA transfer to start when we actually have saved data
@@ -460,7 +460,7 @@ assign ps_readout_last = (ps_read_addr == ADDR_WIDTH'(BUFFER_DEPTH - 1)) & (ps_b
 
 // tell readout FSM and capture logic when we're done with readout
 logic ps_readout_done_pls;
-assign ps_readout_done_pls = ps_readout_data.ok & ps_readout_data.last;
+assign ps_readout_done_pls = ps_readout_data.valid & ps_readout_data.ready & ps_readout_data.last;
 
 // CDC'd from capture clock domain
 logic ps_capture_done_pls;
@@ -533,8 +533,8 @@ always_ff @(posedge ps_clk) begin
     // if we have multiple transactions attempted on ps_readout_start, we
     // should block readout_start_pls from going high again or staying high
     //   multiple transactions are possible, since ps_readout_start.ready doesn't go
-    //   low for two cycles after readout_start.ok & (readout_start.data == 1)
-    if (ps_readout_start.ok & (ps_readout_start.data == 1) & ~ps_readout_active & ~ps_readout_start_pls) begin
+    //   low for two cycles after readout_start.valid & readout_start.ready & (readout_start.data == 1)
+    if (ps_readout_start.valid & ps_readout_start.ready & (ps_readout_start.data == 1) & ~ps_readout_active & ~ps_readout_start_pls) begin
       ps_readout_start_pls <= 1'b1;
     end else begin
       ps_readout_start_pls <= 1'b0;
@@ -544,7 +544,7 @@ always_ff @(posedge ps_clk) begin
     end else begin
       if (ps_readout_start_pls) begin
         ps_readout_active <= 1'b1;
-      end else if (ps_readout_last & ps_readout_data.ok) begin
+      end else if (ps_readout_last & ps_readout_data.valid & ps_readout_data.ready) begin
         ps_readout_active <= 1'b0;
       end
     end

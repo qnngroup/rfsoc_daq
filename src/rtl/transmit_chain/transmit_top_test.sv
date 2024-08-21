@@ -174,10 +174,10 @@ initial begin
   end
 
   ps_channel_mux_config.valid <= 1'b1;
-  do @(posedge ps_clk); while (~ps_channel_mux_config.ok);
+  do @(posedge ps_clk); while (~(ps_channel_mux_config.valid & ps_channel_mux_config.ready));
   ps_channel_mux_config.valid <= 1'b0;
   ps_scale_offset.valid <= 1'b1;
-  do @(posedge ps_clk); while (~ps_scale_offset.ok);
+  do @(posedge ps_clk); while (~(ps_scale_offset.valid & ps_scale_offset.ready));
   ps_scale_offset.valid <= 1'b0;
 
   // configure the AWG
@@ -223,7 +223,7 @@ initial begin
     ps_channel_mux_config.data[channel*$clog2(3*tx_pkg::CHANNELS)+:$clog2(3*tx_pkg::CHANNELS)] <= $clog2(3*tx_pkg::CHANNELS)'(channel + tx_pkg::CHANNELS);
   end
   ps_channel_mux_config.valid <= 1'b1;
-  do @(posedge ps_clk); while (~ps_channel_mux_config.ok);
+  do @(posedge ps_clk); while (~(ps_channel_mux_config.valid & ps_channel_mux_config.ready));
   ps_channel_mux_config.valid <= 1'b0;
   
   dds_tb_i.set_phases(debug, freqs);
@@ -255,7 +255,7 @@ initial begin
   tri_tb_i.set_phases(debug, tri_phase_increment);
   
   ps_channel_mux_config.valid <= 1'b1;
-  do @(posedge ps_clk); while (~ps_channel_mux_config.ok);
+  do @(posedge ps_clk); while (~(ps_channel_mux_config.valid & ps_channel_mux_config.ready));
   ps_channel_mux_config.valid <= 1'b0;
 
   debug.display("finished configuring triangle wave generator", sim_util_pkg::VERBOSE);

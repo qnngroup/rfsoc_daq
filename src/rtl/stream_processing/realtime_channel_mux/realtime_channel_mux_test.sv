@@ -72,7 +72,7 @@ always_ff @(posedge config_clk) begin
     config_in.data <= '0;
   end else begin
     for (int out_channel = 0; out_channel < OUTPUT_CHANNELS; out_channel++) begin
-      if (config_in.ok) begin
+      if (config_in.valid & config_in.ready) begin
         config_in.data[SELECT_BITS*out_channel+:SELECT_BITS] <= $urandom_range(0, {SELECT_BITS{1'b1}});
         source_select[out_channel] <= config_in.data[SELECT_BITS*out_channel+:SELECT_BITS];
       end

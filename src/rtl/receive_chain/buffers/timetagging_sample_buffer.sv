@@ -96,7 +96,7 @@ always_ff @(posedge adc_clk) begin
   if (adc_reset) begin
     {adc_capture_start, adc_capture_stop} <= '0;
   end
-  if (adc_capture_start_stop_sync.ok) begin
+  if (adc_capture_start_stop_sync.valid & adc_capture_start_stop_sync.ready) begin
     // use hw_start/hw_stop inputs of buffer
     {adc_capture_start, adc_capture_stop} <= adc_capture_start_stop_sync.data;
   end else begin
@@ -134,7 +134,7 @@ assign ps_timestamps_capture_arm.data = 1'b1;
 assign ps_samples_capture_arm.last = 1'b0; // don't care
 assign ps_timestamps_capture_arm.last = 1'b0; // don't care
 always_ff @(posedge ps_clk) begin
-  if (ps_capture_arm_start_stop.ok & ps_capture_arm_start_stop.data[2]) begin
+  if (ps_capture_arm_start_stop.valid & ps_capture_arm_start_stop.ready & ps_capture_arm_start_stop.data[2]) begin
     ps_samples_capture_arm.valid <= 1'b1;
     ps_timestamps_capture_arm.valid <= 1'b1;
   end else begin
@@ -259,7 +259,7 @@ always_ff @(posedge ps_clk) begin
   if (ps_reset) begin
     ps_readout_sw_reset_d <= 1'b0;
   end else begin
-    if (ps_readout_sw_reset.ok) begin
+    if (ps_readout_sw_reset.valid & ps_readout_sw_reset.ready) begin
       ps_readout_sw_reset_d <= 1'b1;
     end else begin
       ps_readout_sw_reset_d <= 1'b0;
@@ -297,12 +297,12 @@ always_ff @(posedge ps_clk) begin
   if (ps_reset) begin
     ps_buffer_select <= TIMESTAMP;
   end else begin
-    if (ps_readout_sw_reset.ok) begin
+    if (ps_readout_sw_reset.valid & ps_readout_sw_reset.ready) begin
       ps_buffer_select <= TIMESTAMP;
     end else begin
       unique case (ps_buffer_select)
-        TIMESTAMP: if (ps_timestamps_resized.last && ps_timestamps_resized.ok) ps_buffer_select <= DATA;
-        DATA: if (ps_samples_resized.last && ps_samples_resized.ok) ps_buffer_select <= TIMESTAMP;
+        TIMESTAMP: if (ps_timestamps_resized.last & ps_timestamps_resized.valid & ps_timestamps_resized.ready) ps_buffer_select <= DATA;
+        DATA: if (ps_samples_resized.last & ps_samples_resized.valid & ps_samples_resized.ready) ps_buffer_select <= TIMESTAMP;
       endcase
     end
   end

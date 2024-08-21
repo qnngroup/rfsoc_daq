@@ -11,25 +11,20 @@ logic [DWIDTH - 1:0]  data;
 logic                 ready;
 logic                 valid;
 logic                 last;
-logic                 ok;
-
-assign ok = ready & valid;
 
 // master/slave packetized interface
 modport Master (
   input   ready,
   output  valid,
   output  data,
-  output  last,
-  input   ok
+  output  last
 );
 
 modport Slave (
   output  ready,
   input   valid,
   input   data,
-  input   last,
-  input   ok
+  input   last
 );
 
 endinterface

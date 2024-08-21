@@ -135,9 +135,9 @@ always_ff @(posedge dma_clk) begin
     dma_write_state <= DMA_IDLE;
   end else begin
     unique case (dma_write_state)
-      DMA_IDLE: if (dma_write_depth.ok) dma_write_state <= DMA_ACCEPTING;
+      DMA_IDLE: if (dma_write_depth.valid & dma_write_depth.ready) dma_write_state <= DMA_ACCEPTING;
       DMA_ACCEPTING: begin
-        if ((dma_write_data.ok && dma_write_data.last) // normal operation
+        if ((dma_write_data.valid & dma_write_data.ready & dma_write_data.last) // normal operation
             || (dma_write_enable // didn't get tlast, but finished writing to buffer
                 & (dma_write_channel == $clog2(tx_pkg::CHANNELS)'(tx_pkg::CHANNELS - 1))
                 & (dma_write_address == dma_address_max_reg[dma_write_channel]))) begin
@@ -157,20 +157,20 @@ always_ff @(posedge dma_clk) begin
     dma_awg_burst_length_reg <= '0;
     {dma_awg_start, dma_awg_stop} <= '0;
   end else begin
-    if (dma_write_depth.ok) begin
+    if (dma_write_depth.valid & dma_write_depth.ready) begin
       for (int channel = 0; channel < tx_pkg::CHANNELS; channel++) begin
         dma_address_max_reg[channel] <= dma_write_depth.data[channel*$clog2(DEPTH)+:$clog2(DEPTH)];
       end
     end
-    if (dma_trigger_out_config.ok) begin
+    if (dma_trigger_out_config.valid & dma_trigger_out_config.ready) begin
       dma_trigger_out_config_reg <= dma_trigger_out_config.data;
     end
-    if (dma_awg_burst_length.ok) begin
+    if (dma_awg_burst_length.valid & dma_awg_burst_length.ready) begin
       for (int channel = 0; channel < tx_pkg::CHANNELS; channel++) begin
         dma_awg_burst_length_reg[channel] <= dma_awg_burst_length.data[channel*64+:64] - 1;
       end
     end
-    if (dma_awg_start_stop.ok) begin
+    if (dma_awg_start_stop.valid & dma_awg_start_stop.ready) begin
       {dma_awg_start, dma_awg_stop} <= dma_awg_start_stop.data;
     end else begin
       {dma_awg_start, dma_awg_stop} <= '0; // reset to 0 so it's just a pulse
@@ -187,7 +187,7 @@ always_ff @(posedge dma_clk) begin
     dma_write_enable <= 1'b0;
     dma_write_done <= '0;
   end else begin
-    dma_write_enable <= dma_write_data.ok;
+    dma_write_enable <= dma_write_data.valid & dma_write_data.ready;
     if (dma_write_state == DMA_IDLE) begin
       dma_write_address <= '0;
       dma_write_channel <= '0;
@@ -218,10 +218,10 @@ always_ff @(posedge dma_clk) begin
     dma_transfer_error.data <= '0;
     dma_transfer_error.valid <= 1'b0;
   end else begin
-    if (dma_transfer_error.ok) begin
+    if (dma_transfer_error.valid & dma_transfer_error.ready) begin
       dma_transfer_error.valid <= 1'b0; // reset each time we read it
     end
-    if (dma_write_depth.ok) begin
+    if (dma_write_depth.valid & dma_write_depth.ready) begin
       // reset the status each time we start a new DMA
       dma_transfer_error.data <= '0;
       dma_transfer_error.valid <= 1'b0;

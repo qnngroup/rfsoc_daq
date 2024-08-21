@@ -222,7 +222,7 @@ initial begin
                                             + buffer_pkg::SAMPLE_BUFFER_DEPTH*rx_pkg::DATA_WIDTH/2)/rx_pkg::AXI_MM_WIDTH;
                   end
                   repeat (readout_reset_delay) begin
-                    do @(posedge ps_clk); while (~ps_readout_data.ok);
+                    do @(posedge ps_clk); while (~(ps_readout_data.valid & ps_readout_data.ready));
                   end
                   if (readout_iter == 0) begin
                     tb_i.reset_readout(debug);
@@ -236,7 +236,7 @@ initial begin
                 if ((readout_reset == READOUT_NO_RESET) | (readout_iter != 0)) begin
                   // wait for last signal only if we haven't just reset the
                   // readout FSM
-                  do @(posedge ps_clk); while (~(ps_readout_data.ok & ps_readout_data.last));
+                  do @(posedge ps_clk); while (~(ps_readout_data.valid & ps_readout_data.ready & ps_readout_data.last));
                 end else begin
                   // wait a few cycles before retrying readout
                   repeat (20) @(posedge ps_clk);
