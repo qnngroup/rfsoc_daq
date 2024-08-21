@@ -205,7 +205,9 @@ initial begin
   debug.display("done sending samples over DMA", sim_util_pkg::DEBUG);
 
   // wait a few cycles to check for transfer error
-  repeat (10) @(posedge ps_clk);
+  repeat (10) begin
+    do @(posedge ps_clk); while (~ps_awg_dma_error.ready);
+  end
   awg_tb_i.check_transfer_error(debug, 0); // tlast_check = 0
 
   // send data

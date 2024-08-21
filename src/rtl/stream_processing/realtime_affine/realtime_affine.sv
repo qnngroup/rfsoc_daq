@@ -57,7 +57,7 @@ always_ff @(posedge data_clk) begin
   if (data_reset) begin
     data_valid_d <= '0;
   end
-  if (data_scale_offset_sync.valid & dac_scale_offset_sync.ready) begin
+  if (data_scale_offset_sync.valid & data_scale_offset_sync.ready) begin
     for (int channel = 0; channel < CHANNELS; channel++) begin
       data_scale_factor_reg[channel] <= data_scale_offset_sync.data[channel*(OFFSET_WIDTH+SCALE_WIDTH)+OFFSET_WIDTH+:SCALE_WIDTH];
       data_offset_amount_reg[channel] <= data_scale_offset_sync.data[channel*(OFFSET_WIDTH+SCALE_WIDTH)+:OFFSET_WIDTH];

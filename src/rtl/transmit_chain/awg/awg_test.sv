@@ -124,7 +124,9 @@ initial begin
         debug.display("done sending samples over DMA", sim_util_pkg::DEBUG);
 
         // wait a few cycles to check for transfer error
-        repeat (10) @(posedge dma_clk);
+        repeat (10) begin
+          do @(posedge dma_clk); while (~dma_transfer_error.ready);
+        end
         tb_i.check_transfer_error(debug, tlast_check);
         
         if (start_repeat_count == 0) begin

@@ -49,6 +49,7 @@ package sim_util_pkg;
 
     task fatal(input string message);
       $display("### ENCOUNTERED A FATAL ERROR, STOPPING SIMULATION NOW ###");
+      error_count = error_count + 1;
       $fatal(1, message);
     endtask
 

@@ -179,7 +179,9 @@ initial begin
                 end
                 // wait a few cycles so that write_depth gets sent out
                 // before we continue to the next loop
-                repeat (20) @(posedge ps_clk);
+                repeat (20) begin
+                  do @(posedge ps_clk); while (~ps_capture_write_depth.ready);
+                end
               end
               if ((capture_reset_mode == CAPTURE_HOLD_RESET) && (reset_during_hold == 0)) begin
                 // send reset after capture is complete but before readout
