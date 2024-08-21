@@ -33,8 +33,11 @@ Realtime_Parallel_If #(.DWIDTH(DATA_WIDTH), .CHANNELS(OUTPUT_CHANNELS)) data_out
 Axis_If #(.DWIDTH(OUTPUT_CHANNELS*SELECT_BITS)) config_in ();
 
 realtime_channel_mux #(
+  .DATA_WIDTH(DATA_WIDTH),
+  .OUTPUT_CHANNELS(OUTPUT_CHANNELS),
   .INPUT_CHANNELS(INPUT_CHANNELS),
-  .OUTPUT_CHANNELS(OUTPUT_CHANNELS)
+  .OUTPUT_REG(2),
+  .INPUT_REG(2)
 ) dut_i (
   .data_clk,
   .data_reset,
@@ -129,7 +132,7 @@ initial begin
       @(posedge data_clk);
     end
     valid_en <= '0;
-    repeat (5) @(posedge data_clk);
+    repeat (10) @(posedge data_clk);
     check_results(source_select);
   end
   debug.finish();

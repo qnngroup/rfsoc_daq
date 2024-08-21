@@ -87,8 +87,11 @@ always_ff @(posedge adc_clk) begin
 end
 // mux
 realtime_channel_mux #(
+  .DATA_WIDTH(rx_pkg::DATA_WIDTH),
+  .OUTPUT_CHANNELS(rx_pkg::CHANNELS),
   .INPUT_CHANNELS(2*rx_pkg::CHANNELS),
-  .OUTPUT_CHANNELS(rx_pkg::CHANNELS)
+  .OUTPUT_REG(2),
+  .INPUT_REG(2)
 ) channel_mux_i (
   .data_clk(adc_clk),
   .data_reset(adc_reset),

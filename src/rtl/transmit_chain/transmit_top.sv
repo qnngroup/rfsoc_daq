@@ -117,8 +117,11 @@ assign dac_mux_data_in.valid[3*tx_pkg::CHANNELS-1:2*tx_pkg::CHANNELS] = dac_tri_
 
 // mux
 realtime_channel_mux #(
+  .DATA_WIDTH(tx_pkg::DATA_WIDTH),
+  .OUTPUT_CHANNELS(tx_pkg::CHANNELS),
   .INPUT_CHANNELS(3*tx_pkg::CHANNELS),
-  .OUTPUT_CHANNELS(tx_pkg::CHANNELS)
+  .OUTPUT_REG(2),
+  .INPUT_REG(2)
 ) channel_mux_i (
   .data_clk(dac_clk),
   .data_reset(dac_reset),

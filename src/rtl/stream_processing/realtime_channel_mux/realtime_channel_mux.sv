@@ -6,8 +6,11 @@
 
 `timescale 1ns/1ps
 module realtime_channel_mux #(
-  parameter int OUTPUT_CHANNELS = 8,
-  parameter int INPUT_CHANNELS = 16
+  parameter int DATA_WIDTH,
+  parameter int OUTPUT_CHANNELS,
+  parameter int INPUT_CHANNELS,
+  parameter int OUTPUT_REG,
+  parameter int INPUT_REG
 ) (
   input logic data_clk, data_reset,
 
@@ -51,15 +54,40 @@ always_ff @(posedge data_clk) begin
   end
 end
 
+Realtime_Parallel_If #(.DWIDTH(DATA_WIDTH), .CHANNELS(INPUT_CHANNELS)) data_in_reg ();
+Realtime_Parallel_If #(.DWIDTH(DATA_WIDTH), .CHANNELS(OUTPUT_CHANNELS)) data_out_reg ();
+
+realtime_delay #(
+  .DATA_WIDTH(DATA_WIDTH),
+  .CHANNELS(INPUT_CHANNELS),
+  .DELAY(INPUT_REG)
+) data_delay_in_i (
+  .clk(data_clk),
+  .reset(data_reset),
+  .data_in,
+  .data_out(data_in_reg)
+);
+
+realtime_delay #(
+  .DATA_WIDTH(DATA_WIDTH),
+  .CHANNELS(OUTPUT_CHANNELS),
+  .DELAY(OUTPUT_REG)
+) data_delay_out_i (
+  .clk(data_clk),
+  .reset(data_reset),
+  .data_in(data_out_reg),
+  .data_out
+);
+
 // actually mux the data (registered so we could probably run this at 512 MHz if we wanted)
 always_ff @(posedge data_clk) begin
   if (data_reset) begin
-    data_out.valid <= '0;
+    data_out_reg.valid <= '0;
   end else begin
     // no data_reset condition for data, since it doesn't really matter
     for (int out_channel = 0; out_channel < OUTPUT_CHANNELS; out_channel++) begin
-      data_out.data[out_channel] <= data_in.data[data_source_select[out_channel]];
-      data_out.valid[out_channel] <= data_in.valid[data_source_select[out_channel]];
+      data_out_reg.data[out_channel] <= data_in_reg.data[data_source_select[out_channel]];
+      data_out_reg.valid[out_channel] <= data_in_reg.valid[data_source_select[out_channel]];
     end
   end
 end

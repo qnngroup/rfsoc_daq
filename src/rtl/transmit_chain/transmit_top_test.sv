@@ -50,15 +50,16 @@ logic [tx_pkg::CHANNELS-1:0] dac_triggers_out;
 // pull out awg_trigger/tri_trigger output and match latency of dac_prescaler/mux
 // this way the awg_tb and tri_tb can check the triggers are generated
 // correctly
-logic [5:0][tx_pkg::CHANNELS-1:0] dac_awg_triggers_pipe;
-logic [5:0][tx_pkg::CHANNELS-1:0] dac_tri_triggers_pipe;
+localparam int PIPE_DELAY = 6 + 4;
+logic [PIPE_DELAY-1:0][tx_pkg::CHANNELS-1:0] dac_awg_triggers_pipe;
+logic [PIPE_DELAY-1:0][tx_pkg::CHANNELS-1:0] dac_tri_triggers_pipe;
 logic [tx_pkg::CHANNELS-1:0] dac_awg_trigger;
 logic [tx_pkg::CHANNELS-1:0] dac_tri_trigger;
-assign dac_awg_trigger = dac_awg_triggers_pipe[5];
-assign dac_tri_trigger = dac_tri_triggers_pipe[5];
+assign dac_awg_trigger = dac_awg_triggers_pipe[PIPE_DELAY-1];
+assign dac_tri_trigger = dac_tri_triggers_pipe[PIPE_DELAY-1];
 always @(posedge dac_clk) begin
-  dac_awg_triggers_pipe <= {dac_awg_triggers_pipe[4:0], dac_triggers_out};
-  dac_tri_triggers_pipe <= {dac_tri_triggers_pipe[4:0], dut_i.tri_i.dac_trigger};
+  dac_awg_triggers_pipe <= {dac_awg_triggers_pipe[PIPE_DELAY-2:0], dac_triggers_out};
+  dac_tri_triggers_pipe <= {dac_tri_triggers_pipe[PIPE_DELAY-2:0], dut_i.tri_i.dac_trigger};
 end
 
 // AWG testing

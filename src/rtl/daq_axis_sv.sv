@@ -360,23 +360,34 @@ assign s_axis_transmit_channel_mux.data   = s_axis_transmit_channel_mux_tdata;
 assign s_axis_transmit_channel_mux.valid  = s_axis_transmit_channel_mux_tvalid;
 assign s_axis_transmit_channel_mux_tready = s_axis_transmit_channel_mux.ready;
 
+Realtime_Parallel_If #(.DWIDTH(tx_pkg::DATA_WIDTH), .CHANNELS(tx_pkg::CHANNELS)) m_dac_data_d ();
+assign m00_axis_dac_tdata = m_dac_data_d.data[0];
+assign m01_axis_dac_tdata = m_dac_data_d.data[1];
+assign m02_axis_dac_tdata = m_dac_data_d.data[2];
+assign m03_axis_dac_tdata = m_dac_data_d.data[3];
+assign m10_axis_dac_tdata = m_dac_data_d.data[4];
+assign m11_axis_dac_tdata = m_dac_data_d.data[5];
+assign m12_axis_dac_tdata = m_dac_data_d.data[6];
+assign m13_axis_dac_tdata = m_dac_data_d.data[7];
+assign m00_axis_dac_tvalid = m_dac_data_d.valid[0];
+assign m01_axis_dac_tvalid = m_dac_data_d.valid[1];
+assign m02_axis_dac_tvalid = m_dac_data_d.valid[2];
+assign m03_axis_dac_tvalid = m_dac_data_d.valid[3];
+assign m10_axis_dac_tvalid = m_dac_data_d.valid[4];
+assign m11_axis_dac_tvalid = m_dac_data_d.valid[5];
+assign m12_axis_dac_tvalid = m_dac_data_d.valid[6];
+assign m13_axis_dac_tvalid = m_dac_data_d.valid[7];
 Realtime_Parallel_If #(.DWIDTH(tx_pkg::DATA_WIDTH), .CHANNELS(tx_pkg::CHANNELS)) m_dac_data ();
-assign m00_axis_dac_tdata = m_dac_data.data[0];
-assign m01_axis_dac_tdata = m_dac_data.data[1];
-assign m02_axis_dac_tdata = m_dac_data.data[2];
-assign m03_axis_dac_tdata = m_dac_data.data[3];
-assign m10_axis_dac_tdata = m_dac_data.data[4];
-assign m11_axis_dac_tdata = m_dac_data.data[5];
-assign m12_axis_dac_tdata = m_dac_data.data[6];
-assign m13_axis_dac_tdata = m_dac_data.data[7];
-assign m00_axis_dac_tvalid = m_dac_data.valid[0];
-assign m01_axis_dac_tvalid = m_dac_data.valid[1];
-assign m02_axis_dac_tvalid = m_dac_data.valid[2];
-assign m03_axis_dac_tvalid = m_dac_data.valid[3];
-assign m10_axis_dac_tvalid = m_dac_data.valid[4];
-assign m11_axis_dac_tvalid = m_dac_data.valid[5];
-assign m12_axis_dac_tvalid = m_dac_data.valid[6];
-assign m13_axis_dac_tvalid = m_dac_data.valid[7];
+realtime_delay #(
+  .DATA_WIDTH(tx_pkg::DATA_WIDTH),
+  .CHANNELS(tx_pkg::CHANNELS),
+  .DELAY(2)
+) m_dac_delay_i (
+  .clk(dac_clk),
+  .reset(dac_reset),
+  .data_in(m_dac_data),
+  .data_out(m_dac_data_d)
+);
 Realtime_Parallel_If #(.DWIDTH(rx_pkg::DATA_WIDTH), .CHANNELS(rx_pkg::CHANNELS)) s_adc_data ();
 assign s_adc_data.data[0] = s00_axis_adc_tdata;
 assign s_adc_data.data[1] = s02_axis_adc_tdata;
@@ -394,7 +405,17 @@ assign s_adc_data.valid[4] = s20_axis_adc_tvalid;
 assign s_adc_data.valid[5] = s22_axis_adc_tvalid;
 assign s_adc_data.valid[6] = s30_axis_adc_tvalid;
 assign s_adc_data.valid[7] = s32_axis_adc_tvalid;
-
+Realtime_Parallel_If #(.DWIDTH(rx_pkg::DATA_WIDTH), .CHANNELS(rx_pkg::CHANNELS)) s_adc_data_d ();
+realtime_delay #(
+  .DATA_WIDTH(tx_pkg::DATA_WIDTH),
+  .CHANNELS(tx_pkg::CHANNELS),
+  .DELAY(2)
+) s_adc_delay_i (
+  .clk(adc_clk),
+  .reset(adc_reset),
+  .data_in(s_adc_data),
+  .data_out(s_adc_data_d)
+);
 // CDC triggers from AWG -> sample buffer
 // TODO actually implement proper deterministic-delay triggering
 logic [tx_pkg::CHANNELS-1:0] adc_digital_triggers;
@@ -421,7 +442,7 @@ receive_top #(
 ) rx_top_i (
   .adc_clk,
   .adc_reset,
-  .adc_data_in(s_adc_data),
+  .adc_data_in(s_adc_data_d),
   .adc_digital_triggers,
   .ps_clk,
   .ps_reset,
