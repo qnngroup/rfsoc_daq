@@ -241,8 +241,8 @@ always_ff @(posedge adc_clk) begin
             // if we're resetting the current valid mask (i.e. it wasn't reset
             // in a previous clock cycle), then set a subsequent mask bit whose
             // distance from the current bit is determined by the banking mode
-            if ($clog2(rx_pkg::CHANNELS+1)'(channel) + adc_active_channels < $clog2(rx_pkg::CHANNELS+1)'(rx_pkg::CHANNELS)) begin
-              adc_capture_valid_mask[$clog2(rx_pkg::CHANNELS)'($clog2(rx_pkg::CHANNELS+1)'(channel) + adc_active_channels)] <= 1'b1;
+            if (channel + adc_active_channels < rx_pkg::CHANNELS) begin
+              adc_capture_valid_mask[channel + adc_active_channels] <= 1'b1;
             end
           end
         end
@@ -279,7 +279,7 @@ logic [rx_pkg::CHANNELS-1:0] adc_write_enable, adc_write_enable_d;
 always_comb begin
   for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
     adc_write_enable[channel] = adc_capture_active & adc_capture_valid_mask[channel]
-                                      & adc_valid_d[$clog2(rx_pkg::CHANNELS)'($clog2(rx_pkg::CHANNELS+1)'(channel) % adc_active_channels)];
+                                      & adc_valid_d[channel % adc_active_channels];
   end
 end
 // register write_enable and valid
@@ -293,7 +293,7 @@ end
 //////////////////////////////
 always_comb begin
   for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
-    adc_bank_full[channel] = adc_write_addr[channel] == $clog2(BUFFER_DEPTH)'(BUFFER_DEPTH - 1) & adc_write_enable[channel];
+    adc_bank_full[channel] = adc_write_addr[channel] == (BUFFER_DEPTH - 1) & adc_write_enable[channel];
   end
 end
 always_ff @(posedge adc_clk) begin

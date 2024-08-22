@@ -77,7 +77,7 @@ module daq_axis #(
   output wire s_axis_awg_dma_tready,
 
   (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 m_axis_samples_write_depth TDATA" *)
-  output wire [`ROUNDUP32(8*13)-1:0] m_axis_samples_write_depth_tdata,
+  output wire [`ROUNDUP32(8*12)-1:0] m_axis_samples_write_depth_tdata,
   (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 m_axis_samples_write_depth TVALID" *)
   output wire m_axis_samples_write_depth_tvalid,
   (* X_INTERFACE_INFO = "xilinx.com:interface:axis_rtl:1.0 m_axis_samples_write_depth TLAST" *)
@@ -367,7 +367,7 @@ daq_axis_sv #(
   .s_axis_awg_dma_tlast                      (s_axis_awg_dma_tlast),
   .s_axis_awg_dma_tkeep                      (s_axis_awg_dma_tkeep),
   .s_axis_awg_dma_tready                     (s_axis_awg_dma_tready),
-  .m_axis_samples_write_depth_tdata          (m_axis_samples_write_depth_tdata[8*13-1:0]),
+  .m_axis_samples_write_depth_tdata          (m_axis_samples_write_depth_tdata[8*12-1:0]),
   .m_axis_samples_write_depth_tvalid         (m_axis_samples_write_depth_tvalid),
   .m_axis_samples_write_depth_tlast          (m_axis_samples_write_depth_tlast),
   .m_axis_samples_write_depth_tready         (m_axis_samples_write_depth_tready),

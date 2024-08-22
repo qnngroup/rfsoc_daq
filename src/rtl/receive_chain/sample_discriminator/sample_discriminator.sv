@@ -126,42 +126,80 @@ axis_config_reg_cdc #(
   .dest(adc_thresholds_sync)
 );
 
-// start/stop delay
+// synchronize delay settings
+// since we're not just slicing the config register (we're actually doing some math)
+// it makes sense to do that in the slower clock domain first so we're not
+// stretching ourselves too thin in the fast clock domain
 localparam int DISC_LATENCY = 2; // extra latency for pipeline because of sample discriminator
 localparam int TIMER_BITS = $clog2(MAX_DELAY_CYCLES);
-logic [rx_pkg::CHANNELS-1:0][$clog2(MAX_DELAY_CYCLES+DISC_LATENCY)-1:0] adc_pipe_delay;
-logic [rx_pkg::CHANNELS-1:0][$clog2(2*MAX_DELAY_CYCLES)-1:0] adc_total_delay;
-logic [rx_pkg::CHANNELS-1:0][$clog2(MAX_DELAY_CYCLES+1)-1:0] adc_digital_delay;
-Axis_If #(.DWIDTH(3*TIMER_BITS*rx_pkg::CHANNELS)) adc_delays_sync ();
-assign adc_delays_sync.ready = 1'b1; // always accept new config
+localparam int PIPE_DELAY_WIDTH = $clog2(MAX_DELAY_CYCLES+DISC_LATENCY);
+localparam int TOTAL_DELAY_WIDTH = $clog2(2*MAX_DELAY_CYCLES);
+localparam int DIGITAL_DELAY_WIDTH = $clog2(MAX_DELAY_CYCLES+1);
+localparam int DELAYS_WIDTH = PIPE_DELAY_WIDTH+TOTAL_DELAY_WIDTH+DIGITAL_DELAY_WIDTH;
+logic [rx_pkg::CHANNELS-1:0][PIPE_DELAY_WIDTH-1:0] adc_pipe_delay, ps_pipe_delay;
+logic [rx_pkg::CHANNELS-1:0][TOTAL_DELAY_WIDTH-1:0] adc_total_delay, ps_total_delay;
+logic [rx_pkg::CHANNELS-1:0][DIGITAL_DELAY_WIDTH-1:0] adc_digital_delay, ps_digital_delay;
+logic [rx_pkg::CHANNELS*DELAYS_WIDTH-1:0] adc_delays;
+// handshaking logic
+logic adc_delays_transfer_valid;
+logic ps_delays_transfer_active;
+logic ps_delays_transfer_received;
+logic ps_delays_transfer_send;
+// process delay info to generate pipe/total(start+stop)/digital delay regs
+always_ff @(posedge ps_clk) begin
+  if (ps_reset) begin
+    ps_delays.ready <= 1'b0;
+    ps_pipe_delay <= '0;
+    ps_total_delay <= '0;
+    ps_digital_delay <= '0;
+    ps_delays_transfer_active <= 1'b0;
+  end else begin
+    ps_delays.ready <= ~ps_delays_transfer_active;
+    if (ps_delays.valid & ps_delays.ready) begin
+      ps_delays_transfer_active <= 1'b1;
+      for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
+        // just start delay for data/valid pipeline delay
+        ps_pipe_delay[channel] <= ps_delays.data[(3*channel)*TIMER_BITS+:TIMER_BITS] + DISC_LATENCY;
+        // start + stop delay for total
+        ps_total_delay[channel] <= ps_delays.data[(3*channel+1)*TIMER_BITS+:TIMER_BITS]
+                                    + ps_delays.data[(3*channel)*TIMER_BITS+:TIMER_BITS];
+        ps_digital_delay[channel] <= ps_delays.data[(3*channel+2)*TIMER_BITS+:TIMER_BITS];
+      end
+    end
+    if (ps_delays_transfer_received) begin
+      ps_delays_transfer_active <= 1'b0;
+    end
+  end
+end
+// CDC to fast clock
+xpm_cdc_handshake #(
+  .DEST_EXT_HSK(0), // use internal handshake (dest_req goes high for 1 cycle)
+  .DEST_SYNC_FF(4), // four FF synchronizer for src->dest
+  .INIT_SYNC_FF(0), // disable behavioral initialization of sync FFs
+  .SIM_ASSERT_CHK(1), // enable simulation message reporting for misuse
+  .SRC_SYNC_FF(4), // four FF synchronizer for dest->src
+  .WIDTH(rx_pkg::CHANNELS*DELAYS_WIDTH)
+) cdc_delays_i (
+  .dest_clk(adc_clk),
+  .dest_out(adc_delays),
+  .dest_req(adc_delays_transfer_valid), // out
+  .dest_ack(1'b0), // in
+  .src_clk(ps_clk),
+  .src_in({ps_pipe_delay, ps_total_delay, ps_digital_delay}),
+  .src_rcv(ps_delays_transfer_received), // out
+  .src_send(ps_delays_transfer_active) // in
+);
 always_ff @(posedge adc_clk) begin
   if (adc_reset) begin
     adc_pipe_delay <= '0;
     adc_total_delay <= '0;
     adc_digital_delay <= '0;
   end else begin
-    if (adc_delays_sync.valid & adc_delays_sync.ready) begin
-      for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
-        // just start delay for data/valid pipeline delay
-        adc_pipe_delay[channel] <= adc_delays_sync.data[(3*channel)*TIMER_BITS+:TIMER_BITS] + DISC_LATENCY;
-        // start + stop delay for total
-        adc_total_delay[channel] <= adc_delays_sync.data[(3*channel+1)*TIMER_BITS+:TIMER_BITS]
-                                    + adc_delays_sync.data[(3*channel)*TIMER_BITS+:TIMER_BITS];
-        adc_digital_delay[channel] <= adc_delays_sync.data[(3*channel+2)*TIMER_BITS+:TIMER_BITS];
-      end
+    if (adc_delays_transfer_valid) begin
+      {adc_pipe_delay, adc_total_delay, adc_digital_delay} <= adc_delays;
     end
   end
 end
-axis_config_reg_cdc #(
-  .DWIDTH(3*TIMER_BITS*rx_pkg::CHANNELS)
-) delays_cdc_i (
-  .src_clk(ps_clk),
-  .src_reset(ps_reset),
-  .src(ps_delays),
-  .dest_clk(adc_clk),
-  .dest_reset(adc_reset),
-  .dest(adc_delays_sync)
-);
 
 // triggering source/mode
 localparam int TRIGGER_SELECT_WIDTH = $clog2(rx_pkg::CHANNELS + tx_pkg::CHANNELS);
