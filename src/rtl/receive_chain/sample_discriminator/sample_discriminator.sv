@@ -135,10 +135,12 @@ localparam int TIMER_BITS = $clog2(MAX_DELAY_CYCLES);
 localparam int PIPE_DELAY_WIDTH = $clog2(MAX_DELAY_CYCLES+DISC_LATENCY);
 localparam int TOTAL_DELAY_WIDTH = $clog2(2*MAX_DELAY_CYCLES);
 localparam int DIGITAL_DELAY_WIDTH = $clog2(MAX_DELAY_CYCLES+1);
-localparam int DELAYS_WIDTH = PIPE_DELAY_WIDTH+TOTAL_DELAY_WIDTH+DIGITAL_DELAY_WIDTH;
+localparam int DELAYS_WIDTH = PIPE_DELAY_WIDTH+TOTAL_DELAY_WIDTH+DIGITAL_DELAY_WIDTH+2;
 logic [rx_pkg::CHANNELS-1:0][PIPE_DELAY_WIDTH-1:0] adc_pipe_delay, ps_pipe_delay;
 logic [rx_pkg::CHANNELS-1:0][TOTAL_DELAY_WIDTH-1:0] adc_total_delay, ps_total_delay;
 logic [rx_pkg::CHANNELS-1:0][DIGITAL_DELAY_WIDTH-1:0] adc_digital_delay, ps_digital_delay;
+logic [rx_pkg::CHANNELS-1:0] adc_zero_digital_delay, ps_zero_digital_delay;
+logic [rx_pkg::CHANNELS-1:0] adc_zero_total_delay, ps_zero_total_delay;
 logic [rx_pkg::CHANNELS*DELAYS_WIDTH-1:0] adc_delays;
 // handshaking logic
 logic adc_delays_transfer_valid;
@@ -153,6 +155,8 @@ always_ff @(posedge ps_clk) begin
     ps_total_delay <= '0;
     ps_digital_delay <= '0;
     ps_delays_transfer_active <= 1'b0;
+    ps_zero_total_delay <= '0;
+    ps_zero_digital_delay <= '0;
   end else begin
     ps_delays.ready <= ~ps_delays_transfer_active;
     if (ps_delays.valid & ps_delays.ready) begin
@@ -162,8 +166,11 @@ always_ff @(posedge ps_clk) begin
         ps_pipe_delay[channel] <= ps_delays.data[(3*channel)*TIMER_BITS+:TIMER_BITS] + DISC_LATENCY;
         // start + stop delay for total
         ps_total_delay[channel] <= ps_delays.data[(3*channel+1)*TIMER_BITS+:TIMER_BITS]
-                                    + ps_delays.data[(3*channel)*TIMER_BITS+:TIMER_BITS];
-        ps_digital_delay[channel] <= ps_delays.data[(3*channel+2)*TIMER_BITS+:TIMER_BITS];
+                                    + ps_delays.data[(3*channel)*TIMER_BITS+:TIMER_BITS] - 1;
+        ps_zero_total_delay[channel] <= (ps_delays.data[(3*channel+1)*TIMER_BITS+:TIMER_BITS]
+                                      + ps_delays.data[(3*channel)*TIMER_BITS+:TIMER_BITS]) == 0;
+        ps_digital_delay[channel] <= ps_delays.data[(3*channel+2)*TIMER_BITS+:TIMER_BITS] - 1;
+        ps_zero_digital_delay[channel] <= ps_delays.data[(3*channel+2)*TIMER_BITS+:TIMER_BITS] == 0;
       end
     end
     if (ps_delays_transfer_received) begin
@@ -185,7 +192,7 @@ xpm_cdc_handshake #(
   .dest_req(adc_delays_transfer_valid), // out
   .dest_ack(1'b0), // in
   .src_clk(ps_clk),
-  .src_in({ps_pipe_delay, ps_total_delay, ps_digital_delay}),
+  .src_in({ps_pipe_delay, ps_total_delay, ps_digital_delay, ps_zero_digital_delay, ps_zero_total_delay}),
   .src_rcv(ps_delays_transfer_received), // out
   .src_send(ps_delays_transfer_active) // in
 );
@@ -194,16 +201,18 @@ always_ff @(posedge adc_clk) begin
     adc_pipe_delay <= '0;
     adc_total_delay <= '0;
     adc_digital_delay <= '0;
+    adc_zero_digital_delay <= '0;
+    adc_zero_total_delay <= '0;
   end else begin
     if (adc_delays_transfer_valid) begin
-      {adc_pipe_delay, adc_total_delay, adc_digital_delay} <= adc_delays;
+      {adc_pipe_delay, adc_total_delay, adc_digital_delay, adc_zero_digital_delay, adc_zero_total_delay} <= adc_delays;
     end
   end
 end
 
 // triggering source/mode
 localparam int TRIGGER_SELECT_WIDTH = $clog2(rx_pkg::CHANNELS + tx_pkg::CHANNELS);
-logic [rx_pkg::CHANNELS-1:0][TRIGGER_SELECT_WIDTH-1:0] adc_trigger_source;
+logic [rx_pkg::CHANNELS-1:0][TRIGGER_SELECT_WIDTH-1:0] adc_trigger_source, adc_digital_trigger_source;
 logic [rx_pkg::CHANNELS-1:0] adc_trigger_is_digital;
 Axis_If #(.DWIDTH(rx_pkg::CHANNELS*TRIGGER_SELECT_WIDTH)) adc_trigger_select_sync ();
 assign adc_trigger_select_sync.ready = 1'b1; // always accept new config
@@ -212,6 +221,7 @@ always_ff @(posedge adc_clk) begin
     for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
       // assign each trigger to its respective analog trigger channel
       adc_trigger_source[channel] <= TRIGGER_SELECT_WIDTH'(channel);
+      adc_digital_trigger_source[channel] <= '0;
     end
     adc_trigger_is_digital <= '0;
   end else begin
@@ -219,6 +229,7 @@ always_ff @(posedge adc_clk) begin
       adc_trigger_source <= adc_trigger_select_sync.data;
       for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
         adc_trigger_is_digital[channel] <= adc_trigger_select_sync.data[channel*TRIGGER_SELECT_WIDTH+:TRIGGER_SELECT_WIDTH] >= rx_pkg::CHANNELS;
+        adc_digital_trigger_source[channel] <= adc_trigger_select_sync.data[channel*TRIGGER_SELECT_WIDTH+:TRIGGER_SELECT_WIDTH] - rx_pkg::CHANNELS;
       end
     end
   end
@@ -328,10 +339,10 @@ end
 always_ff @(posedge adc_clk) begin
   for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
     if (adc_trigger_is_digital[channel]) begin
-      if (adc_digital_delay[channel] == 0) begin
-        adc_digital_trigger_in_d[channel] <= adc_digital_trigger_in[adc_trigger_source[channel] - rx_pkg::CHANNELS];
+      if (adc_zero_digital_delay[channel]) begin
+        adc_digital_trigger_in_d[channel] <= adc_digital_trigger_in[adc_digital_trigger_source[channel]];
       end else begin
-        adc_digital_trigger_in_d[channel] <= adc_digital_trigger_in_pipe[adc_digital_delay[channel] - 1][adc_trigger_source[channel] - rx_pkg::CHANNELS];
+        adc_digital_trigger_in_d[channel] <= adc_digital_trigger_in_pipe[adc_digital_delay[channel]][adc_digital_trigger_source[channel]];
       end
     end else begin
       adc_digital_trigger_in_d[channel] <= 1'b0;
@@ -382,7 +393,7 @@ generate
     ) adc_start_pulse_delay_i (
       .clk(adc_clk),
       .reset(adc_reset | adc_reset_state),
-      .delay($clog2(2*MAX_DELAY_CYCLES)'(adc_total_delay[channel] - 1)),
+      .delay(adc_total_delay[channel]),
       .in_pls(adc_fsm_start[channel]),
       .out_pls(adc_fsm_start_d[channel])
     );
@@ -392,7 +403,7 @@ endgenerate
 always_comb begin
   for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
     // invalid for total_delay == 0, but stop_d doesn't get used if total_delay == 0
-    adc_fsm_stop_d[channel] = adc_fsm_stop_pipe[adc_total_delay[channel]-1][channel];
+    adc_fsm_stop_d[channel] = adc_fsm_stop_pipe[adc_total_delay[channel]][channel];
   end
 end
 
@@ -448,10 +459,9 @@ always_ff @(posedge adc_clk) begin
     end
   end else begin
     for (int channel = 0; channel < rx_pkg::CHANNELS; channel++) begin
-      // problem if adc_total_delay == 0 and trigger is digital
       unique case (adc_states[channel])
         DISABLED: if (adc_fsm_start[channel]) adc_states[channel] <=
-                    (|adc_total_delay[channel]) ? PRECAPTURE : CAPTURE;
+                    (adc_zero_total_delay[channel]) ? CAPTURE : PRECAPTURE;
         PRECAPTURE: begin
           if (adc_fsm_start_d[channel]) begin
             adc_states[channel] <= adc_trigger_is_digital[channel] ? POSTCAPTURE : CAPTURE;
@@ -459,16 +469,16 @@ always_ff @(posedge adc_clk) begin
         end
         CAPTURE: begin
           if (adc_fsm_start[channel]) begin
-            adc_states[channel] <= (|adc_total_delay[channel]) ? PRECAPTURE : CAPTURE;
+            adc_states[channel] <= (adc_zero_total_delay[channel]) ? CAPTURE : PRECAPTURE;
           end else begin
-            if (|adc_total_delay[channel]) begin
-              if (adc_fsm_stop_d[channel]) adc_states[channel] <= DISABLED;
-            end else begin
+            if (adc_zero_total_delay[channel]) begin
               if (adc_trigger_is_digital[channel]) begin
                 // wait until data is valid
                 if (adc_valid_pipe[2][channel]) adc_states[channel] <= DISABLED;
               end
               if (adc_fsm_stop[channel]) adc_states[channel] <= DISABLED;
+            end else begin
+              if (adc_fsm_stop_d[channel]) adc_states[channel] <= DISABLED;
             end
           end
         end
