@@ -133,7 +133,6 @@ if { $bCheckIPs == 1 } {
    set list_check_ips "\ 
 xilinx.com:ip:axi_intc:4.1\
 xilinx.com:ip:proc_sys_reset:5.0\
-xilinx.com:ip:system_ila:1.1\
 xilinx.com:ip:zynq_ultra_ps_e:3.4\
 xilinx.com:ip:axi_gpio:2.0\
 xilinx.com:ip:usp_rf_data_converter:2.6\
@@ -2410,28 +2409,6 @@ proc create_root_design { parentCell } {
   # Create instance: rfdc_axis_clocking_and_reset
   create_hier_cell_rfdc_axis_clocking_and_reset [current_bd_instance .] rfdc_axis_clocking_and_reset
 
-  # Create instance: system_ila_0, and set properties
-  set system_ila_0 [ create_bd_cell -type ip -vlnv xilinx.com:ip:system_ila:1.1 system_ila_0 ]
-  set_property -dict [list \
-    CONFIG.C_ADV_TRIGGER {true} \
-    CONFIG.C_DATA_DEPTH {8192} \
-    CONFIG.C_EN_STRG_QUAL {1} \
-    CONFIG.C_INPUT_PIPE_STAGES {6} \
-    CONFIG.C_MON_TYPE {INTERFACE} \
-    CONFIG.C_NUM_MONITOR_SLOTS {1} \
-    CONFIG.C_SLOT {0} \
-    CONFIG.C_SLOT_0_APC_EN {0} \
-    CONFIG.C_SLOT_0_AXI_DATA_SEL {1} \
-    CONFIG.C_SLOT_0_AXI_TRIG_SEL {1} \
-    CONFIG.C_SLOT_0_INTF_TYPE {xilinx.com:interface:axis_rtl:1.0} \
-    CONFIG.C_SLOT_0_TYPE {0} \
-    CONFIG.C_SLOT_1_APC_EN {0} \
-    CONFIG.C_SLOT_1_AXI_DATA_SEL {1} \
-    CONFIG.C_SLOT_1_AXI_TRIG_SEL {1} \
-    CONFIG.C_SLOT_1_INTF_TYPE {xilinx.com:interface:axis_rtl:1.0} \
-  ] $system_ila_0
-
-
   # Create instance: zynq_ultra_ps_e_0, and set properties
   set zynq_ultra_ps_e_0 [ create_bd_cell -type ip -vlnv xilinx.com:ip:zynq_ultra_ps_e:3.4 zynq_ultra_ps_e_0 ]
   set_property -dict [list \
@@ -2773,8 +2750,6 @@ Port;FD4A0000;FD4AFFFF;1|FPD;DPDMA;FD4C0000;FD4CFFFF;1|FPD;DDR_XMPU5_CFG;FD05000
 
   # Create interface connections
   connect_bd_intf_net -intf_net S_AXIS_S2MM_1 [get_bd_intf_pins daq/m_axis_adc_dma] [get_bd_intf_pins dma/S_AXIS_S2MM]
-connect_bd_intf_net -intf_net [get_bd_intf_nets S_AXIS_S2MM_1] [get_bd_intf_pins dma/S_AXIS_S2MM] [get_bd_intf_pins system_ila_0/SLOT_0_AXIS]
-  set_property HDL_ATTRIBUTE.DEBUG {true} [get_bd_intf_nets S_AXIS_S2MM_1]
   connect_bd_intf_net -intf_net adc0_clk_1 [get_bd_intf_ports adc0_clk] [get_bd_intf_pins daq/adc0_clk]
   connect_bd_intf_net -intf_net adc1_clk_1 [get_bd_intf_ports adc1_clk] [get_bd_intf_pins daq/adc1_clk]
   connect_bd_intf_net -intf_net adc2_clk_1 [get_bd_intf_ports adc2_clk] [get_bd_intf_pins daq/adc2_clk]
@@ -2813,12 +2788,12 @@ connect_bd_intf_net -intf_net [get_bd_intf_nets S_AXIS_S2MM_1] [get_bd_intf_pins
   connect_bd_net -net daq_axis_hier_sck [get_bd_ports sck] [get_bd_pins daq/sck]
   connect_bd_net -net daq_axis_hier_sdi [get_bd_ports sdi] [get_bd_pins daq/sdi]
   connect_bd_net -net dma_dout [get_bd_pins axi_intc_0/intr] [get_bd_pins dma/dout]
-  connect_bd_net -net ps_reset_100_peripheral_aresetn [get_bd_pins axi_intc_0/s_axi_aresetn] [get_bd_pins daq/ps_resetn] [get_bd_pins daq/s_axi_aresetn] [get_bd_pins dma/axi_resetn] [get_bd_pins ps_reset_100/peripheral_aresetn] [get_bd_pins rfdc_axis_clocking_and_reset/ps_resetn] [get_bd_pins system_ila_0/resetn]
+  connect_bd_net -net ps_reset_100_peripheral_aresetn [get_bd_pins axi_intc_0/s_axi_aresetn] [get_bd_pins daq/ps_resetn] [get_bd_pins daq/s_axi_aresetn] [get_bd_pins dma/axi_resetn] [get_bd_pins ps_reset_100/peripheral_aresetn] [get_bd_pins rfdc_axis_clocking_and_reset/ps_resetn]
   connect_bd_net -net rfdc_axis_clocking_clk_out1 [get_bd_pins daq/adc_clk] [get_bd_pins rfdc_axis_clocking_and_reset/clk_adc]
   connect_bd_net -net rfdc_axis_clocking_peripheral_aresetn [get_bd_pins daq/dac_resetn] [get_bd_pins rfdc_axis_clocking_and_reset/dac_resetn]
   connect_bd_net -net rfdc_axis_clocking_peripheral_aresetn1 [get_bd_pins daq/adc_resetn] [get_bd_pins rfdc_axis_clocking_and_reset/adc_resetn]
   connect_bd_net -net usp_rf_data_converter_0_clk_dac0 [get_bd_pins daq/clk_dac0] [get_bd_pins rfdc_axis_clocking_and_reset/dac_clk_384]
-  connect_bd_net -net zynq_ultra_ps_e_0_pl_clk0 [get_bd_pins axi_intc_0/s_axi_aclk] [get_bd_pins daq/ps_clk] [get_bd_pins dma/m_axi_mm2s_aclk] [get_bd_pins ps_reset_100/slowest_sync_clk] [get_bd_pins system_ila_0/clk] [get_bd_pins zynq_ultra_ps_e_0/maxihpm0_fpd_aclk] [get_bd_pins zynq_ultra_ps_e_0/maxihpm1_fpd_aclk] [get_bd_pins zynq_ultra_ps_e_0/pl_clk0] [get_bd_pins zynq_ultra_ps_e_0/saxihp0_fpd_aclk] [get_bd_pins zynq_ultra_ps_e_0/saxihp2_fpd_aclk]
+  connect_bd_net -net zynq_ultra_ps_e_0_pl_clk0 [get_bd_pins axi_intc_0/s_axi_aclk] [get_bd_pins daq/ps_clk] [get_bd_pins dma/m_axi_mm2s_aclk] [get_bd_pins ps_reset_100/slowest_sync_clk] [get_bd_pins zynq_ultra_ps_e_0/maxihpm0_fpd_aclk] [get_bd_pins zynq_ultra_ps_e_0/maxihpm1_fpd_aclk] [get_bd_pins zynq_ultra_ps_e_0/pl_clk0] [get_bd_pins zynq_ultra_ps_e_0/saxihp0_fpd_aclk] [get_bd_pins zynq_ultra_ps_e_0/saxihp2_fpd_aclk]
   connect_bd_net -net zynq_ultra_ps_e_0_pl_resetn0 [get_bd_pins ps_reset_100/ext_reset_in] [get_bd_pins zynq_ultra_ps_e_0/pl_resetn0]
 
   # Create address segments
