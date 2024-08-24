@@ -4,6 +4,7 @@ from pynq import allocate
 import xrfclk
 import numpy as np
 from axififo import AxiStreamFifoDriver
+import matplotlib.pyplot as plt
 
 def clog2(x):
     """Return ceil(log2(x))"""
@@ -71,6 +72,9 @@ class DAQOverlay(Overlay):
         if self.verbose:
             print(f"allocating _adc_buffer with size {adc_dma_bits // 16} x 16b")
         self._adc_buffer = allocate(shape=(adc_dma_bits // 16,), dtype=np.uint16)
+        
+        # keep track of number of active channels
+        self._active_channels = 1
         
         ###############################
         # configuration registers
@@ -170,6 +174,85 @@ class DAQOverlay(Overlay):
                 )
             source_word |= source << (source_bits * channel)
         return self._packetize(source_word, (source_bits * self._num_channels + 31)//32)
+    
+    def receive_adc_data(self, override_write_depth_errors: bool):
+        """Perform DMA to receive data from ADC.
+        
+        Checks if a capture was performed before running DMA
+        
+        Arguments:
+            override_write_depth_errors (bool): if True, perform transfer regardless of write_depth status
+        
+        Returns:
+            depth_packets (list[list[int]]): for each (timestamps, samples), a packet of write depth information
+        """
+        failure = False
+        timestamps_write_depth = self.get_timestamps_write_depth()
+        sample_write_depth = self.get_samples_write_depth()
+        depths = []
+        for packet in (timestamps_write_depth, sample_write_depth):
+            num_packets = len(packet)
+            if num_packets == 0:
+                print(f"WARNING: didn't get the right number of packets for fifo, got {num_packets}")
+                failure = True
+            depths.append(packet)
+        if not(failure) or override_write_depth_errors:
+            self._adc_dma.transfer(self._adc_buffer)
+        return depths
+    
+    def get_samples_and_timestamps_from_adc_data(self, depth_packets: list[list[int]]):
+        """Split raw data from ADC into timestamps and samples
+        
+        Arguments:
+            depth_packets (list[list[int]]): for each (timestamps, samples), a packet of write depth information
+        
+        Returns:
+            timestamps (list[array_like]): list of arrays of timestamps for each channel
+            samples (list[array_like]): list of arrays of collected samples for each channel
+        """
+        sample_depth_bits = clog2(self._adc_buffer_data_depth) + 1
+        timestamp_depth_bits = clog2(self._adc_buffer_tstamp_depth) + 1
+        buffer_midpoint = self._num_channels * self._adc_buffer_tstamp_depth * self._tstamp_width // 16
+        data = []
+        for i in range(2):
+            data.append([])
+            packet = depth_packets[i]
+            if i == 0:
+                depth_bits = timestamp_depth_bits
+                depth_to_words = self._tstamp_width // 16
+                offset = 0
+                bank_size = self._adc_buffer_tstamp_depth * depth_to_words
+            else:
+                depth_bits = sample_depth_bits
+                depth_to_words = self._adc_data_width // 16
+                offset = buffer_midpoint
+                bank_size = self._adc_buffer_data_depth * depth_to_words
+            # merge 32-bit qtys
+            depth_word = 0
+            for n, word in enumerate(packet):
+                depth_word |= word << (32 * n)
+            mask = ((1 << depth_bits) - 1)
+            total_depth = [0 for i in range(self._num_channels)]
+            depth_per_bank = []
+            for bank in range(self._num_channels):
+                depth = (depth_word >> (bank * depth_bits)) & mask
+                if depth & (1 << (depth_bits - 1)):
+                    depth = self._adc_buffer_data_depth
+                depth_per_bank.append(depth)
+                channel = bank % self._active_channels
+                total_depth[channel] += depth
+            for channel in range(self._num_channels):
+                data[-1].append(np.zeros((total_depth[channel] * depth_to_words,), dtype=np.uint16))
+            for bank in range(self._num_channels):
+                channel = bank % self._active_channels
+                read_start = offset + (bank_size * bank)
+                read_stop = offset + (bank_size * bank) + depth_per_bank[bank] * depth_to_words
+                write_start = (bank // self._active_channels) * bank_size
+                write_stop = (bank // self._active_channels) * bank_size + depth_per_bank[bank] * depth_to_words
+                data[-1][channel][write_start:write_stop] = self._adc_buffer[read_start:read_stop]
+        timestamps = [d.view(np.uint64) for d in data[0]]
+        samples = data[1]
+        return timestamps, samples
             
     def allocate_awg_memory(self, frame_depths: list[int]):
         """Allocate or reallocate AWG buffer based on specified frame_depths
@@ -195,28 +278,6 @@ class DAQOverlay(Overlay):
             print(f'allocating _awg_buffer with size {total_size} x 16b')
         self._awg_frame_depths = frame_depths
         self._awg_buffer = allocate(shape=(total_size,), dtype=np.uint16)
-        
-    def receive_adc_data(self, override_write_depth_errors=False):
-        """Perform DMA to receive data from ADC.
-        
-        Checks if a capture was performed before running DMA
-        
-        Arguments:
-            override_write_depth_errors (bool): if True, perform transfer regardless of write_depth status
-        """
-        failure = False
-        sample_write_depth = self.get_samples_write_depth()
-        timestamps_write_depth = self.get_timestamps_write_depth()
-        depths = []
-        for packet in (sample_write_depth, timestamps_write_depth):
-            num_packets = len(packet)
-            if num_packets == 0:
-                print(f"WARNING: didn't get the right number of packets for fifo, got {num_packets}")
-                failure = True
-            depths.append(packet)
-        if not(failure) or override_write_depth_errors:
-            self._adc_dma.transfer(self._adc_buffer)
-        return depths
 
     def send_awg_data(self):
         """Set AWG frame depths and perform DMA to send data to AWG"""
@@ -268,6 +329,7 @@ class DAQOverlay(Overlay):
                 """
             )
         banking_mode = clog2(num_channels)
+        self._active_channels = num_channels
         if self.verbose:
             print(f'sending banking mode packet {banking_mode} to buffer_config.fifo')
         self._capture_banking_mode.send_tx_pkt([banking_mode])
@@ -570,3 +632,38 @@ class DAQOverlay(Overlay):
         """
         # xor 2.7V pgood since its logic level is inverted
         return (self._pgood.channel1[1:7].read() ^ 0x4)
+    
+    def plot_channels(self,
+                      channel_list: list[int],
+                      timestamps: list[np.ndarray],
+                      samples: list[np.ndarray]):
+        """Plot received data for specified channels
+        
+        Arguments:
+            channel_list (list[int]): list of received channels to plot
+            timestamps (list[array_like]): list of timestamp data for each channel
+            samples (list[array_like]): list of sample data for each channel
+        """
+        fig, axes = plt.subplots(len(channel_list), 1, sharex=True, figsize=(12,8+0.5*len(channel_list)), dpi=90)
+        index_bits = clog2(self._adc_buffer_data_depth)
+        index_mask = (1 << index_bits) - 1
+        for axis, channel in zip(axes, channel_list):
+            if len(timestamps[channel]) > 0:
+                tvec = np.zeros(len(samples[channel]))
+                tstamp = int(timestamps[channel][0])
+                t0 = tstamp >> index_bits
+                for n in range(len(timestamps[channel])):
+                    tstamp = int(timestamps[channel][n])
+                    toffset = ((tstamp >> index_bits) - t0) * self._adc_parallel_samples
+                    sample_index = (tstamp & index_mask) * self._adc_parallel_samples
+                    if n == len(timestamps[channel]) - 1:
+                        sample_index_next = len(tvec)
+                    else:
+                        tstamp = int(timestamps[channel][n + 1])
+                        sample_index_next = (tstamp & index_mask) * self._adc_parallel_samples
+                    n_samples = sample_index_next - sample_index
+                    tvec = (toffset + np.arange(n_samples))/self._adc_fsamp
+                    axis.plot(tvec, np.int16(samples[channel][sample_index:sample_index_next])/2**16)
+            else:
+                tvec = np.arange(len(samples[channel]))/self._adc_fsamp
+                axis.plot(tvec, np.int16(samples[channel])/2**16)
