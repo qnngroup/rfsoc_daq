@@ -3,10 +3,10 @@
 
 `timescale 1ns/1ps
 module triangle #(
-  parameter int PHASE_BITS = 32, // ~ 2 Hz resolution at 6 GS/s
-  parameter int CHANNELS = 8,
-  parameter int PARALLEL_SAMPLES = 16,
-  parameter int SAMPLE_WIDTH = 16
+  parameter int PHASE_BITS, // 32 -> ~2 Hz resolution at 6 GS/s
+  parameter int CHANNELS,
+  parameter int PARALLEL_SAMPLES,
+  parameter int SAMPLE_WIDTH
 ) (
   input logic ps_clk, ps_reset,
   Axis_If.Slave ps_phase_inc, // {phase_inc} for each channel
@@ -33,7 +33,7 @@ axis_config_reg_cdc #(
 assign dac_phase_inc.ready = 1'b1; // always accept new phase inc
 
 logic [CHANNELS-1:0][PARALLEL_SAMPLES-1:0][PHASE_BITS-1:0] dac_phase_inc_reg;
-logic [CHANNELS-1:0][PARALLEL_SAMPLES-1:0][PHASE_BITS-1:0] dac_sample_phase, dac_sample_phase_d;
+logic [CHANNELS-1:0][PARALLEL_SAMPLES-1:0][PHASE_BITS-1:0] dac_sample_phase;
 logic [CHANNELS-1:0][PHASE_BITS-1:0] dac_cycle_phase;
 
 localparam int LATENCY = 2;
@@ -45,7 +45,6 @@ always_ff @(posedge dac_clk) begin
     dac_phase_inc_reg <= '0;
     dac_cycle_phase <= '0;
     dac_sample_phase <= '0;
-    dac_sample_phase_d <= '0;
     dac_data_valid <= '0;
   end else begin
     // load new phase_inc
@@ -72,7 +71,6 @@ always_ff @(posedge dac_clk) begin
       end
     end
     dac_data_valid <= {dac_data_valid[LATENCY-2:0], 1'b1};
-    dac_sample_phase_d <= dac_sample_phase;
   end
 end
 
@@ -93,7 +91,6 @@ end
 // if some, but not all signals are in the second quadrant (MSBs = 01) and all signals are either
 // in the first or second quadrant (MSBs = 0X), then
 logic [CHANNELS-1:0] dac_rising_edge;
-logic [CHANNELS-1:0] dac_upper_half;
 logic [CHANNELS-1:0] dac_crossing_in_batch;
 logic [CHANNELS-1:0] dac_crossing_between_batch;
 always_ff @(posedge dac_clk) begin

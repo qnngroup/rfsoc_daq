@@ -49,6 +49,7 @@ package sim_util_pkg;
 
     task fatal(input string message);
       $display("### ENCOUNTERED A FATAL ERROR, STOPPING SIMULATION NOW ###");
+      error_count = error_count + 1;
       $fatal(1, message);
     endtask
 
@@ -66,6 +67,23 @@ package sim_util_pkg;
   class queue #(type T=int, type T2=int);
 
     math #(.T(T)) math_i = new;
+
+    task automatic strip_to_matching(
+      inout debug debug_i,
+      inout T a_q [$],
+      input T b_q [$]
+    );
+      while (a_q.size() > b_q.size()) begin
+        if (a_q[$] === b_q[$]) begin
+          a_q.pop_front();
+        end else begin
+          a_q.pop_back();
+        end
+      end
+      if (a_q[$] !== b_q[$]) begin
+        debug_i.error($sformatf("couldn't find expected qty %x in a_q", b_q[$]));
+      end
+    endtask
 
     task automatic compare_threshold(
       debug debug_i,

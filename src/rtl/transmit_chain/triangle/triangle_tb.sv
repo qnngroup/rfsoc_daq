@@ -70,6 +70,19 @@ task automatic check_results (
     end else begin
       direction = DOWN;
     end
+    if ((last_sample > 0) && (phase_increment[channel] > last_sample)) begin
+      // might've missed a zero crossing and accidentally gotten a timestamp
+      // for it. If so, just pop the last element in trigger_values[channel]
+      in_trigger_values = 1'b0;
+      for (int sample = 0; sample < PARALLEL_SAMPLES; sample++) begin
+        if (last_sample === trigger_values[channel][$][sample*SAMPLE_WIDTH+:SAMPLE_WIDTH]) begin
+          in_trigger_values = 1'b1;
+        end
+      end
+      if (in_trigger_values) begin
+        trigger_values[channel].pop_back();
+      end
+    end
     while (recv.size() > 0) begin
       debug.display($sformatf(
         "channel %0d: sample pair %x, %x (%0d, %0d)",

@@ -19,10 +19,6 @@ module awg_test ();
 sim_util_pkg::debug debug = new(sim_util_pkg::DEFAULT);
 
 parameter int DEPTH = 256;
-parameter int AXI_MM_WIDTH = 128;
-parameter int PARALLEL_SAMPLES = 16;
-parameter int SAMPLE_WIDTH = 16;
-parameter int CHANNELS = 8;
 
 logic dac_reset;
 logic dac_clk = 0;
@@ -34,22 +30,18 @@ logic dma_clk = 0;
 localparam int DMA_CLK_RATE_HZ = 100_000_000;
 always #(0.5s/DMA_CLK_RATE_HZ) dma_clk = ~dma_clk;
 
-Axis_If #(.DWIDTH(AXI_MM_WIDTH)) dma_data_in ();
-Axis_If #(.DWIDTH($clog2(DEPTH)*CHANNELS)) dma_write_depth ();
-Axis_If #(.DWIDTH(2*CHANNELS)) dma_trigger_out_config ();
-Axis_If #(.DWIDTH(64*CHANNELS)) dma_awg_burst_length ();
+Axis_If #(.DWIDTH(tx_pkg::AXI_MM_WIDTH)) dma_data_in ();
+Axis_If #(.DWIDTH($clog2(DEPTH)*tx_pkg::CHANNELS)) dma_write_depth ();
+Axis_If #(.DWIDTH(2*tx_pkg::CHANNELS)) dma_trigger_out_config ();
+Axis_If #(.DWIDTH(64*tx_pkg::CHANNELS)) dma_awg_burst_length ();
 Axis_If #(.DWIDTH(2)) dma_awg_start_stop ();
 Axis_If #(.DWIDTH(2)) dma_transfer_error ();
 
-Realtime_Parallel_If #(.DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH), .CHANNELS(CHANNELS)) dac_data_out ();
-logic [CHANNELS-1:0] dac_trigger;
+Realtime_Parallel_If #(.DWIDTH(tx_pkg::DATA_WIDTH), .CHANNELS(tx_pkg::CHANNELS)) dac_data_out ();
+logic [tx_pkg::CHANNELS-1:0] dac_trigger;
 
 awg_tb #(
-  .DEPTH(DEPTH),
-  .AXI_MM_WIDTH(AXI_MM_WIDTH),
-  .PARALLEL_SAMPLES(PARALLEL_SAMPLES),
-  .SAMPLE_WIDTH(SAMPLE_WIDTH),
-  .CHANNELS(CHANNELS)
+  .DEPTH(DEPTH)
 ) tb_i (
   .dma_clk,
   .dma_data_in,
@@ -64,11 +56,7 @@ awg_tb #(
 );
 
 awg #(
-  .DEPTH(DEPTH),
-  .AXI_MM_WIDTH(AXI_MM_WIDTH),
-  .PARALLEL_SAMPLES(PARALLEL_SAMPLES),
-  .SAMPLE_WIDTH(SAMPLE_WIDTH),
-  .CHANNELS(CHANNELS)
+  .DEPTH(DEPTH)
 ) dut_i (
   .dma_clk,
   .dma_reset,
@@ -84,9 +72,9 @@ awg #(
   .dac_trigger
 );
 
-logic [CHANNELS-1:0][$clog2(DEPTH)-1:0] write_depths;
-logic [CHANNELS-1:0][63:0] burst_lengths;
-logic [CHANNELS-1:0][1:0] trigger_modes;
+logic [tx_pkg::CHANNELS-1:0][$clog2(DEPTH)-1:0] write_depths;
+logic [tx_pkg::CHANNELS-1:0][63:0] burst_lengths;
+logic [tx_pkg::CHANNELS-1:0][1:0] trigger_modes;
 
 initial begin
   debug.display("### TESTING ARBITRARY WAVEFORM GENERATOR ###", sim_util_pkg::DEFAULT);
@@ -101,7 +89,7 @@ initial begin
   @(posedge dac_clk);
   dac_reset <= 1'b0;
 
-  for (int channel = 0; channel < CHANNELS; channel++) begin
+  for (int channel = 0; channel < tx_pkg::CHANNELS; channel++) begin
     write_depths[channel] = $urandom_range(1, DEPTH/2);
     burst_lengths[channel] = $urandom_range(1, 4);
     trigger_modes[channel] = $urandom_range(0, 2);
@@ -136,7 +124,9 @@ initial begin
         debug.display("done sending samples over DMA", sim_util_pkg::DEBUG);
 
         // wait a few cycles to check for transfer error
-        repeat (10) @(posedge dma_clk);
+        repeat (10) begin
+          do @(posedge dma_clk); while (~dma_transfer_error.ready);
+        end
         tb_i.check_transfer_error(debug, tlast_check);
         
         if (start_repeat_count == 0) begin

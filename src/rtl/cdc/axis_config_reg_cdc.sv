@@ -27,7 +27,7 @@ always_ff @(posedge src_clk) begin
     src_empty <= 1'b1;
     src_send <= 1'b0;
   end else begin
-    if (src.ok & ~src_rcv) begin
+    if (src.valid & src.ready & ~src_rcv) begin
       src_empty <= 1'b0;
       src_send <= 1'b1;
     end else if (src_send & src_rcv) begin
@@ -52,7 +52,7 @@ always_ff @(posedge dest_clk) begin
   end else begin
     // once dest_out has data, dest_req is asserted
     // wait until ready goes high before sending ack
-    if (dest.ok) begin
+    if (dest.valid & dest.ready) begin
       dest.valid <= 1'b0; // reset valid after transfer occurs
       dest_ack <= 1'b1;
       transfer_done <= 1'b1;

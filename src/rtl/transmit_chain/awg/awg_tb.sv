@@ -3,11 +3,7 @@
 
 `timescale 1ns/1ps
 module awg_tb #(
-  parameter int DEPTH = 1024,
-  parameter int AXI_MM_WIDTH = 128,
-  parameter int PARALLEL_SAMPLES = 16,
-  parameter int SAMPLE_WIDTH = 16,
-  parameter int CHANNELS = 8
+  parameter int DEPTH = 1024
 ) (
   input logic dma_clk,
 
@@ -19,57 +15,57 @@ module awg_tb #(
   Axis_If.Slave  dma_transfer_error,
 
   input logic dac_clk,
-  input logic [CHANNELS-1:0] dac_trigger,
+  input logic [tx_pkg::CHANNELS-1:0] dac_trigger,
   Realtime_Parallel_If.Slave dac_data_out
 );
 
-typedef logic signed [SAMPLE_WIDTH-1:0] sample_t;
-typedef logic [AXI_MM_WIDTH-1:0] dma_batch_t;
-typedef logic [SAMPLE_WIDTH*PARALLEL_SAMPLES-1:0] dac_batch_t;
+typedef logic signed [tx_pkg::SAMPLE_WIDTH-1:0] sample_t;
+typedef logic [tx_pkg::AXI_MM_WIDTH-1:0] dma_batch_t;
+typedef logic [tx_pkg::DATA_WIDTH-1:0] dac_batch_t;
 sim_util_pkg::queue #(.T(sample_t), .T2(dma_batch_t)) dma_q_util = new;
 sim_util_pkg::queue #(.T(sample_t), .T2(dac_batch_t)) dac_q_util = new;
 
-sample_t samples_to_send [CHANNELS][$];
+sample_t samples_to_send [tx_pkg::CHANNELS][$];
 dma_batch_t dma_words [$];
-int trigger_arrivals [CHANNELS][$];
+int trigger_arrivals [tx_pkg::CHANNELS][$];
 
 task automatic clear_receive_data();
   dac_data_recv_i.clear_queues();
-  for (int channel = 0; channel < CHANNELS; channel++) begin
+  for (int channel = 0; channel < tx_pkg::CHANNELS; channel++) begin
     while (trigger_arrivals[channel].size() > 0) trigger_arrivals[channel].pop_back();
   end
 endtask
 
 task automatic clear_send_data();
   while (dma_words.size() > 0) dma_words.pop_back();
-  for (int channel = 0; channel < CHANNELS; channel++) begin
+  for (int channel = 0; channel < tx_pkg::CHANNELS; channel++) begin
     while (samples_to_send[channel].size() > 0) samples_to_send[channel].pop_back();
   end
 endtask
 
 axis_driver #(
-  .DWIDTH(AXI_MM_WIDTH)
+  .DWIDTH(tx_pkg::AXI_MM_WIDTH)
 ) dma_data_i (
   .clk(dma_clk),
   .intf(dma_data_in)
 );
 
 axis_driver #(
-  .DWIDTH($clog2(DEPTH)*CHANNELS)
+  .DWIDTH($clog2(DEPTH)*tx_pkg::CHANNELS)
 ) dma_write_depth_i (
   .clk(dma_clk),
   .intf(dma_write_depth)
 );
 
 axis_driver #(
-  .DWIDTH(2*CHANNELS)
+  .DWIDTH(2*tx_pkg::CHANNELS)
 ) dma_trigger_cfg_i (
   .clk(dma_clk),
   .intf(dma_trigger_out_config)
 );
 
 axis_driver #(
-  .DWIDTH(64*CHANNELS)
+  .DWIDTH(64*tx_pkg::CHANNELS)
 ) dma_burst_length_i (
   .clk(dma_clk),
   .intf(dma_awg_burst_length)
@@ -92,8 +88,8 @@ axis_receiver #(
 );
 
 realtime_parallel_receiver #(
-  .DWIDTH(PARALLEL_SAMPLES*SAMPLE_WIDTH),
-  .CHANNELS(CHANNELS)
+  .DWIDTH(tx_pkg::DATA_WIDTH),
+  .CHANNELS(tx_pkg::CHANNELS)
 ) dac_data_recv_i (
   .clk(dac_clk),
   .intf(dac_data_out)
@@ -109,7 +105,7 @@ task automatic check_dma_words(
   dma_batch_t words_temp [$];
   debug.display("checking dma input data", sim_util_pkg::DEBUG);
   debug.display($sformatf("dma_words.size() = %0d", dma_words.size()), sim_util_pkg::DEBUG);
-  for (int c = 0; c < CHANNELS; c++) begin
+  for (int c = 0; c < tx_pkg::CHANNELS; c++) begin
     debug.display($sformatf(
       "samples_to_send[%0d].size() = %0d",
       c,
@@ -118,9 +114,9 @@ task automatic check_dma_words(
     );
   end
   channel_offset = 0;
-  for (int channel = 0; channel < CHANNELS; channel++) begin
+  for (int channel = 0; channel < tx_pkg::CHANNELS; channel++) begin
     samples = samples_to_send[channel].size();
-    words = (samples*SAMPLE_WIDTH)/AXI_MM_WIDTH;
+    words = (samples*tx_pkg::SAMPLE_WIDTH)/tx_pkg::AXI_MM_WIDTH;
     if (dma_words.size() < (words + channel_offset)) begin
       debug.fatal("incorrect number of dma words");
     end
@@ -130,8 +126,8 @@ task automatic check_dma_words(
     dma_q_util.samples_from_batches(
       words_temp,
       dma_samples,
-      SAMPLE_WIDTH,
-      AXI_MM_WIDTH/SAMPLE_WIDTH
+      tx_pkg::SAMPLE_WIDTH,
+      tx_pkg::AXI_MM_WIDTH/tx_pkg::SAMPLE_WIDTH
     );
     debug.display($sformatf("words_temp.size() = %0d", words_temp.size()), sim_util_pkg::DEBUG);
     debug.display($sformatf("dma_samples.size() = %0d", dma_samples.size()), sim_util_pkg::DEBUG);
@@ -145,15 +141,15 @@ endtask
 
 task automatic check_output_data(
   inout sim_util_pkg::debug debug,
-  input logic [CHANNELS-1:0][1:0] trigger_modes,
-  input logic [CHANNELS-1:0][$clog2(DEPTH)-1:0] write_depths,
-  input logic [CHANNELS-1:0][63:0] burst_lengths
+  input logic [tx_pkg::CHANNELS-1:0][1:0] trigger_modes,
+  input logic [tx_pkg::CHANNELS-1:0][$clog2(DEPTH)-1:0] write_depths,
+  input logic [tx_pkg::CHANNELS-1:0][63:0] burst_lengths
 );
   sample_t recv_samples [$];
   int sample_count;
   int burst_count;
   int time_offset;
-  for (int channel = 0; channel < CHANNELS; channel++) begin
+  for (int channel = 0; channel < tx_pkg::CHANNELS; channel++) begin
     sample_count = 0;
     burst_count = 0;
     time_offset = 0;
@@ -168,11 +164,11 @@ task automatic check_output_data(
     dac_q_util.samples_from_batches(
       dac_data_recv_i.data_q[channel],
       recv_samples,
-      SAMPLE_WIDTH,
-      PARALLEL_SAMPLES
+      tx_pkg::SAMPLE_WIDTH,
+      tx_pkg::PARALLEL_SAMPLES
     );
     if (recv_samples.size()
-        != (write_depths[channel]+1)*burst_lengths[channel]*PARALLEL_SAMPLES) begin
+        != (write_depths[channel]+1)*burst_lengths[channel]*tx_pkg::PARALLEL_SAMPLES) begin
       debug.error($sformatf(
         {
           "incorrect number of samples received on channel %0d.",
@@ -181,7 +177,7 @@ task automatic check_output_data(
           "\ngot %0d"
         },
         channel,
-        (write_depths[channel]+1)*burst_lengths[channel]*PARALLEL_SAMPLES,
+        (write_depths[channel]+1)*burst_lengths[channel]*tx_pkg::PARALLEL_SAMPLES,
         samples_to_send[channel].size(),
         recv_samples.size())
       );
@@ -198,10 +194,10 @@ task automatic check_output_data(
         );
       end
       recv_samples.pop_back();
-      if (sample_count == (write_depths[channel]+1)*PARALLEL_SAMPLES - 1) begin
+      if (sample_count == (write_depths[channel]+1)*tx_pkg::PARALLEL_SAMPLES - 1) begin
         burst_count = burst_count + 1;
       end
-      sample_count = (sample_count + 1) % ((write_depths[channel]+1)*PARALLEL_SAMPLES);
+      sample_count = (sample_count + 1) % ((write_depths[channel]+1)*tx_pkg::PARALLEL_SAMPLES);
     end
     // check for correct timing of trigger signals
     case (trigger_modes[channel])
@@ -211,7 +207,7 @@ task automatic check_output_data(
     endcase
     // check we got the correct number of trigger events
     // should have burst_count trigger events,
-    // at times k*(write_depths[channel]+1)*PARALLEL_SAMPLES for
+    // at times k*(write_depths[channel]+1)*tx_pkg::PARALLEL_SAMPLES for
     // k = 0,1,2,...,burst_count
     if (trigger_arrivals[channel].size() != burst_count) begin
       debug.error($sformatf(
@@ -236,9 +232,9 @@ endtask
 
 task automatic configure_dut(
   inout sim_util_pkg::debug debug,
-  input logic [CHANNELS-1:0][1:0] trigger_modes,
-  input logic [CHANNELS-1:0][63:0] burst_lengths,
-  input logic [CHANNELS-1:0][$clog2(DEPTH)-1:0] write_depths
+  input logic [tx_pkg::CHANNELS-1:0][1:0] trigger_modes,
+  input logic [tx_pkg::CHANNELS-1:0][63:0] burst_lengths,
+  input logic [tx_pkg::CHANNELS-1:0][$clog2(DEPTH)-1:0] write_depths
 );
   bit register_write_success;
 
@@ -262,25 +258,25 @@ endtask
 
 task automatic generate_samples(
   inout sim_util_pkg::debug debug,
-  input logic [CHANNELS-1:0][$clog2(DEPTH)-1:0] write_depths
+  input logic [tx_pkg::CHANNELS-1:0][$clog2(DEPTH)-1:0] write_depths
 );
-  logic [AXI_MM_WIDTH-1:0] dma_word;
+  logic [tx_pkg::AXI_MM_WIDTH-1:0] dma_word;
 
-  for (int channel = 0; channel < CHANNELS; channel++) begin
+  for (int channel = 0; channel < tx_pkg::CHANNELS; channel++) begin
     for (int batch = 0; batch < write_depths[channel] + 1; batch++) begin
-      for (int sample = 0; sample < PARALLEL_SAMPLES; sample++) begin
-        samples_to_send[channel].push_front($urandom_range(1,{SAMPLE_WIDTH{1'b1}}));
+      for (int sample = 0; sample < tx_pkg::PARALLEL_SAMPLES; sample++) begin
+        samples_to_send[channel].push_front($urandom_range(1,{tx_pkg::SAMPLE_WIDTH{1'b1}}));
       end
     end
   end
 
-  // reform samples into AXI_MM_WIDTH-wide words
-  for (int channel = 0; channel < CHANNELS; channel++) begin
-    for (int word = 0; word < ((write_depths[channel]+1)*PARALLEL_SAMPLES*SAMPLE_WIDTH)/AXI_MM_WIDTH; word++) begin
+  // reform samples into tx_pkg::AXI_MM_WIDTH-wide words
+  for (int channel = 0; channel < tx_pkg::CHANNELS; channel++) begin
+    for (int word = 0; word < ((write_depths[channel]+1)*tx_pkg::DATA_WIDTH)/tx_pkg::AXI_MM_WIDTH; word++) begin
       dma_word = '0;
-      for (int sample = 0; sample < AXI_MM_WIDTH/SAMPLE_WIDTH; sample++) begin
-        dma_word = {samples_to_send[channel][$-(word*(AXI_MM_WIDTH/SAMPLE_WIDTH)+sample)],
-                    dma_word[AXI_MM_WIDTH-1:SAMPLE_WIDTH]};
+      for (int sample = 0; sample < tx_pkg::AXI_MM_WIDTH/tx_pkg::SAMPLE_WIDTH; sample++) begin
+        dma_word = {samples_to_send[channel][$-(word*(tx_pkg::AXI_MM_WIDTH/tx_pkg::SAMPLE_WIDTH)+sample)],
+                    dma_word[tx_pkg::AXI_MM_WIDTH-1:tx_pkg::SAMPLE_WIDTH]};
       end
       dma_words.push_front(dma_word);
     end
@@ -340,8 +336,8 @@ endtask
 
 task automatic do_dac_burst(
   inout sim_util_pkg::debug debug,
-  input logic [CHANNELS-1:0][$clog2(DEPTH)-1:0] write_depths,
-  input logic [CHANNELS-1:0][63:0] burst_lengths
+  input logic [tx_pkg::CHANNELS-1:0][$clog2(DEPTH)-1:0] write_depths,
+  input logic [tx_pkg::CHANNELS-1:0][63:0] burst_lengths
 );
   bit register_write_success;
   debug.display("running DAC burst", sim_util_pkg::DEBUG);
@@ -361,7 +357,7 @@ task automatic do_dac_burst(
   while (dac_data_out.data === '0) @(posedge dac_clk);
   // we have nonzero data now, so wait until all channels become inactive
   while (dac_data_out.data !== '0) begin
-    for (int channel = 0; channel < CHANNELS; channel++) begin
+    for (int channel = 0; channel < tx_pkg::CHANNELS; channel++) begin
       // save trigger arrival if it happens
       if (dac_trigger[channel] === 1'b1) begin
         debug.display($sformatf(
@@ -375,7 +371,7 @@ task automatic do_dac_burst(
     end
     @(posedge dac_clk);
   end
-  for (int channel = 0; channel < CHANNELS; channel++) begin
+  for (int channel = 0; channel < tx_pkg::CHANNELS; channel++) begin
     debug.display($sformatf(
       "trigger_arrivals[%0d].size() = %0d",
       channel,

@@ -4,9 +4,9 @@
 
 `timescale 1ns/1ps
 module lmh6401_spi #(
-  parameter int AXIS_CLK_FREQ = 150_000_000,
-  parameter int SPI_CLK_FREQ = 1_000_000,
-  parameter int NUM_CHANNELS = 2
+  parameter int AXIS_CLK_FREQ,
+  parameter int SPI_CLK_FREQ,
+  parameter int NUM_CHANNELS
 ) (
   input wire clk, reset,
   Axis_If.Slave command_in, // {addr + data}
@@ -51,7 +51,7 @@ always_ff @(posedge clk) begin
     spi.sdi <= 1'b0;
   end else begin
     unique case (state)
-      IDLE: if (command_in.ok) begin 
+      IDLE: if (command_in.valid & command_in.ready) begin 
         state <= SENDING;
         addr <= command_in.data[16+:$clog2(NUM_CHANNELS)];
         // only perform writes, so set MSB of data to 0 so we don't
