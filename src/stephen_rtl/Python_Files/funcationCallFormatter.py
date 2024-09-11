@@ -77,16 +77,29 @@ def formatFuncCall(s,fName = "functionName",addition=None):
     if find_num_pats(out+body, ".") != n: print("ERROR IN BODY")
     return out+align(body)
 
+def parallelize_field(field_name, num_in_parallel, width=None):
+    template = lambda i : f"assign {field_name}{i} = {field_name}[{i}];\n"
+    out= f"logic[{num_in_parallel-1}:0][{width}-1:0] {field_name};" if width else f"logic[{num_in_parallel}:0]{field_name};"
+    out += f"\nlogic[{width}-1:0] " if width else "\nlogic "
+    for i in range(num_in_parallel): out+=f"{field_name}{i},"
+    out = out[:-1] + ";\n"
+    for i in range(num_in_parallel): out+=template(i)
+    return out[:-1]
 
-st = """module wave_generator (input wire clk,rst,
-			 		  input wire next,
-			 		  output logic[DATAW-1:0] sample_out, 
-			 		  output logic sample_out_valid,
-			 		  Axis_IF.stream_in wave);
+
+st = """module rgb_controller(input wire clk, rst,
+              		  input wire [7:0] r_in, g_in, b_in,
+              		  output logic r_out, g_out, b_out);
                  """
-fName = "wave_gen"
-addition = "daq_params_pkg::"
+fName = "dut_i"
+addition = ""
 out= formatFuncCall(st,fName=fName,addition=addition)
+print(out)
+
+field_name = "dac_batches"
+num_in_parallel = 8
+width = "BATCH_WIDTH"
+out = parallelize_field(field_name,num_in_parallel,width)
 print(out)
 
 

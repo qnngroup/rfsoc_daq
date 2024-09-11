@@ -17,12 +17,14 @@ module slave_test #(parameter IS_INTEGRATED = 0, parameter VERBOSE=sim_util_pkg:
     bit halt_osc = 0;
     int seed;
     logic[MEM_SIZE-1:0] rtl_write_reqs, rtl_read_reqs, fresh_bits, rtl_rdy; 
-    logic[MEM_SIZE-1:0][WD_DATA_WIDTH-1:0] rtl_wd_in, rtl_rd_out;
-    logic[WD_DATA_WIDTH-1:0] rdata, wdata;
-    Recieve_Transmit_IF #(A_BUS_WIDTH, A_DATA_WIDTH)   wa_if (); 
-    Recieve_Transmit_IF #(WD_BUS_WIDTH, WD_DATA_WIDTH) wd_if (); 
-    Recieve_Transmit_IF #(A_BUS_WIDTH, A_DATA_WIDTH)   ra_if (); 
-    Recieve_Transmit_IF #(WD_BUS_WIDTH, WD_DATA_WIDTH) rd_if (); 
+    logic[MEM_SIZE-1:0][DATAW-1:0] rtl_wd_in, rtl_rd_out;
+    logic[DATAW-1:0] rdata, wdata;
+    int test_num, written_val;
+    int dac_id; 
+    Recieve_Transmit_IF #(A_BUS_WIDTH, A_DATA_WIDTH)        wa_if (); 
+    Recieve_Transmit_IF #(WD_BUS_WIDTH, DATAW)              wd_if (); 
+    Recieve_Transmit_IF #(A_BUS_WIDTH, A_DATA_WIDTH)        ra_if (); 
+    Recieve_Transmit_IF #(WD_BUS_WIDTH, DATAW)              rd_if (); 
     Recieve_Transmit_IF #(RESP_DATA_WIDTH, RESP_DATA_WIDTH) wr_if ();  
     Recieve_Transmit_IF #(RESP_DATA_WIDTH, RESP_DATA_WIDTH) rr_if ();
 
@@ -48,11 +50,11 @@ module slave_test #(parameter IS_INTEGRATED = 0, parameter VERBOSE=sim_util_pkg:
         ps_wresp_recieve(.clk(clk), .rst(rst),
                          .bus(wr_if.receive_bus),
                          .is_addr(1'b0)); 
-        axi_receive #(.BUS_WIDTH(WD_BUS_WIDTH), .DATA_WIDTH(WD_DATA_WIDTH))
+        axi_receive #(.BUS_WIDTH(WD_BUS_WIDTH), .DATA_WIDTH(DATAW))
         ps_rdata_recieve(.clk(clk), .rst(rst),
                          .bus(rd_if.receive_bus),
                          .is_addr(1'b0));
-        axi_transmit #(.BUS_WIDTH(WD_BUS_WIDTH), .DATA_WIDTH(WD_DATA_WIDTH))
+        axi_transmit #(.BUS_WIDTH(WD_BUS_WIDTH), .DATA_WIDTH(DATAW))
         ps_wdata_transmit(.clk(clk), .rst(rst),
                           .bus(wd_if.transmit_bus)); 
         axi_transmit #(.BUS_WIDTH(A_BUS_WIDTH), .DATA_WIDTH(A_DATA_WIDTH))
@@ -62,6 +64,7 @@ module slave_test #(parameter IS_INTEGRATED = 0, parameter VERBOSE=sim_util_pkg:
         ps_raddr_transmit(.clk(clk), .rst(rst),
                           .bus(ra_if.transmit_bus)); 
 
+    always_ff @(posedge clk) test_num <= debug.test_num;
 	always #(0.5s/(CLK_RATE_MHZ*1_000_000)) clk = ~clk;
 	initial begin
         if (~IS_INTEGRATED) begin 
@@ -92,6 +95,8 @@ module slave_test #(parameter IS_INTEGRATED = 0, parameter VERBOSE=sim_util_pkg:
             debug.displayc($sformatf("Using random seed value %0d",seed),.msg_color(sim_util_pkg::BLUE),.msg_verbosity(sim_util_pkg::VERBOSE));            
         end
         $srandom(seed);
+        dac_id = seed%DAC_NUM;
+        debug.displayc($sformatf("Inital dac targeted is %0d",dac_id),.msg_color(sim_util_pkg::BLUE),.msg_verbosity(sim_util_pkg::VERBOSE));
         debug.timeout_watcher(clk,TIMEOUT);
         repeat (5) @(posedge clk);
         sim_util_pkg::flash_signal(rst,clk);        
@@ -195,9 +200,9 @@ module slave_test #(parameter IS_INTEGRATED = 0, parameter VERBOSE=sim_util_pkg:
         curr_err = debug.get_error_count();
         debug.disp_test_part(1,fresh_bits == 0,"Freshbits shouldn't be activated right now");
         fork 
-            begin tb_i.ps_write(debug, SCALE_DAC_OUT_ADDR, 5); end
+            begin tb_i.ps_write(debug, DAC_SCALE_ADDRS[dac_id], 5); end
             begin 
-                rtl_rdy[SCALE_DAC_OUT_ID] <= 0;
+                rtl_rdy[DAC_SCALE_IDS[dac_id]] <= 0;
                 while (1) begin
                     @ (posedge clk); 
                     if (fresh_bits != 0) break; 
@@ -205,11 +210,11 @@ module slave_test #(parameter IS_INTEGRATED = 0, parameter VERBOSE=sim_util_pkg:
             end 
         join
         repeat (10) @(posedge clk); 
-        debug.disp_test_part(2,fresh_bits[SCALE_DAC_OUT_ID] == 1,"Freshbits should be high");
-        rtl_rdy[SCALE_DAC_OUT_ID] <= 1;
+        debug.disp_test_part(2,fresh_bits[DAC_SCALE_IDS[dac_id]] == 1,"Freshbits should be high");
+        rtl_rdy[DAC_SCALE_IDS[dac_id]] <= 1;
         repeat(2) @(posedge clk);
-        debug.disp_test_part(3,fresh_bits[SCALE_DAC_OUT_ID] == 0,"Freshbits should have fallen");
-        debug.disp_test_part(4,rtl_rd_out[SCALE_DAC_OUT_ID] == 5,"Correct value not polled");
+        debug.disp_test_part(3,fresh_bits[DAC_SCALE_IDS[dac_id]] == 0,"Freshbits should have fallen");
+        debug.disp_test_part(4,rtl_rd_out[DAC_SCALE_IDS[dac_id]] == 5,"Correct value not polled");
         combine_errors();
         debug.check_test(curr_err == debug.get_error_count(), .has_parts(1));
 
@@ -240,45 +245,45 @@ module slave_test #(parameter IS_INTEGRATED = 0, parameter VERBOSE=sim_util_pkg:
         debug.displayc($sformatf("%0d: RTL holds a write while PS tries to write %s", debug.test_num, osc_string), .msg_verbosity(sim_util_pkg::VERBOSE));
         curr_err = debug.get_error_count();
         wdata = $urandom(); 
-        for (int i = PS_SEED_BASE_ID; i <= PS_SEED_VALID_ID; i++) begin
+        for (int i = PS_SEED_BASE_IDS[dac_id]; i <= PS_SEED_VALID_IDS[dac_id]; i++) begin
             rtl_write_reqs[i] <= 1;
             rtl_wd_in[i] <= 16'hBEEF; 
         end
         @(posedge clk); 
         fork 
-            tb_i.ps_write(debug,PS_SEED_BASE_ADDR+4, wdata);
+            tb_i.ps_write(debug,PS_SEED_BASE_ADDRS[dac_id]+4, wdata);
         join_none
         repeat(20) @(posedge clk);
-        tb_i.rtl_read(PS_SEED_BASE_ID+1,rdata); 
-        debug.disp_test_part(1,rdata == 16'hBEEF,"Error while rtl holds write (rtl read wrong)");
+        tb_i.rtl_read(PS_SEED_BASE_IDS[dac_id]+1,rdata); 
+        debug.disp_test_part(1,rdata == 16'hBEEF,$sformatf("Error while rtl holds write (rtl read wrong). Expc %h, got %h", 16'hBEEF, rdata));
         debug.disp_test_part(2,dut_i.ps_write_req == 1,"PS write req should not be complete yet");
-        for (int i = PS_SEED_BASE_ID; i <= PS_SEED_VALID_ID; i++) begin
-            rtl_wd_in[i] <= 16'hBEEF+(i-PS_SEED_BASE_ID); 
+        for (int i = PS_SEED_BASE_IDS[dac_id]; i <= PS_SEED_VALID_IDS[dac_id]; i++) begin
+            rtl_wd_in[i] <= 16'hBEEF+(i-PS_SEED_BASE_IDS[dac_id]); 
             @(posedge clk); 
         end
-        tb_i.rtl_read(PS_SEED_BASE_ID+1,rdata); 
-        debug.disp_test_part(3,rdata == (16'hBEEF+1),"Error while rtl holds write (rtl read wrong)");
+        tb_i.rtl_read(PS_SEED_BASE_IDS[dac_id]+1,rdata); 
+        debug.disp_test_part(3,rdata == (16'hBEEF+1),$sformatf("Error while rtl holds write (rtl read wrong). Expc %h, got %h", 16'hBEEF+1, rdata));
         debug.disp_test_part(4,dut_i.ps_write_req == 1,"PS write req should not be complete yet");
         repeat(5) @(posedge clk);
         {rtl_wd_in,rtl_write_reqs} <= 0;
         while (~dut_i.wcomplete) @(posedge clk);
         debug.disp_test_part(5,dut_i.ps_write_req == 0,"PS write req should be done now");
-        tb_i.ps_read(PS_SEED_BASE_ADDR+4,rdata);
-        debug.disp_test_part(6,rdata == wdata,"PS read wrong");
+        tb_i.ps_read(PS_SEED_BASE_ADDRS[dac_id]+4,rdata);
+        debug.disp_test_part(6,rdata == wdata,$sformatf("PS read wrong. Expc %h, got %h", wdata, rdata));
         debug.check_test(curr_err == debug.get_error_count(), .has_parts(1));
         reset_errors();
 
         // TEST 4
         debug.displayc($sformatf("%0d: RTL holds writes while PS tries to write to an unrelated address %s", debug.test_num, osc_string), .msg_verbosity(sim_util_pkg::VERBOSE));
         wdata = $urandom(); 
-        for (int i = PS_SEED_BASE_ID; i <= PS_SEED_VALID_ID; i++) begin
-            if (i != PS_SEED_BASE_ID+3) begin
+        for (int i = PS_SEED_BASE_IDS[dac_id]; i <= PS_SEED_VALID_IDS[dac_id]; i++) begin
+            if (i != PS_SEED_BASE_IDS[dac_id]+3) begin
                 rtl_write_reqs[i] <= 1;
                 rtl_wd_in[i] <= 16'hBEEF+i; 
             end 
         end
-        tb_i.ps_write(debug,PS_SEED_BASE_ADDR+(4*3), wdata);
-        tb_i.ps_read(PS_SEED_BASE_ADDR+(4*3),rdata);
+        tb_i.ps_write(debug,PS_SEED_BASE_ADDRS[dac_id]+(4*3), wdata);
+        tb_i.ps_read(PS_SEED_BASE_ADDRS[dac_id]+(4*3),rdata);
         {rtl_wd_in,rtl_write_reqs} <= 0;
         debug.check_test(rdata == wdata, .has_parts(0));
         reset_errors();
@@ -311,12 +316,12 @@ module slave_test #(parameter IS_INTEGRATED = 0, parameter VERBOSE=sim_util_pkg:
         debug.displayc($sformatf("%0d: Read/Write past memory space %s", debug.test_num, osc_string), .msg_verbosity(sim_util_pkg::VERBOSE));        
         curr_err = debug.get_error_count();
         tb_i.ps_read(ABS_ADDR_CEILING,rdata); 
-        debug.disp_test_part(1,$signed(rdata) == -2,$sformatf("MMap ceiling should contain -2. Read data is %0d", rdata));
+        debug.disp_test_part(1,rdata == {(DATAW-2){1'b1}},$sformatf("MMap ceiling should contain %h. Read data is %h",{(DATAW-2){1'b1}},rdata));
         tb_i.ps_write(debug,ABS_ADDR_CEILING, 500);
         tb_i.ps_read(ABS_ADDR_CEILING,rdata); 
-        debug.disp_test_part(2,$signed(rdata) == -2,"MMap ceiling should not be writable");
+        debug.disp_test_part(2,$signed(rdata) == {(DATAW-2){1'b1}},"MMap ceiling should not be writable");
         tb_i.ps_read(ABS_ADDR_CEILING+4*50,rdata);
-        debug.disp_test_part(3,$signed(rdata) == -2,"Reading past ceiling should resolve to the ceiling");
+        debug.disp_test_part(3,$signed(rdata) == {(DATAW-2){1'b1}},"Reading past ceiling should resolve to the ceiling");
         debug.check_test(curr_err == debug.get_error_count(), .has_parts(1));
         reset_errors();
 
@@ -327,12 +332,11 @@ module slave_test #(parameter IS_INTEGRATED = 0, parameter VERBOSE=sim_util_pkg:
         tb_i.check_addr_space(debug);       
         debug.check_test(curr_err == debug.get_error_count(), .has_parts(1));
         reset_errors();
-
         // TEST 9
-        debug.displayc($sformatf("%0d: Write to entire mapped address space %s", debug.test_num, osc_string), .msg_verbosity(sim_util_pkg::VERBOSE));        
+        debug.displayc($sformatf("%0d: Write to entire mapped address space %s", debug.test_num, osc_string), .msg_verbosity(sim_util_pkg::VERBOSE));  
         curr_err = debug.get_error_count();
-        tb_i.write_addr_space(debug);
-        tb_i.check_addr_space(debug,.has_written(1));
+        tb_i.write_addr_space(debug, written_val);
+        tb_i.check_addr_space(debug, .written_val(written_val), .has_written(1));
         debug.check_test(curr_err == debug.get_error_count(), .has_parts(1));
         reset_errors();
     endtask

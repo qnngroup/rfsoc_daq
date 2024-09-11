@@ -2,12 +2,12 @@
 `default_nettype none
 
 import daq_params_pkg::INTERPOLATER_DELAY;
-module pwl_generator #(parameter DMA_DATA_WIDTH, parameter SAMPLE_WIDTH, parameter BATCH_SIZE, parameter SPARSE_BRAM_DEPTH, parameter DENSE_BRAM_DEPTH) 
+module pwl_generator #(parameter DMA_DATA_WIDTH, SAMPLE_WIDTH, BATCH_SIZE, SPARSE_BRAM_DEPTH, DENSE_BRAM_DEPTH, PWL_PERIOD_WIDTH) 
 			 		  (input wire clk,rst,
 			 		   input wire halt, 
 			 		   input wire run, 
 			 		   output logic pwl_rdy,
-			 		   output logic[(2*(axi_params_pkg::WD_DATA_WIDTH))-1:0] pwl_wave_period,
+			 		   output logic[PWL_PERIOD_WIDTH-1:0] pwl_wave_period,
 			 		   output logic valid_pwl_wave_period, 
 			 		   output logic[BATCH_SIZE-1:0][SAMPLE_WIDTH-1:0] batch_out,
 			 		   output logic valid_batch_out,
@@ -37,8 +37,8 @@ module pwl_generator #(parameter DMA_DATA_WIDTH, parameter SAMPLE_WIDTH, paramet
 	logic brams_writes_ready, brams_valid;
 	logic dbram_we,dbram_en;
 	logic dbram_next;
-	logic gen_mode, rst_gen_mode;
-	logic[(2*(axi_params_pkg::WD_DATA_WIDTH))-1:0] batch_counter; 
+	logic gen_mode, clr_brams;
+	logic[PWL_PERIOD_WIDTH-1:0] batch_counter; 
 	logic valid_dense_batch, dbram_write_rdy;
 	logic[$clog2(BATCH_SIZE)-1:0] batch_ptr; 
 	logic[INTERPOLATER_DELAY-1:0][SAMPLE_WIDTH+1:0] intrp_pipe; 
@@ -47,11 +47,9 @@ module pwl_generator #(parameter DMA_DATA_WIDTH, parameter SAMPLE_WIDTH, paramet
 	logic intrp_out_nxt_sb;
 	logic[$clog2(INTERPOLATER_DELAY):0] intrp_count; 
 	logic[INTERPOLATER_DELAY-1:0][BATCH_WIDTH-1:0] dbatch_pipe;
-	logic[INTERPOLATER_DELAY-1:0][1:0] which_bram_pipe;
-	logic[INTERPOLATER_DELAY-1:0] reset_period_pipe; 
-	logic reset_period; 
+	logic[INTERPOLATER_DELAY-1:0][2:0] which_bram_pipe;
 	logic[BATCH_WIDTH-1:0] dbatch_out;
-	logic which_bram; 
+	logic which_bram, last_batch; 
 	logic[1:0][DMA_DATA_WIDTH+1:0] dma_pipe;
 	logic curr_is_last, done;	               										             //5              6
 	enum logic[3:0] {IDLE,DENSE_INTRP_WAIT,STORE_DENSE_WAVE,STORE_SPARSE_WAVE,SETUP_GEN_MODE,SEND_DENSE_WAVE,SEND_SPARSE_WAVE,HOLD_SPARSE_CMD,HALT} pwlState;
@@ -60,7 +58,7 @@ module pwl_generator #(parameter DMA_DATA_WIDTH, parameter SAMPLE_WIDTH, paramet
 	sparse_bramint(.clk(clk),.rst(rst),
 	               .addr(sbram_addr), .line_in(sparse_line_in),
 	               .we(sbram_we), .en(sbram_en),
-	               .generator_mode(gen_mode), .rst_gen_mode(rst_gen_mode),
+	               .generator_mode(gen_mode), .clr_bram(clr_brams),
 	               .next(sbram_next),
 	               .line_out(sparse_line_out), .valid_line_out(valid_sparse_line),
 	               .generator_addr(sbram_gen_addr),
@@ -71,7 +69,7 @@ module pwl_generator #(parameter DMA_DATA_WIDTH, parameter SAMPLE_WIDTH, paramet
 	dense_bramint(.clk(clk), .rst(rst),
 	               .addr(dbram_addr), .line_in(dense_line_in),
 	               .we(dbram_we), .en(dbram_en),
-	               .generator_mode(gen_mode), .rst_gen_mode(rst_gen_mode),
+	               .generator_mode(gen_mode), .clr_bram(clr_brams),
 	               .next(dbram_next),
 	               .line_out(dense_batch_out), .valid_line_out(valid_dense_batch),
 	               .generator_addr(dbram_gen_addr),
@@ -115,7 +113,7 @@ module pwl_generator #(parameter DMA_DATA_WIDTH, parameter SAMPLE_WIDTH, paramet
 
 		{valid_intrp_out,intrp_out_dt,intrp_out_nxt_sb} = intrp_pipe[INTERPOLATER_DELAY-1];
 		nxt_valid_intrp_out = intrp_pipe[INTERPOLATER_DELAY-2][SAMPLE_WIDTH+1];
-		{valid_batch_out,which_bram} = which_bram_pipe[INTERPOLATER_DELAY-1];
+		{valid_batch_out,which_bram,last_batch} = which_bram_pipe[INTERPOLATER_DELAY-1];
 		dbatch_out = dbatch_pipe[INTERPOLATER_DELAY-1];
 		if (valid_batch_out) batch_out = (which_bram)? intrp_batch : dbatch_out; 
 		else batch_out = 0;
@@ -123,45 +121,42 @@ module pwl_generator #(parameter DMA_DATA_WIDTH, parameter SAMPLE_WIDTH, paramet
 		push_dense_cmd_now = curr_dma_valid && (nxt_dma_valid || curr_is_last) && ~curr_dma_sb && dma.ready;
 		save_sparse_cmd_now = curr_dma_valid && (nxt_dma_valid || curr_is_last) && curr_dma_sb && dma.ready; 
 		dense_line_in = {dense_nxt_bram_bit,dense_batch_in};
-		reset_period = reset_period_pipe[INTERPOLATER_DELAY-1];
 
 		x_reg_whole = x_reg[SAMPLE_WIDTH+:SAMPLE_WIDTH];
 		scaled_x = x << SAMPLE_WIDTH; 
+
+		clr_brams = (pwlState == IDLE && dma.valid) && (sparse_bramint.lines_stored != 0 || dense_bramint.lines_stored != 0);
 	end
 
 	always_ff @(posedge clk) begin
 		intrp_pipe[INTERPOLATER_DELAY-1:1] <= intrp_pipe[INTERPOLATER_DELAY-2:0];
 		which_bram_pipe[INTERPOLATER_DELAY-1:1] <= which_bram_pipe[INTERPOLATER_DELAY-2:0];
 		dbatch_pipe[INTERPOLATER_DELAY-1:1] <= dbatch_pipe[INTERPOLATER_DELAY-2:0];
-		reset_period_pipe[INTERPOLATER_DELAY-1:1] <= reset_period_pipe[INTERPOLATER_DELAY-2:0];
 
 		if (rst) begin
-			{sbram_addr, dbram_addr, regions_stored, regions_sent} <= 0; 
-			{sbram_next, dbram_next} <= 0;
-			{sparse_line_in, dense_batch_in, dense_nxt_bram_bit, batch_ptr} <= 0;
-			{dbram_we, dbram_en} <= 0; 
-			{sbram_we, sbram_en} <= 0;  
-			{first_sb,curr_bram} <= 0; 
-			{which_bram_pipe[0],dbatch_pipe[0],reset_period_pipe[0],intrp_pipe[0],intrp_count} <= 0; 
-			{x_reg,slope_reg,dt_reg,nxt_bram_reg,batch_counter,pwl_wave_period,valid_pwl_wave_period} <= 0;
-			{gen_mode, rst_gen_mode, pwl_rdy} <= 1;
-			{dma_pipe,done} <= 0; 
+			{sbram_addr, dbram_addr, regions_stored, regions_sent} <= '0; 
+			{sbram_next, dbram_next} <= '0;
+			{sparse_line_in, dense_batch_in, dense_nxt_bram_bit, batch_ptr} <= '0;
+			{dbram_we, dbram_en} <= '0; 
+			{sbram_we, sbram_en} <= '0;  
+			{first_sb,curr_bram} <= '0; 
+			{which_bram_pipe[0],dbatch_pipe[0],intrp_pipe[0],intrp_count} <= '0; 
+			{x_reg,slope_reg,dt_reg,nxt_bram_reg,batch_counter,pwl_wave_period,valid_pwl_wave_period} <= '0;
+			{gen_mode, pwl_rdy} <= 1;
+			{dma_pipe,done} <= '0; 
 			pwlState <= IDLE; 
 		end else begin
 			if (pwlState == IDLE && curr_dma_valid) regions_stored <= 0;
 			else if (dbram_we || sbram_we) regions_stored <= regions_stored + 1;
 
-			if (regions_sent == 0 && (dbram_next || sbram_next)) reset_period_pipe[0] <= 1;
-			else reset_period_pipe[0] <= 0; 
-
 			if (~valid_pwl_wave_period) begin 
-				if (reset_period && batch_counter > 0) begin 
-					pwl_wave_period <= batch_counter;
+				if (last_batch) begin 
+					pwl_wave_period <= batch_counter + 1;
 					valid_pwl_wave_period <= 1; 
 					batch_counter <= 0;
 				end 
 				else if (valid_batch_out) batch_counter <= batch_counter + 1;
-			end else if (pwlState == IDLE && dma.valid && dma.ready) valid_pwl_wave_period <= 0; 
+			end else if (pwlState == IDLE && dma.valid && dma.ready) {pwl_wave_period,valid_pwl_wave_period} <= '0; 
 
 			if (dma.ready) begin
 				if (dma.valid) begin
@@ -205,6 +200,7 @@ module pwl_generator #(parameter DMA_DATA_WIDTH, parameter SAMPLE_WIDTH, paramet
 									pwlState <= STORE_SPARSE_WAVE;
 								end else
 								if (push_dense_cmd_now) pwlState <= DENSE_INTRP_WAIT;
+
 							end 
 						end  
 					end 
@@ -273,10 +269,10 @@ module pwl_generator #(parameter DMA_DATA_WIDTH, parameter SAMPLE_WIDTH, paramet
 
 				SEND_DENSE_WAVE: begin
 					if (halt) begin
-						rst_gen_mode <= 1;
+						gen_mode <= 0;
 						pwlState <= HALT;
 					end else begin
-						which_bram_pipe[0] <= {1'b1,1'b0};
+						which_bram_pipe[0] <= (regions_sent == regions_stored-1)? {1'b1,1'b0,1'b1} : {1'b1,1'b0,1'b0};
 						dbatch_pipe[0] <= dense_batch_out[0+:BATCH_WIDTH];
 						if (regions_sent == regions_stored-1) begin
 							regions_sent <= 0;
@@ -298,10 +294,10 @@ module pwl_generator #(parameter DMA_DATA_WIDTH, parameter SAMPLE_WIDTH, paramet
 
 				SEND_SPARSE_WAVE: begin
 					if (halt) begin
-						rst_gen_mode <= 1;
+						gen_mode <= 0;
 						pwlState <= HALT;
 					end else begin 
-						which_bram_pipe[0] <= {1'b1,1'b1};
+						which_bram_pipe[0] <= (regions_sent == regions_stored-1)? {1'b1,1'b1,1'b1} : {1'b1,1'b1,1'b0}; 
 						if (dt == BATCH_SIZE) begin
 							if (regions_sent == regions_stored-1) begin
 								regions_sent <= 0;
@@ -331,11 +327,11 @@ module pwl_generator #(parameter DMA_DATA_WIDTH, parameter SAMPLE_WIDTH, paramet
 
 				HOLD_SPARSE_CMD: begin
 					if (halt) begin
-						rst_gen_mode <= 1;
+						gen_mode <= 0;
 						pwlState <= HALT;
 					end else begin 
 						x_reg <= x_reg + (slope_reg*BATCH_SIZE);
-						which_bram_pipe[0] <= {1'b1,1'b1};
+						which_bram_pipe[0] <= (regions_sent == regions_stored-1)? {1'b1,1'b1,1'b1} : {1'b1,1'b1,1'b0}; 
 						if (dt_reg == BATCH_SIZE) begin
 							if (regions_sent == regions_stored-1) begin
 								regions_sent <= 0;
@@ -363,36 +359,35 @@ module pwl_generator #(parameter DMA_DATA_WIDTH, parameter SAMPLE_WIDTH, paramet
 				end 
 
 				HALT: begin
-					rst_gen_mode <= 0; 
 					pwl_rdy <= 1;				
-					{sbram_next, dbram_next} <= 0;
-					{sbram_addr, dbram_addr} <= 0;
-					{dbram_we, dbram_en, sbram_we, sbram_en} <= 0;
-					{which_bram_pipe[0],dbatch_pipe[0]} <= 0; 
+					{sbram_next, dbram_next} <= '0;
+					{sbram_addr, dbram_addr} <= '0;
+					{dbram_we, dbram_en, sbram_we, sbram_en} <= '0;
+					{which_bram_pipe[0],dbatch_pipe[0]} <= '0; 
+					regions_sent <= 0;
 					pwlState <= IDLE;
 				end 
 			endcase 
 		end
 	end
+	// logic[15:0] test0,test1,test2,test3,test4,test5,test6,test7,test8,test9,test10,test11,test12,test13,test14,test15;
 
-	logic[15:0] test0,test1,test2,test3,test4,test5,test6,test7,test8,test9,test10,test11,test12,test13,test14,test15;
-
-	assign test0 = (gen_mode)? batch_out[0] : intrp_batch[0];
-	assign test1 = (gen_mode)? batch_out[1] : intrp_batch[1];
-	assign test2 = (gen_mode)? batch_out[2] : intrp_batch[2];
-	assign test3 = (gen_mode)? batch_out[3] : intrp_batch[3];
-	assign test4 = (gen_mode)? batch_out[4] : intrp_batch[4];
-	assign test5 = (gen_mode)? batch_out[5] : intrp_batch[5];
-	assign test6 = (gen_mode)? batch_out[6] : intrp_batch[6];
-	assign test7 = (gen_mode)? batch_out[7] : intrp_batch[7];
-	assign test8 = (gen_mode)? batch_out[8] : intrp_batch[8];
-	assign test9 = (gen_mode)? batch_out[9] : intrp_batch[9];
-	assign test10 = (gen_mode)? batch_out[10] : intrp_batch[10];
-	assign test11 = (gen_mode)? batch_out[11] : intrp_batch[11];
-	assign test12 = (gen_mode)? batch_out[12] : intrp_batch[12];
-	assign test13 = (gen_mode)? batch_out[13] : intrp_batch[13];
-	assign test14 = (gen_mode)? batch_out[14] : intrp_batch[14];
-	assign test15 = (gen_mode)? batch_out[15] : intrp_batch[15];
+	// assign test0 = (gen_mode)? batch_out[0] : intrp_batch[0];
+	// assign test1 = (gen_mode)? batch_out[1] : intrp_batch[1];
+	// assign test2 = (gen_mode)? batch_out[2] : intrp_batch[2];
+	// assign test3 = (gen_mode)? batch_out[3] : intrp_batch[3];
+	// assign test4 = (gen_mode)? batch_out[4] : intrp_batch[4];
+	// assign test5 = (gen_mode)? batch_out[5] : intrp_batch[5];
+	// assign test6 = (gen_mode)? batch_out[6] : intrp_batch[6];
+	// assign test7 = (gen_mode)? batch_out[7] : intrp_batch[7];
+	// assign test8 = (gen_mode)? batch_out[8] : intrp_batch[8];
+	// assign test9 = (gen_mode)? batch_out[9] : intrp_batch[9];
+	// assign test10 = (gen_mode)? batch_out[10] : intrp_batch[10];
+	// assign test11 = (gen_mode)? batch_out[11] : intrp_batch[11];
+	// assign test12 = (gen_mode)? batch_out[12] : intrp_batch[12];
+	// assign test13 = (gen_mode)? batch_out[13] : intrp_batch[13];
+	// assign test14 = (gen_mode)? batch_out[14] : intrp_batch[14];
+	// assign test15 = (gen_mode)? batch_out[15] : intrp_batch[15];
 endmodule 
 
 `default_nettype wire

@@ -6,7 +6,7 @@ module bram_interface #(parameter DATA_WIDTH, parameter BRAM_DEPTH, parameter BR
 					    input wire [$clog2(BRAM_DEPTH)-1:0] addr,
 					    input wire[DATA_WIDTH-1:0] line_in,
 					    input wire we, en, 
-					    input wire generator_mode, rst_gen_mode, 
+					    input wire generator_mode, clr_bram, 
 					    input wire next, 
 					    output logic[DATA_WIDTH-1:0] line_out,
 					    output logic valid_line_out,
@@ -22,7 +22,7 @@ module bram_interface #(parameter DATA_WIDTH, parameter BRAM_DEPTH, parameter BR
 	logic[$clog2(BRAM_DEPTH)-1:0] lines_stored;
 	logic[$clog2(BUFF_LEN)-1:0] buff_place_ptr, buff_access_ptr;
 	logic[$clog2(BUFF_LEN):0] els_in_buff;
-	enum logic[2:0] {WRITE_MODE, PREP_GEN_MODE, FILL_BUFF, GENERATOR_MODE, SIMPLE_MODE, RESET_GEN_MODE, ERROR_STATE} bramState;
+	enum logic[2:0] {WRITE_MODE, PREP_GEN_MODE, FILL_BUFF, GENERATOR_MODE, SIMPLE_MODE, CLEAR_BRAM, RESET_GEN_MODE, ERROR_STATE} bramState;
 
     BRAM #(.DATA_WIDTH(DATA_WIDTH),.BRAM_DEPTH(BRAM_DEPTH),.RAM_PERFORMANCE("HIGH_PERFORMANCE")) 
     bram (.addra(addr_in),  
@@ -51,7 +51,8 @@ module bram_interface #(parameter DATA_WIDTH, parameter BRAM_DEPTH, parameter BR
 		valid_line = valid_line_pipe[BUFF_LEN-1];
 		nxt_valid_line = valid_line_pipe[BUFF_LEN-2];
 		line_out = 	(bramState == ERROR_STATE)? 0 : line_out_buffer[buff_access_ptr];
-		write_rdy = bramState == WRITE_MODE;
+		write_rdy = bramState == WRITE_MODE && ~generator_mode && ~clr_bram;
+		valid_line_out = (bramState == GENERATOR_MODE || bramState == SIMPLE_MODE) && generator_mode;
 	end
 
 	always_ff @(posedge clk) begin
@@ -59,48 +60,45 @@ module bram_interface #(parameter DATA_WIDTH, parameter BRAM_DEPTH, parameter BR
 
 		if (rst) begin
 			valid_line_pipe[0] <= 0; 
-			{buff_addr,buff_place_ptr,buff_access_ptr,els_in_buff} <= 0;
-			{lines_stored,valid_line_out,line_out_buffer} <= 0;
+			{buff_addr,buff_place_ptr,buff_access_ptr,els_in_buff} <= '0;
+			{lines_stored,line_out_buffer} <= '0;
 			bramState <= WRITE_MODE;
 		end
 		else begin
 			case(bramState)
 				WRITE_MODE: begin
-					if (generator_mode) bramState <= PREP_GEN_MODE;
-					if (we) lines_stored <= lines_stored + 1;
+					if (~clr_bram) begin 
+						if (generator_mode) bramState <= PREP_GEN_MODE;
+						if (we && write_rdy) lines_stored <= lines_stored + 1;
+					end else lines_stored <= 0;
 				end 
 
 				PREP_GEN_MODE: begin
-					if (~rst_gen_mode) begin 
-						{buff_addr,buff_place_ptr,buff_access_ptr,els_in_buff} <= 0; 
-						valid_line_pipe[0] <= 1;
-						bramState <= FILL_BUFF;
-					end 
+					{buff_addr,buff_place_ptr,buff_access_ptr,els_in_buff} <= '0; 
+					valid_line_pipe[0] <= 1;
+					bramState <= FILL_BUFF;
 				end 
 
 				FILL_BUFF: begin
-					if (buff_addr < BUFF_LEN) buff_addr <= buff_addr + 1; 
-					if (buff_addr == BUFF_LEN-1) valid_line_pipe[0] <= 0;
-					if (els_in_buff < BUFF_LEN) begin
-						if (valid_line) begin 
-							els_in_buff <= els_in_buff + 1;
-							buff_place_ptr <= (buff_place_ptr == BUFF_LEN-1)? 0 : buff_place_ptr + 1;
-							line_out_buffer[buff_place_ptr] <= bram_line_out;
-						end 
-					end else begin						
-						if (lines_stored == 0) bramState <= ERROR_STATE;
-						else begin
-							valid_line_out <= 1;
-							bramState <= (lines_stored > BUFF_LEN)? GENERATOR_MODE : SIMPLE_MODE;
-						end 
-					end
+					if (generator_mode) begin 
+						if (buff_addr < BUFF_LEN) buff_addr <= buff_addr + 1; 
+						if (buff_addr == BUFF_LEN-1) valid_line_pipe[0] <= 0;
+						if (els_in_buff < BUFF_LEN) begin
+							if (valid_line) begin 
+								els_in_buff <= els_in_buff + 1;
+								buff_place_ptr <= (buff_place_ptr == BUFF_LEN-1)? 0 : buff_place_ptr + 1;
+								line_out_buffer[buff_place_ptr] <= bram_line_out;
+							end 
+						end else begin						
+							if (lines_stored == 0) bramState <= ERROR_STATE;
+							else bramState <= (lines_stored > BUFF_LEN)? GENERATOR_MODE : SIMPLE_MODE;					
+						end
+					end else bramState <= WRITE_MODE;
 				end 
 
 				GENERATOR_MODE: begin
-					if (rst_gen_mode) begin
-						valid_line_out <= 0; 
-						bramState <= PREP_GEN_MODE;
-					end else if (~generator_mode) bramState <= RESET_GEN_MODE; 					
+					if (clr_bram) bramState <= CLEAR_BRAM;
+					else if (~generator_mode) bramState <= RESET_GEN_MODE;
 					else begin 
 						if (next) begin
 							buff_access_ptr <= (buff_access_ptr == BUFF_LEN-1)? 0 : buff_access_ptr + 1;
@@ -119,19 +117,20 @@ module bram_interface #(parameter DATA_WIDTH, parameter BRAM_DEPTH, parameter BR
 				end 
 
 				SIMPLE_MODE: begin
-					if (rst_gen_mode) begin
-						valid_line_out <= 0; 
-						bramState <= PREP_GEN_MODE;
-					end
+					if (clr_bram) bramState <= CLEAR_BRAM;
+					else if (~generator_mode) bramState <= RESET_GEN_MODE;				
 					else if (next) buff_access_ptr <= (buff_access_ptr == lines_stored-1)? 0 : buff_access_ptr + 1;
-					if (~generator_mode) bramState <= RESET_GEN_MODE; 					
+				end 
+
+				CLEAR_BRAM: begin					
+					lines_stored <= 0;	
+					bramState <= RESET_GEN_MODE;
 				end 
 
 				RESET_GEN_MODE: begin
 					bramState <= WRITE_MODE;
 					valid_line_pipe[0] <= 0; 
-					{buff_addr,buff_place_ptr,buff_access_ptr,els_in_buff} <= 0;
-					{lines_stored,valid_line_out} <= 0;
+					if (clr_bram) lines_stored <= 0;
 				end 
 
 				ERROR_STATE: begin

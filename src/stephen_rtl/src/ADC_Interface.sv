@@ -1,7 +1,7 @@
 `timescale 1ns / 1ps
 `default_nettype none
 
-module ADC_Interface #(parameter DATAW, SDC_SAMPLES, BUFF_CONFIG_WIDTH, CHAN_SAMPLES, BUFF_SAMPLES)
+module ADC_Interface #(parameter DATAW, SDC_SIZE, BUFF_CONFIG_WIDTH, CHAN_SIZE, BUFF_SIZE)
 					  (input wire clk,rst,
 					   input wire[(mem_layout_pkg::MEM_SIZE)-1:0] fresh_bits,
 					   input wire[(mem_layout_pkg::MEM_SIZE)-1:0][DATAW-1:0] read_resps,
@@ -10,10 +10,10 @@ module ADC_Interface #(parameter DATAW, SDC_SAMPLES, BUFF_CONFIG_WIDTH, CHAN_SAM
 					   Axis_IF.stream_out cmc, 
 					   Axis_IF.stream_out sdc);
 
-	logic[SDC_SAMPLES-1:0][DATAW-1:0] sdc_reg; 
+	logic[SDC_SIZE-1:0][DATAW-1:0] sdc_reg; 
 	logic[BUFF_CONFIG_WIDTH-1:0] buff_config_reg; 
-	logic[CHAN_SAMPLES-1:0][DATAW-1:0] channel_mux_reg; 
-	logic[BUFF_SAMPLES-1:0][DATAW-1:0] buff_timestamp_reg; 
+	logic[CHAN_SIZE-1:0][DATAW-1:0] channel_mux_reg; 
+	logic[BUFF_SIZE-1:0][DATAW-1:0] buff_timestamp_reg; 
 	logic buff_timestamp_writereq;
 	logic state_rdy;
 
@@ -63,7 +63,7 @@ module ADC_Interface #(parameter DATAW, SDC_SAMPLES, BUFF_CONFIG_WIDTH, CHAN_SAM
 					end
 				end
 				SEND_SDC: begin
-					for (int i = 0; i < SDC_SAMPLES; i++) sdc_reg[i] <= read_resps[(mem_layout_pkg::SDC_BASE_ID)+i]; 
+					for (int i = 0; i < SDC_SIZE; i++) sdc_reg[i] <= read_resps[(mem_layout_pkg::SDC_BASE_ID)+i]; 
 					sdc.valid <= 1; 
 					adcState <= IDLE; 
 				end 
@@ -73,7 +73,7 @@ module ADC_Interface #(parameter DATAW, SDC_SAMPLES, BUFF_CONFIG_WIDTH, CHAN_SAM
 					adcState <= IDLE; 
 				end 
 				SEND_CHAN: begin
-					for (int i = 0; i < CHAN_SAMPLES; i++) channel_mux_reg[i] <= read_resps[(mem_layout_pkg::CHAN_MUX_BASE_ID)+i]; 
+					for (int i = 0; i < CHAN_SIZE; i++) channel_mux_reg[i] <= read_resps[(mem_layout_pkg::CHAN_MUX_BASE_ID)+i]; 
 					cmc.valid <= 1;
 					adcState <= IDLE;
 				end 

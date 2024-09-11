@@ -28,7 +28,7 @@ module ps_intf_probe();
     logic[$clog2(BUFF_LEN)-1:0] dma_i; 
     logic send_dma_data,set_seeds,run_pwl,halt_dac,run_trig;
     logic first_sent, which_period; 
-    logic[WD_DATA_WIDTH-1:0] pwl_period0, pwl_period1; 
+    logic[DATAW-1:0] pwl_period0, pwl_period1; 
     enum logic[1:0] {IDLE_D, SEND_DMA_DATA,HOLD_CMD,DMA_WAIT} dmaState;
     enum logic[1:0] {IDLE_T, SET_SEEDS,WRESP,ERROR} dacTestState;
     enum logic {SEND_ADDR, GET_DATA} readState;

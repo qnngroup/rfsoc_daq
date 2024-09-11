@@ -3,6 +3,7 @@
 
 import mem_layout_pkg::*;
 import axi_params_pkg::*;
+import daq_params_pkg::DAC_NUM;
 module axi_slave (input wire clk, rst,
 				  Recieve_Transmit_IF waddr_if,
 				  Recieve_Transmit_IF wdata_if,
@@ -13,14 +14,14 @@ module axi_slave (input wire clk, rst,
 				  input wire[MEM_SIZE-1:0] rtl_write_reqs, rtl_read_reqs,
 				  input wire clr_rd_out, 
 				  input wire[MEM_SIZE-1:0] rtl_rdy, 
-               	  input wire[MEM_SIZE-1:0][WD_DATA_WIDTH-1:0] rtl_wd_in,
-               	  output logic[MEM_SIZE-1:0][WD_DATA_WIDTH-1:0] rtl_rd_out,
+               	  input wire[MEM_SIZE-1:0][DATAW-1:0] rtl_wd_in,
+               	  output logic[MEM_SIZE-1:0][DATAW-1:0] rtl_rd_out,
                	  output logic[MEM_SIZE-1:0] fresh_bits);
 
-    logic [MEM_SIZE-1:0][WD_DATA_WIDTH-1:0] mem_map;			
+    logic [MEM_SIZE-1:0][DATAW-1:0] mem_map;			
     logic [MEM_SIZE-1:0] rtl_read_reqs_full, rtl_write_reqs_full; 	  
-	logic[A_DATA_WIDTH-1:0] windex_out, windex_out_raw, rindex_out;
-	logic[WD_DATA_WIDTH-1:0] wdata_out, rdata_in; 
+	logic[ADDRW-1:0] windex_out, windex_out_raw, rindex_out;
+	logic[DATAW-1:0] wdata_out, rdata_in; 
 	logic wcomplete, rcomplete;
 	logic can_ps_write, can_ps_read, is_readonly_addr;
 	logic ps_write_req,ps_read_req; 
@@ -48,7 +49,7 @@ module axi_slave (input wire clk, rst,
 	              .bus(wresp_if.transmit_bus));
 
 
-	ps_reqhandler #(.A_DATA_WIDTH(A_DATA_WIDTH), .WD_DATA_WIDTH(WD_DATA_WIDTH), .REQ_BUFFER_SZ(daq_params_pkg::REQ_BUFFER_SZ))
+	ps_reqhandler #(.ADDRW(ADDRW), .DATAW(DATAW), .REQ_BUFFER_SZ(daq_params_pkg::REQ_BUFFER_SZ))
 	ps_rh(.clk(clk), .rst(rst),
 		  .have_windex(waddr_if.valid_data), .have_wdata(wdata_if.valid_data),
 		  .have_rdata(raddr_if.valid_data),
@@ -84,19 +85,22 @@ module axi_slave (input wire clk, rst,
 			end 
 		end
 	end
-
+	logic[DATAW-1:0] test;
+	
 	always_ff @(posedge clk) begin
 		if (rst) begin 
-			{fresh_bits,rtl_rd_out, wcomplete, rcomplete} <= 0;
+			{fresh_bits,rtl_rd_out, wcomplete, rcomplete} <= '0;
 			for (int i = 0; i < MEM_SIZE; i++) begin
-				if (i == MAX_DAC_BURST_SIZE_ID) mem_map[i] <= daq_params_pkg::MAX_DAC_BURST_SIZE; 
-				else if (i == DAC_BURST_SIZE_ID) mem_map[i] <= 0; 
-				else if (i == SCALE_DAC_OUT_ID) mem_map[i] <= 0; 
-				else if (is_PS_VALID(i) || is_RTL_VALID(i)) mem_map[i] <= 0;
+				if (i == MAX_DAC_BURST_SIZE_ID) mem_map[i] <= daq_params_pkg::MAX_DAC_BURST_SIZE;
+				else if (i inside {[DAC_BURST_SIZE_IDS[0] : DAC_BURST_SIZE_IDS[DAC_NUM-1]]}) mem_map[i] <= '0;
+				else if (i inside {[DAC_SCALE_IDS[0] : DAC_SCALE_IDS[DAC_NUM-1]]}) mem_map[i] <= '0; 
+				else if (is_PS_VALID(i) || is_RTL_VALID(i) || i == RST_ID) mem_map[i] <= '0;
 				else if (i == MEM_SIZE_ID) mem_map[i] <= MEM_SIZE; 
 				else if (i == VERSION_ID) mem_map[i] <= daq_params_pkg::FIRMWARE_VERSION; 
-				else if (i == ABS_ID_CEILING) mem_map[i] <= -2; 
-				else mem_map[i] <= -1; 				
+				else if (i == ABS_ID_CEILING) mem_map[i] <= {(DATAW-2){1'b1}};
+				else if (i inside {[MEM_TEST_BASE_ID : MEM_TEST_END_ID]}) mem_map[i] <= {(DATAW-1){1'b1}};
+				else if (i <= MAPPED_ID_CEILING) mem_map[i] <= {DATAW{1'b1}};
+				else mem_map[i] <= 0; 				
 			end 
 		end else begin
 			// Handler for internal system read and write requests (Prioritized over PS requests since those are buffered)
@@ -122,16 +126,14 @@ module axi_slave (input wire clk, rst,
 					if (windex_out >= MEM_TEST_BASE_ID && windex_out < MEM_TEST_END_ID) begin
 						mem_map[windex_out] <= wdata_out-10;
 						fresh_bits[windex_out] <= 1; 
-						if (windex_out != MEM_TEST_END_ID-1) begin
-							mem_map[windex_out+1] <= wdata_out+10;
-							fresh_bits[windex_out+1] <= 1;
-						end 
+						mem_map[windex_out+1] <= wdata_out+10;
+						fresh_bits[windex_out+1] <= 1;
 					end else 
-					if (windex_out == DAC_BURST_SIZE_ID) begin
+					if (is_DACBS_REG(windex_out)) begin
 						mem_map[windex_out] <= (wdata_out <= daq_params_pkg::MAX_DAC_BURST_SIZE)? wdata_out : daq_params_pkg::MAX_DAC_BURST_SIZE; 
 						fresh_bits[windex_out] <= 1;
 					end else 
-					if (windex_out == SCALE_DAC_OUT_ID) begin
+					if (is_DACSCALE_REG(windex_out)) begin
 						mem_map[windex_out] <= (wdata_out <= daq_params_pkg::MAX_SCALE_FACTOR)? wdata_out : daq_params_pkg::MAX_SCALE_FACTOR; 
 						fresh_bits[windex_out] <= 1; 
 					end

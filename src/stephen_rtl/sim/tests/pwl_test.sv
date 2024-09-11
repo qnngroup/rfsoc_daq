@@ -23,7 +23,7 @@ module pwl_test #(parameter IS_INTEGRATED = 0, parameter VERBOSE=sim_util_pkg::D
 
     sim_util_pkg::debug debug = new(VERBOSE,TEST_NUM,"PWL", IS_INTEGRATED); 
 
-    pwl_generator #(.DMA_DATA_WIDTH(daq_params_pkg::DMA_DATA_WIDTH), .SAMPLE_WIDTH(daq_params_pkg::SAMPLE_WIDTH), .BATCH_SIZE(daq_params_pkg::BATCH_SIZE), .SPARSE_BRAM_DEPTH(daq_params_pkg::SPARSE_BRAM_DEPTH), .DENSE_BRAM_DEPTH(daq_params_pkg::DENSE_BRAM_DEPTH))
+    pwl_generator #(.DMA_DATA_WIDTH(daq_params_pkg::DMA_DATA_WIDTH), .SAMPLE_WIDTH(daq_params_pkg::SAMPLE_WIDTH), .BATCH_SIZE(daq_params_pkg::BATCH_SIZE), .SPARSE_BRAM_DEPTH(daq_params_pkg::SPARSE_BRAM_DEPTH), .DENSE_BRAM_DEPTH(daq_params_pkg::DENSE_BRAM_DEPTH), .PWL_PERIOD_WIDTH(daq_params_pkg::PWL_PERIOD_WIDTH))
     dut_i(.clk(clk), .rst(rst),
           .halt(halt), .run(run_pwl), .pwl_rdy(pwl_rdy),
           .pwl_wave_period(pwl_wave_period), .valid_pwl_wave_period(valid_pwl_wave_period),

@@ -1,7 +1,6 @@
 `timescale 1ns / 1ps
 `default_nettype none
 
-
 module top_level(input wire ps_clk,ps_rst, dac_clk, dac_rst,
                  //Inputs from DAC
                  input wire dac0_rdy,
@@ -45,20 +44,20 @@ module top_level(input wire ps_clk,ps_rst, dac_clk, dac_rst,
     Recieve_Transmit_IF #(axi_params_pkg::WD_BUS_WIDTH, axi_params_pkg::WD_DATA_WIDTH) wd_if (); 
     Recieve_Transmit_IF #(axi_params_pkg::A_BUS_WIDTH,  axi_params_pkg::A_DATA_WIDTH)  ra_if (); 
     Recieve_Transmit_IF #(axi_params_pkg::WD_BUS_WIDTH, axi_params_pkg::WD_DATA_WIDTH) rd_if (); 
-    Recieve_Transmit_IF #(axi_params_pkg::RESP_DATA_WIDTH, axi_params_pkg::RESP_DATA_WIDTH) wr_if ();  
+    Recieve_Transmit_IF #(axi_params_pkg::RESP_DATA_WIDTH, axi_params_pkg::RESP_DATA_WIDTH) wr_if ();
     Recieve_Transmit_IF #(axi_params_pkg::RESP_DATA_WIDTH, axi_params_pkg::RESP_DATA_WIDTH) rr_if ();
 
     Axis_IF #(daq_params_pkg::BUFF_TIMESTAMP_WIDTH) bufft_if(); 
     Axis_IF #(daq_params_pkg::BUFF_CONFIG_WIDTH) buffc_if();
-    Axis_IF #(daq_params_pkg::DMA_DATA_WIDTH) pwl_dma_if();
+    Axis_IF #(daq_params_pkg::DMA_DATA_WIDTH, daq_params_pkg::DAC_NUM) pwl_dma_ifs();
     Axis_IF #(daq_params_pkg::CHANNEL_MUX_WIDTH) cmc_if();
     Axis_IF #(daq_params_pkg::SDC_DATA_WIDTH) sdc_if();
 
 
-    assign pwl_dma_if.data = pwl_tdata;
-    assign pwl_dma_if.valid = pwl_tvalid;
-    assign pwl_dma_if.last = pwl_tlast;
-    assign pwl_tready = pwl_dma_if.ready; 
+    assign pwl_dma_ifs.data = pwl_tdata;
+    assign pwl_dma_ifs.valid = pwl_tvalid;
+    assign pwl_dma_ifs.last = pwl_tlast;
+    assign pwl_tready = pwl_dma_ifs.ready; 
 
     assign bufft_if.data = bufft_data_in;
     assign bufft_if.valid = bufft_valid_in;
@@ -114,7 +113,7 @@ module top_level(input wire ps_clk,ps_rst, dac_clk, dac_rst,
          .wa_if(wa_if), .wd_if(wd_if),
          .ra_if(ra_if), .rd_if(rd_if),
          .wr_if(wr_if), .rr_if(rr_if),
-         .pwl_dma_if(pwl_dma_if),
+         .pwl_dma_ifs(pwl_dma_ifs),
          .bufft_if(bufft_if), .buffc_if(buffc_if), .cmc_if(cmc_if), .sdc_if(sdc_if)); 
     
       // sys_ILA sys_ILA (.clk(ps_clk), 

@@ -2,10 +2,10 @@
 `timescale 1ns / 1ps
 
 import daq_params_pkg::SDC_DATA_WIDTH;
-import daq_params_pkg::SDC_SAMPLES;
+import daq_params_pkg::SDC_SIZE;
 import daq_params_pkg::BUFF_CONFIG_WIDTH;
 import daq_params_pkg::CHANNEL_MUX_WIDTH;
-import daq_params_pkg::CHAN_SAMPLES;
+import daq_params_pkg::CHAN_SIZE;
 import daq_params_pkg::BUFF_TIMESTAMP_WIDTH;
 module adc_intf_test #(parameter IS_INTEGRATED = 0, parameter VERBOSE=sim_util_pkg::DEBUG)();
 	localparam TIMEOUT = 1500;
@@ -18,8 +18,8 @@ module adc_intf_test #(parameter IS_INTEGRATED = 0, parameter VERBOSE=sim_util_p
     logic clk, rst; 
     logic[(mem_layout_pkg::MEM_SIZE)-1:0] fresh_bits; 
     logic[(mem_layout_pkg::MEM_SIZE)-1:0][(axi_params_pkg::DATAW)-1:0] mem_map, read_resps; 
-    logic[CHAN_SAMPLES-1:0][(axi_params_pkg::DATAW)-1:0] exp_cmc_data; 
-    logic[SDC_SAMPLES-1:0][(axi_params_pkg::DATAW)-1:0] exp_sdc_data; 
+    logic[CHAN_SIZE-1:0][(axi_params_pkg::DATAW)-1:0] exp_cmc_data; 
+    logic[SDC_SIZE-1:0][(axi_params_pkg::DATAW)-1:0] exp_sdc_data; 
     int total_errors = 0;
     int curr_err, seed, test_num; 
     Axis_IF #(BUFF_TIMESTAMP_WIDTH) bufft(); 
@@ -27,7 +27,7 @@ module adc_intf_test #(parameter IS_INTEGRATED = 0, parameter VERBOSE=sim_util_p
     Axis_IF #(CHANNEL_MUX_WIDTH) cmc();
     Axis_IF #(SDC_DATA_WIDTH) sdc(); 
 
-    ADC_Interface #(.DATAW(axi_params_pkg::DATAW), .SDC_SAMPLES(daq_params_pkg::SDC_SAMPLES), .BUFF_CONFIG_WIDTH(BUFF_CONFIG_WIDTH), .CHAN_SAMPLES(CHAN_SAMPLES), .BUFF_SAMPLES(BUFF_SAMPLES))
+    ADC_Interface #(.DATAW(axi_params_pkg::DATAW), .SDC_SIZE(daq_params_pkg::SDC_SIZE), .BUFF_CONFIG_WIDTH(BUFF_CONFIG_WIDTH), .CHAN_SIZE(CHAN_SIZE), .BUFF_SIZE(BUFF_SIZE))
     dut_i(.clk(clk), .rst(rst),
           .fresh_bits(fresh_bits),
           .read_resps(read_resps),
@@ -62,11 +62,11 @@ module adc_intf_test #(parameter IS_INTEGRATED = 0, parameter VERBOSE=sim_util_p
     endtask 
 
     task automatic cmc_test(inout sim_util_pkg::debug debug, input bit write_all = 1, input bit signal_rdy = 1);
-        tb_i.populate_wd_list(CHAN_SAMPLES+1); 
+        tb_i.populate_wd_list(CHAN_SIZE+1); 
         tb_i.write_addr(mem_layout_pkg::CHAN_MUX_BASE_ID, .write_all(write_all));
         sim_util_pkg::delay(clk, $urandom_range(2,100));
         debug.disp_test_part(1, cmc.valid == 1, "Valid should be high"); 
-        debug.disp_test_part(2,cmc.data == read_resps[mem_layout_pkg::CHAN_MUX_BASE_ID+:CHAN_SAMPLES],$sformatf("Expected %h, got %h",cmc.data, read_resps[mem_layout_pkg::CHAN_MUX_BASE_ID+:CHAN_SAMPLES])); 
+        debug.disp_test_part(2,cmc.data == read_resps[mem_layout_pkg::CHAN_MUX_BASE_ID+:CHAN_SIZE],$sformatf("Expected %h, got %h",cmc.data, read_resps[mem_layout_pkg::CHAN_MUX_BASE_ID+:CHAN_SIZE])); 
         if (signal_rdy) begin 
             sim_util_pkg::flash_signal(cmc.ready,clk);
             @(posedge clk); 
@@ -86,11 +86,11 @@ module adc_intf_test #(parameter IS_INTEGRATED = 0, parameter VERBOSE=sim_util_p
         end 
     endtask 
     task automatic sdc_test(inout sim_util_pkg::debug debug, input bit write_all = 1, input bit signal_rdy = 1);
-        tb_i.populate_wd_list(SDC_SAMPLES+1); 
+        tb_i.populate_wd_list(SDC_SIZE+1); 
         tb_i.write_addr(mem_layout_pkg::SDC_BASE_ID, .write_all(write_all));
         sim_util_pkg::delay(clk, $urandom_range(2,100));
         debug.disp_test_part(1, sdc.valid == 1, "Valid should be high"); 
-        debug.disp_test_part(2,sdc.data == read_resps[mem_layout_pkg::SDC_BASE_ID+:SDC_SAMPLES],$sformatf("Expected %h, got %h",sdc.data, read_resps[mem_layout_pkg::SDC_BASE_ID+:SDC_SAMPLES])); 
+        debug.disp_test_part(2,sdc.data == read_resps[mem_layout_pkg::SDC_BASE_ID+:SDC_SIZE],$sformatf("Expected %h, got %h",sdc.data, read_resps[mem_layout_pkg::SDC_BASE_ID+:SDC_SIZE])); 
         if (signal_rdy) begin 
             sim_util_pkg::flash_signal(sdc.ready,clk); 
             @(posedge clk);

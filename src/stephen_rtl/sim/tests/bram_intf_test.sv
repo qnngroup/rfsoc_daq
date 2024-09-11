@@ -3,7 +3,7 @@
 
 module bram_intf_test #(parameter IS_INTEGRATED = 0, parameter VERBOSE=sim_util_pkg::DEBUG)();
 	localparam TIMEOUT = 5000;
-	localparam TEST_NUM = 7;
+	localparam TEST_NUM = 9;
 	localparam int CLK_RATE_MHZ = 150;
     localparam MAN_SEED = 0; 
     localparam BRAM_DEPTH = 100; 
@@ -18,18 +18,19 @@ module bram_intf_test #(parameter IS_INTEGRATED = 0, parameter VERBOSE=sim_util_
     logic[$clog2(BRAM_DEPTH)-1:0] addr;
     logic[DATAW-1:0] line_in;
     logic we, en;
-    logic generator_mode, rst_gen_mode;
+    logic generator_mode, clr_bram;
     logic next;
     logic[DATAW-1:0] line_out;
     logic valid_line_out;
     logic[$clog2(BRAM_DEPTH)-1:0] generator_addr;
     logic write_rdy;
+    int test_num; 
 
     bram_interface #(.DATA_WIDTH(DATAW), .BRAM_DEPTH(BRAM_DEPTH), .BRAM_DELAY(BRAM_DELAY))
     dut_i(.clk(clk), .rst(rst),
           .addr(addr), .line_in(line_in),
           .we(we), .en(en), .generator_mode(generator_mode),
-          .rst_gen_mode(rst_gen_mode), .next(next),
+          .clr_bram(clr_bram), .next(next),
           .line_out(line_out), .valid_line_out(valid_line_out),
           .generator_addr(generator_addr), .write_rdy(write_rdy));
 
@@ -39,10 +40,11 @@ module bram_intf_test #(parameter IS_INTEGRATED = 0, parameter VERBOSE=sim_util_
          .generator_addr(generator_addr), .write_rdy(write_rdy),
          .rst(rst),
          .addr(addr), .line_in(line_in), .we(we), .en(en),
-         .generator_mode(generator_mode), .rst_gen_mode(rst_gen_mode), .next(next));
+         .generator_mode(generator_mode), .clr_bram(clr_bram), .next(next));
 
 
 	always #(0.5s/(CLK_RATE_MHZ*1_000_000)) clk = ~clk;
+    always_ff @(posedge clk) test_num <= debug.test_num;
 	initial begin
         if (~IS_INTEGRATED) begin 
             $dumpfile("bram_intf_test.vcd");
@@ -127,8 +129,31 @@ module bram_intf_test #(parameter IS_INTEGRATED = 0, parameter VERBOSE=sim_util_
         // TEST 7
         debug.displayc($sformatf("%0d: Reset gen_mode and restart prev test",debug.test_num), .msg_verbosity(sim_util_pkg::VERBOSE));
         curr_err = debug.get_error_count();
-        sim_util_pkg::flash_signal(rst_gen_mode,clk);  
+        tb_i.reset_generator();        
         tb_i.check_bram_vals(debug,3,.osc_next(1)); 
+        debug.check_test(curr_err == debug.get_error_count(), .has_parts(1));
+        reset_errors();
+
+        // TEST 8
+        debug.displayc($sformatf("%0d: Turn off and on generator mode randomly, restart part of prev test",debug.test_num), .msg_verbosity(sim_util_pkg::VERBOSE));
+        curr_err = debug.get_error_count();
+        repeat(4) begin 
+            tb_i.reset_generator(1);
+            tb_i.check_few_bram_vals(debug,BRAM_DEPTH/4);            
+        end 
+        debug.check_test(curr_err == debug.get_error_count(), .has_parts(1));
+        reset_errors();
+
+        // TEST 9
+        debug.displayc($sformatf("%0d: Clear bram, ensure line storage is 0 (3 times)",debug.test_num), .msg_verbosity(sim_util_pkg::VERBOSE));
+        curr_err = debug.get_error_count();
+        repeat(3) begin
+            tb_i.clear_bram();
+            @(posedge clk);
+            debug.disp_test_part(0, dut_i.lines_stored == 0, "Lines were not cleared");        
+            tb_i.write_rands(BRAM_DEPTH/5);
+            tb_i.check_bram_vals(debug,2); 
+        end
         combine_errors();
         debug.check_test(curr_err == debug.get_error_count(), .has_parts(1));
 

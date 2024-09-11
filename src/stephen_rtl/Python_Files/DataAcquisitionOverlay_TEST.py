@@ -242,9 +242,9 @@ class DataAcquisitionOverlay():
         else: total_right+= 1
         correct,wrong = 0,0
         # Write to large register poll check
-        sdc_vec = [r.randrange(0,0xffff) for el in range(sdc_samples)]
+        sdc_vec = [r.randrange(0,0xffff) for el in range(sdc_size)]
         addr = addr_map["sdc_base"]
-        for i in range(sdc_samples):
+        for i in range(sdc_size):
             self.write(addr,sdc_vec[i])
             addr += 4
         val = self.read(addr)
@@ -254,7 +254,7 @@ class DataAcquisitionOverlay():
         correct, wrong = self.test_print(val == 0, "large_reg", correct, wrong,i=1)
         sdc_vec_in = []
         addr = addr_map["sdc_base"]
-        for i in range(sdc_samples):
+        for i in range(sdc_size):
             sdc_vec_in.append(self.read(addr))
             addr+=4
         for i in range(len(sdc_vec_in)): correct, wrong = self.test_print(sdc_vec[i] == sdc_vec_in[i], "large_reg", correct, wrong,i=2+i)

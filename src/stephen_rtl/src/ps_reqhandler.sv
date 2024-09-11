@@ -1,23 +1,23 @@
 `timescale 1ns / 1ps
 `default_nettype none
 
-module ps_reqhandler #(parameter A_DATA_WIDTH, WD_DATA_WIDTH, REQ_BUFFER_SZ)
+module ps_reqhandler #(parameter ADDRW, DATAW, REQ_BUFFER_SZ)
 					 (input wire clk, rst,
 					  input wire have_windex, have_wdata, have_rdata,
-					  input wire[WD_DATA_WIDTH-1:0] rdata_in, wdata_in,
-					  input wire[A_DATA_WIDTH-1:0] windex_in, rindex_in, 
+					  input wire[DATAW-1:0] rdata_in, wdata_in,
+					  input wire[ADDRW-1:0] windex_in, rindex_in, 
 					  input wire transmit_wrsp_rdy, transmit_rdata_rdy,
 					  input wire wcomplete, rcomplete, 
-					  output logic[WD_DATA_WIDTH-1:0] rdata_out, wdata_out,
-					  output logic[A_DATA_WIDTH-1:0] windex_out, rindex_out, 
+					  output logic[DATAW-1:0] rdata_out, wdata_out,
+					  output logic[ADDRW-1:0] windex_out, rindex_out, 
 					  output logic[1:0] wresp, 
 					  output logic transmit_wresp, transmit_rdata,
 					  output logic ps_read_req, ps_write_req); 
 
 	enum logic {IDLE, SEND} wrespTransmitState, rdataTransmitState;
 	logic[$clog2(REQ_BUFFER_SZ):0] ps_wd_buffptr, ps_wi_buffptr, ps_rd_buffptr;     // write and read buffer pointers
-	logic[REQ_BUFFER_SZ-1:0][WD_DATA_WIDTH-1:0] ps_wdbuff, ps_rdbuff;              // write and read data buffers  
-	logic[REQ_BUFFER_SZ-1:0][A_DATA_WIDTH-1:0] ps_wibuff, ps_ribuff;               // write and read address buffer  	
+	logic[REQ_BUFFER_SZ-1:0][DATAW-1:0] ps_wdbuff, ps_rdbuff;              // write and read data buffers  
+	logic[REQ_BUFFER_SZ-1:0][ADDRW-1:0] ps_wibuff, ps_ribuff;               // write and read address buffer  	
 
 	// Setting all output signals for transmitting rdata/wresp, writing recieved wdata, and requesting r/w
 	always_comb begin

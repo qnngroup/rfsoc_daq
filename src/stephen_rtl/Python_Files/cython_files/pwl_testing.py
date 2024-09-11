@@ -175,20 +175,21 @@ def test_coords(coords,do_plot=True,show_batches=False,simple_plot=False, ignore
     return path,passed,wrong,intvc,intvp
 ##############################################################################################################################################
 
-test_num = int(1e4)
-do_plot = False
+test_num = int(10)
+do_plot = True
 simple_plot = False
 nxt_perc = 10
 t0 = time()
 n = 10
 intvcs,intvps = [],[]
+avg_dt = 100
 for i in range(test_num):
     perc = (i/test_num)*100
     if round(perc) == nxt_perc: 
         print(f"{nxt_perc}%",end="")
         if nxt_perc != 90: print(",",end="")
         nxt_perc+=10        
-    coords = gen_rand_coords(n=n,avg_dt=100,max_val=max_voltage)
+    coords = gen_rand_coords(n=n,avg_dt=avg_dt,max_val=max_voltage)
     # coords = [(0, 0), (9, 64)]
     ignore = ignore_same_sloped_points(coords)
     path,result,wrong,intvc,intvp = test_coords(coords[:],do_plot=do_plot,show_batches=False,simple_plot=simple_plot, ignore=ignore,scale_plot = False)

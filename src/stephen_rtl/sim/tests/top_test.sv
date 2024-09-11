@@ -15,13 +15,13 @@ module top_test #(parameter IS_INTEGRATED = 0, parameter VERBOSE=sim_util_pkg::D
     logic dac_clk, dac_rst; 
     logic[(axi_params_pkg::A_BUS_WIDTH)-1:0] raddr_packet, waddr_packet;
     logic[(axi_params_pkg::WD_BUS_WIDTH)-1:0] rdata_packet, wdata_packet;
-    logic[1:0] wresp_out, rresp_out; 
+    logic[(axi_params_pkg::RESP_DATA_WIDTH)-1:0] wresp_out, rresp_out; 
     logic raddr_valid_packet, waddr_valid_packet, wdata_valid_packet, rdata_valid_out, wresp_valid_out, rresp_valid_out, ps_wresp_rdy, ps_read_rdy; 
     logic[(daq_params_pkg::DMA_DATA_WIDTH)-1:0] pwl_tdata;
     logic[((daq_params_pkg::DMA_DATA_WIDTH)/8)-1:0] pwl_tkeep;
     logic pwl_tlast, pwl_tready, pwl_tvalid; 
-    logic[(daq_params_pkg::BATCH_WIDTH)-1:0] dac_batch;
-    logic valid_dac_batch, dac0_rdy;
+    logic[(daq_params_pkg::DAC_NUM)-1:0][(daq_params_pkg::BATCH_WIDTH)-1:0] dac_batches;
+    logic[(daq_params_pkg::DAC_NUM)-1:0] valid_dac_batches, dac_rdys;
     logic pl_rstn;
     logic[(daq_params_pkg::SDC_DATA_WIDTH)-1:0] sdc_data_out;
     logic[(daq_params_pkg::CHANNEL_MUX_WIDTH)-1:0] cmc_data_out;
@@ -32,13 +32,14 @@ module top_test #(parameter IS_INTEGRATED = 0, parameter VERBOSE=sim_util_pkg::D
     logic bufft_valid_in;
     logic bufft_rdy_out;
     int total_errors = 0;
+    int dac_id; 
     int curr_err,seed,test_num;
 
 
     top_level
     dut_i(.ps_clk(ps_clk), .ps_rst(ps_rst), .pl_rstn(pl_rstn),
           .dac_clk(dac_clk), .dac_rst(dac_rst),
-          .dac0_rdy(dac0_rdy), .dac_batch(dac_batch), .valid_dac_batch(valid_dac_batch),
+          .dac_rdys(dac_rdys), .dac_batches(dac_batches), .valid_dac_batches(valid_dac_batches),
           .raddr_packet(raddr_packet), .raddr_valid_packet(raddr_valid_packet),
           .waddr_packet(waddr_packet), .waddr_valid_packet(waddr_valid_packet),
           .wdata_packet(wdata_packet), .wdata_valid_packet(wdata_valid_packet),
@@ -58,7 +59,7 @@ module top_test #(parameter IS_INTEGRATED = 0, parameter VERBOSE=sim_util_pkg::D
     top_tb 
     tb_i(.ps_clk(ps_clk), .ps_rst(ps_rst), .pl_rstn(pl_rstn),
          .dac_clk(dac_clk), .dac_rst(dac_rst),
-         .dac0_rdy(dac0_rdy), .dac_batch(dac_batch), .valid_dac_batch(valid_dac_batch),
+         .dac_rdys(dac_rdys), .dac_batches(dac_batches), .valid_dac_batches(valid_dac_batches),
          .raddr_packet(raddr_packet), .raddr_valid_packet(raddr_valid_packet),
          .waddr_packet(waddr_packet), .waddr_valid_packet(waddr_valid_packet),
          .wdata_packet(wdata_packet), .wdata_valid_packet(wdata_valid_packet),
