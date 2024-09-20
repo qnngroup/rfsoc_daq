@@ -1,12 +1,13 @@
 `timescale 1ns / 1ps
 `default_nettype none
 
+import daq_params_pkg::DAC_NUM;
 module top_level(input wire ps_clk,ps_rst, dac_clk, dac_rst,
                  //Inputs from DAC
-                 input wire dac0_rdy,
+                 input wire[DAC_NUM-1:0] dac_rdys,
                  //Outpus to DAC
-                 output logic[(daq_params_pkg::BATCH_WIDTH)-1:0] dac_batch, 
-                 output logic valid_dac_batch, 
+                 output logic[DAC_NUM-1:0][(daq_params_pkg::BATCH_WIDTH)-1:0] dac_batches, 
+                 output logic[DAC_NUM-1:0] valid_dac_batches, 
                  output logic pl_rstn, 
                  //Inputs from PS
                  input  wire [(axi_params_pkg::A_BUS_WIDTH)-1:0] raddr_packet,
@@ -35,10 +36,10 @@ module top_level(input wire ps_clk,ps_rst, dac_clk, dac_rst,
                  input  wire bufft_valid_in,
                  output logic bufft_rdy_out, 
                  //DMA Inputs/Outputs (axi-stream)
-                 input  wire[(daq_params_pkg::DMA_DATA_WIDTH)-1:0] pwl_tdata,
-                 input  wire[(daq_params_pkg::DMA_DATA_WIDTH/8)-1:0] pwl_tkeep,
-                 input  wire pwl_tlast, pwl_tvalid,
-                 output logic pwl_tready);
+                 input  wire[DAC_NUM-1:0][(daq_params_pkg::DMA_DATA_WIDTH)-1:0] pwl_tdatas,
+                 input  wire[DAC_NUM-1:0][(daq_params_pkg::DMA_DATA_WIDTH/8)-1:0] pwl_tkeeps,
+                 input  wire[DAC_NUM-1:0] pwl_tlasts, pwl_tvalids,
+                 output logic[DAC_NUM-1:0] pwl_treadys);
 
     Recieve_Transmit_IF #(axi_params_pkg::A_BUS_WIDTH,  axi_params_pkg::A_DATA_WIDTH)  wa_if (); 
     Recieve_Transmit_IF #(axi_params_pkg::WD_BUS_WIDTH, axi_params_pkg::WD_DATA_WIDTH) wd_if (); 
@@ -49,15 +50,18 @@ module top_level(input wire ps_clk,ps_rst, dac_clk, dac_rst,
 
     Axis_IF #(daq_params_pkg::BUFF_TIMESTAMP_WIDTH) bufft_if(); 
     Axis_IF #(daq_params_pkg::BUFF_CONFIG_WIDTH) buffc_if();
-    Axis_IF #(daq_params_pkg::DMA_DATA_WIDTH, daq_params_pkg::DAC_NUM) pwl_dma_ifs();
+    Axis_IF #(daq_params_pkg::DMA_DATA_WIDTH, daq_params_pkg::DAC_NUM) pwl_dmas_if();
     Axis_IF #(daq_params_pkg::CHANNEL_MUX_WIDTH) cmc_if();
     Axis_IF #(daq_params_pkg::SDC_DATA_WIDTH) sdc_if();
 
-
-    assign pwl_dma_ifs.data = pwl_tdata;
-    assign pwl_dma_ifs.valid = pwl_tvalid;
-    assign pwl_dma_ifs.last = pwl_tlast;
-    assign pwl_tready = pwl_dma_ifs.ready; 
+    always_comb begin 
+        for (int dac_id = 0; dac_id < DAC_NUM; dac_id++) begin
+            pwl_dmas_if.data[dac_id] = pwl_tdatas[dac_id];
+            pwl_dmas_if.valid[dac_id] = pwl_tvalids[dac_id];
+            pwl_dmas_if.last[dac_id] = pwl_tlasts[dac_id];
+            pwl_treadys[dac_id] = pwl_dmas_if.ready[dac_id]; 
+        end 
+    end 
 
     assign bufft_if.data = bufft_data_in;
     assign bufft_if.valid = bufft_valid_in;
@@ -109,13 +113,13 @@ module top_level(input wire ps_clk,ps_rst, dac_clk, dac_rst,
 
     sys 
     sys (.ps_clk(ps_clk), .ps_rst(ps_rst), .dac_clk(dac_clk), .dac_rst(dac_rst), .pl_rstn(pl_rstn),
-         .dac_batch(dac_batch), .valid_dac_batch(valid_dac_batch), .dac0_rdy(dac0_rdy),
+         .dac_batches(dac_batches), .valid_dac_batches(valid_dac_batches), .dac_rdys(dac_rdys),
          .wa_if(wa_if), .wd_if(wd_if),
          .ra_if(ra_if), .rd_if(rd_if),
          .wr_if(wr_if), .rr_if(rr_if),
-         .pwl_dma_ifs(pwl_dma_ifs),
+         .pwl_dmas_if(pwl_dmas_if),
          .bufft_if(bufft_if), .buffc_if(buffc_if), .cmc_if(cmc_if), .sdc_if(sdc_if)); 
-    
+
       // sys_ILA sys_ILA (.clk(ps_clk), 
       //                  .probe0(sys.rst),
       //                  .probe1(sys.hlt_counter),

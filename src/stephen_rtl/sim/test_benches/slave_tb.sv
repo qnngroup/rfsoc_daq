@@ -23,6 +23,9 @@ module slave_tb (input wire clk,
 	logic clk2;
 	logic[DATAW-1:0] rdata;
 	assign clk2 = clk; 
+
+	`define iinside(i, ids) (i inside {[ids[0] : ids[DAC_NUM-1]]})
+
 	task automatic init();
 		{wa_if.data_to_send, wa_if.send} <= 0;
 		{wd_if.data_to_send, wd_if.send} <= 0;
@@ -124,12 +127,12 @@ module slave_tb (input wire clk,
 				rtl_read(i,rdata);
 				debug.disp_test_part(i,rdata == ps_rdata, $sformatf("PS and RTL read different data at id %0d! PS read 0x%04x, RTL read 0x%04x", i, ps_rdata, rdata));
 
-				if (i inside {[DAC_BURST_SIZE_IDS[0] : DAC_BURST_SIZE_IDS[DAC_NUM-1]]}) maxed_val = (written_val > MAX_DAC_BURST_SIZE)? MAX_DAC_BURST_SIZE : written_val;
-				if (i inside {[DAC_SCALE_IDS[0] : DAC_SCALE_IDS[DAC_NUM-1]]}) maxed_val = (written_val > MAX_SCALE_FACTOR)? MAX_SCALE_FACTOR : written_val;
+				if (`iinside(i,DAC_BURST_SIZE_IDS)) maxed_val = (written_val > MAX_DAC_BURST_SIZE)? MAX_DAC_BURST_SIZE : written_val;
+				if (`iinside(i,DAC_SCALE_IDS)) maxed_val = (written_val > MAX_SCALE_FACTOR)? MAX_SCALE_FACTOR : written_val;
 
 				if (i == MAX_DAC_BURST_SIZE_ID) debug.disp_test_part(i,rdata == MAX_DAC_BURST_SIZE, $sformatf("Max burst size incorrect. Expected 0x%04x, got 0x%04x",MAX_DAC_BURST_SIZE, rdata));
-				else if (i inside {[DAC_BURST_SIZE_IDS[0] : DAC_BURST_SIZE_IDS[DAC_NUM-1]]}) debug.disp_test_part(i,rdata == maxed_val, $sformatf("Burst size incorrect. Expected 0x%04x, got 0x%04x",maxed_val, rdata));
-				else if (i inside {[DAC_SCALE_IDS[0] : DAC_SCALE_IDS[DAC_NUM-1]]})  debug.disp_test_part(i,rdata == maxed_val, $sformatf("Scale factor incorrect. Expected 0x%04x, got 0x%04x",maxed_val, rdata));
+				else if (`iinside(i,DAC_BURST_SIZE_IDS)) debug.disp_test_part(i,rdata == maxed_val, $sformatf("Burst size incorrect. Expected 0x%04x, got 0x%04x",maxed_val, rdata));
+				else if (`iinside(i,DAC_SCALE_IDS))  debug.disp_test_part(i,rdata == maxed_val, $sformatf("Scale factor incorrect. Expected 0x%04x, got 0x%04x",maxed_val, rdata));
 				else if (i == VERSION_ID) debug.disp_test_part(i,rdata == FIRMWARE_VERSION, $sformatf("Version number incorrect. Expected %0d, got 0x%04x", FIRMWARE_VERSION, rdata)); 
 				else if (i == MEM_SIZE_ID) debug.disp_test_part(i,rdata == MEM_SIZE, $sformatf("Memory size incorrect. Expected %0d, got 0x%04x", MEM_SIZE, rdata)); 
 				else if (is_PS_BIGREG(i) && is_PS_VALID(i)) debug.disp_test_part(i,rdata == 0, "Valid registers apart of big registers should be cleared after being written to");
@@ -150,8 +153,8 @@ module slave_tb (input wire clk,
 
 				if (i == RST_ID) debug.disp_test_part(i,rdata == 0, $sformatf("RST should be 0, got 0x%04x", rdata));
 				else if (i == MAX_DAC_BURST_SIZE_ID) debug.disp_test_part(i,rdata == MAX_DAC_BURST_SIZE, "Default max burst size incorrect");
-				else if (i inside {[DAC_BURST_SIZE_IDS[0] : DAC_BURST_SIZE_IDS[DAC_NUM-1]]}) debug.disp_test_part(i,rdata == 0, $sformatf("Default burst size incorrect. Got 0x%04x", rdata));  
-				else if (i inside {[DAC_SCALE_IDS[0] : DAC_SCALE_IDS[DAC_NUM-1]]}) debug.disp_test_part(i,rdata == 0, $sformatf("Default scale factor incorrect. Got 0x%04x", rdata)); 
+				else if (`iinside(i,DAC_BURST_SIZE_IDS)) debug.disp_test_part(i,rdata == 0, $sformatf("Default burst size incorrect. Got 0x%04x", rdata));  
+				else if (`iinside(i,DAC_SCALE_IDS)) debug.disp_test_part(i,rdata == 0, $sformatf("Default scale factor incorrect. Got 0x%04x", rdata)); 
 				else if (is_PS_VALID(i) || is_RTL_VALID(i)) debug.disp_test_part(i,rdata == 0, $sformatf("Valid addresses reset incorrectly. Expected %0d, got 0x%04x.", 0, rdata));
 				else if (i == MEM_SIZE_ID) debug.disp_test_part(i,rdata == MEM_SIZE, $sformatf("Default memory size incorrect. Expected %0d, got 0x%04x.", MEM_SIZE, rdata));
 				else if (i == VERSION_ID) debug.disp_test_part(i,rdata == FIRMWARE_VERSION, $sformatf("Default version number incorrect. Expected %0d, got 0x%04x.", FIRMWARE_VERSION, rdata));

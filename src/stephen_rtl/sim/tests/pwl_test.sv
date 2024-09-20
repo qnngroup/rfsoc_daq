@@ -8,7 +8,7 @@ module pwl_test #(parameter IS_INTEGRATED = 0, parameter VERBOSE=sim_util_pkg::D
     localparam MAN_SEED = 0;
     
     logic clk, rst; 
-    logic halt, run_pwl, pwl_rdy;
+    logic halt, run_pwl, pwl_generator_rdy;
     logic[(2*axi_params_pkg::DATAW)-1:0] pwl_wave_period;
     logic valid_pwl_wave_period;
     logic[(daq_params_pkg::BATCH_SIZE)-1:0][(daq_params_pkg::SAMPLE_WIDTH)-1:0] batch_out;
@@ -25,14 +25,14 @@ module pwl_test #(parameter IS_INTEGRATED = 0, parameter VERBOSE=sim_util_pkg::D
 
     pwl_generator #(.DMA_DATA_WIDTH(daq_params_pkg::DMA_DATA_WIDTH), .SAMPLE_WIDTH(daq_params_pkg::SAMPLE_WIDTH), .BATCH_SIZE(daq_params_pkg::BATCH_SIZE), .SPARSE_BRAM_DEPTH(daq_params_pkg::SPARSE_BRAM_DEPTH), .DENSE_BRAM_DEPTH(daq_params_pkg::DENSE_BRAM_DEPTH), .PWL_PERIOD_WIDTH(daq_params_pkg::PWL_PERIOD_WIDTH))
     dut_i(.clk(clk), .rst(rst),
-          .halt(halt), .run(run_pwl), .pwl_rdy(pwl_rdy),
+          .halt(halt), .run(run_pwl), .pwl_generator_rdy(pwl_generator_rdy),
           .pwl_wave_period(pwl_wave_period), .valid_pwl_wave_period(valid_pwl_wave_period),
           .batch_out(batch_out), .valid_batch_out(valid_batch_out),
           .dma(pwl_dma));
 
     pwl_tb #(.SAMPLE_WIDTH(daq_params_pkg::SAMPLE_WIDTH), .DMA_DATA_WIDTH(daq_params_pkg::DMA_DATA_WIDTH), .BATCH_SIZE(daq_params_pkg::BATCH_SIZE))
     tb_i(.clk(clk), .rst(rst),
-         .pwl_rdy(pwl_rdy),
+         .pwl_generator_rdy(pwl_generator_rdy),
          .valid_batch(valid_batch_out), .batch(batch_out),
          .halt(halt), .run_pwl(run_pwl),
          .dma(pwl_dma));

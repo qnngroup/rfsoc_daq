@@ -7,7 +7,7 @@ module dac_intf_test #(parameter IS_INTEGRATED = 0, parameter VERBOSE=sim_util_p
 	localparam TEST_NUM = 18;
 	localparam int PS_CLK_RATE_MHZ = 150;
 	localparam int DAC_CLK_RATE_MHZ = 384;
-	localparam MAN_SEED = 53;
+	localparam MAN_SEED = 0;
 
 	sim_util_pkg::debug debug = new(VERBOSE,TEST_NUM,"DAC_INTERFACE",IS_INTEGRATED); 
 

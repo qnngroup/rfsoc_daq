@@ -5,7 +5,7 @@ module pwl_tb #(parameter SAMPLE_WIDTH, parameter DMA_DATA_WIDTH, parameter BATC
 					   (input wire clk,
 					   	input wire valid_batch, 
 					   	input wire[BATCH_SIZE-1:0][SAMPLE_WIDTH-1:0] batch,
-					   	input wire pwl_rdy,
+					   	input wire pwl_generator_rdy,
 					   	output logic rst, 
 					   	output logic halt, run_pwl,
 					    Axis_IF dma);
@@ -38,7 +38,7 @@ module pwl_tb #(parameter SAMPLE_WIDTH, parameter DMA_DATA_WIDTH, parameter BATC
 	task automatic send_buff(input logic[DMA_DATA_WIDTH-1:0] dma_buff [$], input bit osc_valid = 0, input int osc_delay_range[1:0] = {0,5});
 		int delay_timer; 
 		halt_pwl();
-		while (~pwl_rdy) @(posedge clk); 
+		while (~pwl_generator_rdy) @(posedge clk); 
 		for (int i = 0; i < dma_buff.size(); i++) begin
 			dma.valid <= 1; 
 			dma.data <= dma_buff[i]; 

@@ -84,7 +84,8 @@ module dac_intf_tb #(MEM_SIZE, DATA_WIDTH, BATCH_SIZE, DMA_DATA_WIDTH, MAX_DAC_B
 	task automatic send_buff(input logic[DMA_DATA_WIDTH-1:0] dma_buff [$], input int dac_id);
 		int delay_timer; 
 		halt_dac(dac_id); 
-		while (~pwl_rdys[dac_id]) @(posedge dac_clk); 
+		while (~pwl_rdys[dac_id]) @(posedge ps_clk); 
+		@(posedge dac_clk);
 		for (int i = 0; i < dma_buff.size(); i++) begin
 			dmas.valid[dac_id] <= 1; 
 			dmas.data[dac_id] <= dma_buff[i]; 

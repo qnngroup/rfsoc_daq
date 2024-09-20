@@ -20,8 +20,8 @@ module sample_generator #(parameter FULL_CMD_WIDTH, CMD_WIDTH, RESP_WIDTH,  BS_W
 	logic[BATCH_SIZE-1:0][SAMPLE_WIDTH-1:0] rand_samples,trig_out,pwl_batch_out,rand_seed,dac_batch_in;
 	logic valid_dac_batch_in; 
 	logic[DAC_STAGES-1:0][BATCH_WIDTH:0] batch_pipe; 
-	logic set_seeds,run_shift_regs,run_trig_wav,run_pwl;
-	logic pwl_rdy, valid_pwl_batch;
+	logic set_seeds,run_rand,run_trig,run_pwl;
+	logic pwl_generator_rdy, valid_pwl_batch;
 	logic[PWL_PERIOD_WIDTH-1:0] pwl_wave_period;
 	logic valid_pwl_wave_period; 
 	logic active_out;
@@ -38,21 +38,21 @@ module sample_generator #(parameter FULL_CMD_WIDTH, CMD_WIDTH, RESP_WIDTH,  BS_W
 			LFSR #(.DATA_WIDTH(SAMPLE_WIDTH)) 
 			lfsr(.clk(clk), .rst(rst || set_seeds || halt),
 				 .seed(rand_seed[i]),
-				 .run(run_shift_regs && dac_rdy && ~set_seeds),
+				 .run(run_rand && dac_rdy && ~set_seeds),
 				 .sample_out(rand_samples[i]));
 		end
 	endgenerate
 	// For the DAC Triangle Wave Generator 
 	trig_wave_gen #(.SAMPLE_WIDTH (SAMPLE_WIDTH), .BATCH_WIDTH (BATCH_WIDTH), .BATCH_SIZE(BATCH_SIZE))
   	twg(.clk(clk), .rst(rst || halt),
-      .run(run_trig_wav && dac_rdy),
+      .run(run_trig && dac_rdy),
       .batch_out_comb(trig_out));
 	// For PWL
 	pwl_generator #(.DMA_DATA_WIDTH(DMA_DATA_WIDTH), .SAMPLE_WIDTH(SAMPLE_WIDTH), .BATCH_SIZE(BATCH_SIZE), .SPARSE_BRAM_DEPTH(SPARSE_BRAM_DEPTH), .DENSE_BRAM_DEPTH(DENSE_BRAM_DEPTH), .PWL_PERIOD_WIDTH(PWL_PERIOD_WIDTH))
 	pwl_gen(.clk(clk), .rst(rst),
 	        .halt(halt),
 	        .run(run_pwl && dac_rdy),
-	        .pwl_rdy(pwl_rdy),
+	        .pwl_generator_rdy(pwl_generator_rdy),
 	        .pwl_wave_period(pwl_wave_period),
 	        .valid_pwl_wave_period(valid_pwl_wave_period),
 	        .batch_out(pwl_batch_out),
@@ -60,14 +60,14 @@ module sample_generator #(parameter FULL_CMD_WIDTH, CMD_WIDTH, RESP_WIDTH,  BS_W
 	        .dma(pwl_dma_if.stream_in));
 
 	always_comb begin
-		//ps_cmd: [... sample_seed(256),ps_halt_cmd(1),run_shift_regs(1),run_trig_wave(1),run_pwl(1)]
+		//ps_cmd: [... sample_seed(256),ps_halt_cmd(1),run_rand(1),run_trig(1),run_pwl(1)]
 		//dac_cmd: [pwl_wave_period(32), pwl_ready(1)]
-		curr_dac_cmd = {pwl_wave_period,pwl_rdy};
+		curr_dac_cmd = {pwl_wave_period,pwl_generator_rdy};
 		halt = ps_halt_cmd || haltState == HALT;
-		active_out = (run_shift_regs || run_trig_wav || run_pwl);
+		active_out = (run_rand || run_trig || run_pwl);
 		if (active_out && ~set_seeds) begin
-			if (run_shift_regs) {dac_batch_in,valid_dac_batch_in} = {rand_samples,dac_rdy};
-			else if (run_trig_wav) {dac_batch_in,valid_dac_batch_in} = {trig_out,dac_rdy};
+			if (run_rand) {dac_batch_in,valid_dac_batch_in} = {rand_samples,dac_rdy};
+			else if (run_trig) {dac_batch_in,valid_dac_batch_in} = {trig_out,dac_rdy};
 			else if (run_pwl) {dac_batch_in,valid_dac_batch_in} = {pwl_batch_out,valid_pwl_batch};
 		end else {dac_batch_in,valid_dac_batch_in} = 0;
 		{valid_dac_batch,dac_batch}	= (dac_rdy && ~halt)? batch_pipe[DAC_STAGES-1] : 0;    
@@ -81,7 +81,7 @@ module sample_generator #(parameter FULL_CMD_WIDTH, CMD_WIDTH, RESP_WIDTH,  BS_W
 		end 
 
 		if (rst || halt) begin
-			{rand_seed,run_shift_regs,run_trig_wav,run_pwl,set_seeds} <= 0;
+			{rand_seed,run_rand,run_trig,run_pwl,set_seeds} <= 0;
 			{valid_dac_cmd,dac_cmd,ps_halt_cmd}  <= 0; 
 		end else begin
 			if (~valid_dac_cmd && transfer_rdy && dac_cmd != curr_dac_cmd) begin
@@ -91,7 +91,7 @@ module sample_generator #(parameter FULL_CMD_WIDTH, CMD_WIDTH, RESP_WIDTH,  BS_W
 			if (valid_dac_cmd && transfer_rdy) valid_dac_cmd <= 0; 
 			if (set_seeds) set_seeds <= 0; 
 			if (valid_ps_cmd) begin
-				{ps_halt_cmd,run_shift_regs,run_trig_wav,run_pwl} <= ps_cmd[0+:CMD_WIDTH]; 
+				{ps_halt_cmd,run_rand,run_trig,run_pwl} <= ps_cmd[0+:CMD_WIDTH]; 
 				if (ps_cmd[2]) begin
 					rand_seed <= ps_cmd[CMD_WIDTH+:BATCH_WIDTH]; 
 					set_seeds <= 1; 	

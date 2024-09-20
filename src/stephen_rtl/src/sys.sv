@@ -204,7 +204,7 @@ module sys(input wire ps_clk,ps_rst,dac_clk,dac_rst,
           .fresh_bits(fresh_bits));
 
 
-    DAC_Interface #(.DATAW(DATAW), .SAMPLEW(SAMPLE_WIDTH), .BS_WIDTH(BS_WIDTH), .BATCH_WIDTH(BATCH_WIDTH), .BATCH_SIZE(BATCH_SIZE))
+    DAC_Interface #(.DATAW(DATAW), .SAMPLEW(SAMPLE_WIDTH), .BS_WIDTH(BS_WIDTH), .BATCH_WIDTH(BATCH_WIDTH), .BATCH_SIZE(BATCH_SIZE), .PWL_PERIOD_WIDTH(PWL_PERIOD_WIDTH), .PWL_PERIOD_SIZE(PWL_PERIOD_SIZE))
     dac_intf(.ps_clk(ps_clk),.ps_rst(rst),
              .dac_clk(dac_clk),.dac_rst(dac_rst),
              .fresh_bits(fresh_bits), .read_resps(rtl_rd_out),

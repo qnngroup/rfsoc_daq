@@ -77,18 +77,18 @@
         logic[ADDR_NUM-1:0][MEM_WIDTH-1:0] ids = {ABS_ID_CEILING, MEM_TEST_END_ID, MEM_TEST_BASE_ID, MAPPED_ID_CEILING, MEM_SIZE_ID, VERSION_ID, SDC_VALID_ID, SDC_BASE_ID, CHAN_MUX_VALID_ID, CHAN_MUX_BASE_ID, BUFF_TIME_VALID_ID, BUFF_TIME_BASE_ID, BUFF_CONFIG_ID, PWL_PERIOD_VALID_IDS[7], PWL_PERIOD_VALID_IDS[6], PWL_PERIOD_VALID_IDS[5], PWL_PERIOD_VALID_IDS[4], PWL_PERIOD_VALID_IDS[3], PWL_PERIOD_VALID_IDS[2], PWL_PERIOD_VALID_IDS[1], PWL_PERIOD_VALID_IDS[0], PWL_PERIOD_IDS[7], PWL_PERIOD_IDS[6], PWL_PERIOD_IDS[5], PWL_PERIOD_IDS[4], PWL_PERIOD_IDS[3], PWL_PERIOD_IDS[2], PWL_PERIOD_IDS[1], PWL_PERIOD_IDS[0], RUN_PWL_IDS[7], RUN_PWL_IDS[6], RUN_PWL_IDS[5], RUN_PWL_IDS[4], RUN_PWL_IDS[3], RUN_PWL_IDS[2], RUN_PWL_IDS[1], RUN_PWL_IDS[0], DAC2_ID, DAC1_ID, DAC_SCALE_IDS[7], DAC_SCALE_IDS[6], DAC_SCALE_IDS[5], DAC_SCALE_IDS[4], DAC_SCALE_IDS[3], DAC_SCALE_IDS[2], DAC_SCALE_IDS[1], DAC_SCALE_IDS[0], MAX_DAC_BURST_SIZE_ID, DAC_BURST_SIZE_IDS[7], DAC_BURST_SIZE_IDS[6], DAC_BURST_SIZE_IDS[5], DAC_BURST_SIZE_IDS[4], DAC_BURST_SIZE_IDS[3], DAC_BURST_SIZE_IDS[2], DAC_BURST_SIZE_IDS[1], DAC_BURST_SIZE_IDS[0], DAC_HLT_IDS[7], DAC_HLT_IDS[6], DAC_HLT_IDS[5], DAC_HLT_IDS[4], DAC_HLT_IDS[3], DAC_HLT_IDS[2], DAC_HLT_IDS[1], DAC_HLT_IDS[0], TRIG_WAVE_IDS[7], TRIG_WAVE_IDS[6], TRIG_WAVE_IDS[5], TRIG_WAVE_IDS[4], TRIG_WAVE_IDS[3], TRIG_WAVE_IDS[2], TRIG_WAVE_IDS[1], TRIG_WAVE_IDS[0], PS_SEED_VALID_IDS[7], PS_SEED_VALID_IDS[6], PS_SEED_VALID_IDS[5], PS_SEED_VALID_IDS[4], PS_SEED_VALID_IDS[3], PS_SEED_VALID_IDS[2], PS_SEED_VALID_IDS[1], PS_SEED_VALID_IDS[0], PS_SEED_BASE_IDS[7], PS_SEED_BASE_IDS[6], PS_SEED_BASE_IDS[5], PS_SEED_BASE_IDS[4], PS_SEED_BASE_IDS[3], PS_SEED_BASE_IDS[2], PS_SEED_BASE_IDS[1], PS_SEED_BASE_IDS[0], RST_ID};
 
         // Useful functions
-        function logic[MEM_WIDTH-1:0] ADDR2ID(logic[ADDRW-1:0] addr);
+        function automatic logic[MEM_WIDTH-1:0] ADDR2ID(logic[ADDRW-1:0] addr);
             return (addr - PS_BASE_ADDR) >> 2;
         endfunction  
-        function logic[ADDRW-1:0] ID2ADDR(logic[MEM_WIDTH-1:0] index);
+        function automatic logic[ADDRW-1:0] ID2ADDR(logic[MEM_WIDTH-1:0] index);
             return (index << 2) + PS_BASE_ADDR;
         endfunction 
-        function logic[DAC_NUM-1:0][ADDRW-1:0] gen_dac_addrs(logic[ADDRW-1:0] base_addr, int reg_width);
+        function automatic logic[DAC_NUM-1:0][ADDRW-1:0] gen_dac_addrs(logic[ADDRW-1:0] base_addr, int reg_width);
           logic[DAC_NUM-1:0][ADDRW-1:0] dac_addr_bases; 
           for (int i = 0; i < DAC_NUM; i++) dac_addr_bases[i] = base_addr + reg_width*(4*i); 
           return dac_addr_bases; 
         endfunction 
-        function logic[DAC_NUM-1:0][MEM_WIDTH-1:0] gen_dac_ids(logic[MEM_WIDTH-1:0] base_id, int reg_width);
+        function automatic logic[DAC_NUM-1:0][MEM_WIDTH-1:0] gen_dac_ids(logic[MEM_WIDTH-1:0] base_id, int reg_width);
           logic[DAC_NUM-1:0][MEM_WIDTH-1:0] dac_id_bases; 
           logic[DAC_NUM-1:0][ADDRW-1:0] dac_addr_bases = gen_dac_addrs(ID2ADDR(base_id), reg_width);; 
           for (int i = 0; i < DAC_NUM; i++) dac_id_bases[i] = ADDR2ID(dac_addr_bases[i]);

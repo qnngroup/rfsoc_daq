@@ -23,7 +23,7 @@ module DAC_Interface #(parameter DATAW, SAMPLEW, BS_WIDTH, BATCH_WIDTH, BATCH_SI
 	logic[DAC_NUM-1:0][SCALE_WIDTH-1:0] scale_factor_outs;
 	logic[DAC_NUM-1:0][BS_WIDTH-1:0] dac_bs_outs; 
 	logic[DAC_NUM-1:0][BS_WIDTH-1:0] halt_counters;
-	logic[DAC_NUM-1:0] state_rdys, ps_cmd_transfer_done, ps_halt_cmds, pwl_rdys; 
+	logic[DAC_NUM-1:0] state_rdys, ps_cmd_transfer_done, ps_halt_cmds, pwl_rdys, run_pwls, run_trigs, run_rands; 
 
 	logic[BATCH_WIDTH-1:0] dac_batches0,dac_batches1,dac_batches2,dac_batches3,dac_batches4,dac_batches5,dac_batches6,dac_batches7;
 	assign dac_batches0 = dac_batches[0];
@@ -67,6 +67,9 @@ module DAC_Interface #(parameter DATAW, SAMPLEW, BS_WIDTH, BATCH_WIDTH, BATCH_SI
 			assign save_pwl_wave_periods[dac_i] = wave_period_edge != 0;
 			assign halt_counters[dac_i] = sample_gen.halt_counter;
 			assign ps_halt_cmds[dac_i] = sample_gen.ps_halt_cmd;
+			assign run_pwls[dac_i] = sample_gen.run_pwl; 
+			assign run_trigs[dac_i] = sample_gen.run_trig; 
+			assign run_rands[dac_i] = sample_gen.run_rand; 
 
 			always_comb begin
 		        for (int i = 0; i < BATCH_SIZE; i++) begin
@@ -87,7 +90,7 @@ module DAC_Interface #(parameter DATAW, SAMPLEW, BS_WIDTH, BATCH_WIDTH, BATCH_SI
 			               .val(pwl_wave_periods[dac_i]),
 			               .comb_edge_out(wave_period_edge));
 
-			//cmd: [dac_burst_size(16),scale_factor(4),sample_seed(256),ps_halt_cmd(1),run_shift_regs(1),run_trig_wave(1),run_pwl(1)]
+			//cmd: [dac_burst_size(16),scale_factor(4),sample_seed(256),ps_halt_cmd(1),run_rand(1),run_trig(1),run_pwl(1)]
 			data_handshake #(.DATA_WIDTH(FULL_CMD_WIDTH))
 			    ps_cmd_transfer(.clk_src(ps_clk), .rst_src(ps_rst),
 			                 	.clk_dst(dac_clk), .rst_dst(dac_rst),
@@ -145,13 +148,13 @@ module DAC_Interface #(parameter DATAW, SAMPLEW, BS_WIDTH, BATCH_WIDTH, BATCH_SI
 								state_rdys[dac_i] <= 0;
 							end else 
 							if (fresh_bits[mem_layout_pkg::PS_SEED_VALID_IDS[dac_i]]) begin
-								ps_cmd_in[0+:CMD_WIDTH] <= 1<<2; //run_shift_regs command
+								ps_cmd_in[0+:CMD_WIDTH] <= 1<<2; //run_rand command
 								for (int i = 0; i < BATCH_SIZE; i++) seed_set[i] <= read_resps[(mem_layout_pkg::PS_SEED_BASE_IDS[dac_i])+i];
 								ps_cmd_in_valid <= 1;
 								state_rdys[dac_i] <= 0;
 							end else 
 							if (fresh_bits[mem_layout_pkg::TRIG_WAVE_IDS[dac_i]]) begin
-								ps_cmd_in[0+:CMD_WIDTH] <= 1<<1; //run_trig_wave command
+								ps_cmd_in[0+:CMD_WIDTH] <= 1<<1; //run_trig command
 								ps_cmd_in_valid <= 1; 
 								state_rdys[dac_i] <= 0;
 							end else 

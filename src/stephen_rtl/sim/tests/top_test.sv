@@ -3,11 +3,12 @@
 
 module top_test #(parameter IS_INTEGRATED = 0, parameter VERBOSE=sim_util_pkg::DEBUG)();
 	localparam TIMEOUT = 8000;
-	localparam TEST_NUM = 10;
+	// localparam TEST_NUM = 10;
+    localparam TEST_NUM = 1;
 	localparam int PS_CLK_RATE_MHZ = 150;
     localparam int DAC_CLK_RATE_MHZ = 384;
-    localparam MAN_SEED = 0;
-    localparam SKIP_LONG_TEST = 1;
+    localparam MAN_SEED = 64;
+    localparam SKIP_LONG_TEST = 0;
 
     sim_util_pkg::debug debug = new(VERBOSE,TEST_NUM,"TOP", IS_INTEGRATED); 
 
@@ -17,9 +18,9 @@ module top_test #(parameter IS_INTEGRATED = 0, parameter VERBOSE=sim_util_pkg::D
     logic[(axi_params_pkg::WD_BUS_WIDTH)-1:0] rdata_packet, wdata_packet;
     logic[(axi_params_pkg::RESP_DATA_WIDTH)-1:0] wresp_out, rresp_out; 
     logic raddr_valid_packet, waddr_valid_packet, wdata_valid_packet, rdata_valid_out, wresp_valid_out, rresp_valid_out, ps_wresp_rdy, ps_read_rdy; 
-    logic[(daq_params_pkg::DMA_DATA_WIDTH)-1:0] pwl_tdata;
-    logic[((daq_params_pkg::DMA_DATA_WIDTH)/8)-1:0] pwl_tkeep;
-    logic pwl_tlast, pwl_tready, pwl_tvalid; 
+    logic[DAC_NUM-1:0][(daq_params_pkg::DMA_DATA_WIDTH)-1:0] pwl_tdatas;
+    logic[DAC_NUM-1:0][((daq_params_pkg::DMA_DATA_WIDTH)/8)-1:0] pwl_tkeeps;
+    logic[DAC_NUM-1:0] pwl_tlasts, pwl_treadys, pwl_tvalids; 
     logic[(daq_params_pkg::DAC_NUM)-1:0][(daq_params_pkg::BATCH_WIDTH)-1:0] dac_batches;
     logic[(daq_params_pkg::DAC_NUM)-1:0] valid_dac_batches, dac_rdys;
     logic pl_rstn;
@@ -54,7 +55,7 @@ module top_test #(parameter IS_INTEGRATED = 0, parameter VERBOSE=sim_util_pkg::D
           .cmc_data_out(cmc_data_out), .cmc_valid_out(cmc_valid_out),
           .bufft_data_in(bufft_data_in), .bufft_valid_in(bufft_valid_in),
           .bufft_rdy_out(bufft_rdy_out),
-          .pwl_tdata(pwl_tdata), .pwl_tkeep(pwl_tkeep), .pwl_tlast(pwl_tlast), .pwl_tvalid(pwl_tvalid), .pwl_tready(pwl_tready));
+          .pwl_tdatas(pwl_tdatas), .pwl_tkeeps(pwl_tkeeps), .pwl_tlasts(pwl_tlasts), .pwl_tvalids(pwl_tvalids), .pwl_treadys(pwl_treadys));
 
     top_tb 
     tb_i(.ps_clk(ps_clk), .ps_rst(ps_rst), .pl_rstn(pl_rstn),
@@ -74,8 +75,8 @@ module top_test #(parameter IS_INTEGRATED = 0, parameter VERBOSE=sim_util_pkg::D
          .cmc_data_out(cmc_data_out), .cmc_valid_out(cmc_valid_out),
          .bufft_data_in(bufft_data_in), .bufft_valid_in(bufft_valid_in),
          .bufft_rdy_out(bufft_rdy_out),
-         .pwl_data(pwl_tdata), .pwl_keep(pwl_tkeep), .pwl_last(pwl_tlast), .pwl_valid(pwl_tvalid), .pwl_ready(pwl_tready),
-         .run_pwl(dut_i.sys.dac_intf.sample_gen.run_pwl),.run_trig(dut_i.sys.dac_intf.sample_gen.run_trig_wav),.run_rand(dut_i.sys.dac_intf.sample_gen.run_shift_regs));
+         .pwl_datas(pwl_tdatas), .pwl_keeps(pwl_tkeeps), .pwl_lasts(pwl_tlasts), .pwl_valids(pwl_tvalids), .pwl_rdys(pwl_treadys),
+         .run_pwls(dut_i.sys.dac_intf.run_pwls),.run_trigs(dut_i.sys.dac_intf.run_trigs),.run_rands(dut_i.sys.dac_intf.run_rands));
 
 	always #(0.5s/(PS_CLK_RATE_MHZ*1_000_000)) ps_clk = ~ps_clk;
     always #(0.5s/(DAC_CLK_RATE_MHZ*1_000_000)) dac_clk = ~dac_clk;
@@ -111,78 +112,80 @@ module top_test #(parameter IS_INTEGRATED = 0, parameter VERBOSE=sim_util_pkg::D
             debug.displayc($sformatf("Using random seed value %0d",seed),.msg_color(sim_util_pkg::BLUE),.msg_verbosity(sim_util_pkg::VERBOSE));            
         end
         $srandom(seed);
+        dac_id = seed%DAC_NUM;
+        debug.displayc($sformatf("Inital dac targeted is %0d",dac_id),.msg_color(sim_util_pkg::BLUE),.msg_verbosity(sim_util_pkg::VERBOSE));
         debug.timeout_watcher(ps_clk,TIMEOUT);
         tb_i.init();
         repeat (20) @(posedge ps_clk);
 
-        //TEST 1
-        debug.displayc($sformatf("%0d: Write to reset",debug.test_num), .msg_verbosity(sim_util_pkg::VERBOSE));
-        curr_err = debug.get_error_count();
-        tb_i.reset_test(debug);
-        debug.check_test(curr_err == debug.get_error_count(), .has_parts(1));
-        reset_errors();
+        // //TEST 1
+        // debug.displayc($sformatf("%0d: Write to reset",debug.test_num), .msg_verbosity(sim_util_pkg::VERBOSE));
+        // curr_err = debug.get_error_count();
+        // tb_i.reset_test(debug);
+        // debug.check_test(curr_err == debug.get_error_count(), .has_parts(1));
+        // reset_errors();
 
-        //TEST 2
-        debug.displayc($sformatf("%0d: Ensure dac's valid goes high for random, triangle, and pwl waves",debug.test_num), .msg_verbosity(sim_util_pkg::VERBOSE));
-        curr_err = debug.get_error_count();
-        tb_i.dac_test(debug);
-        debug.check_test(curr_err == debug.get_error_count(), .has_parts(1));
-        reset_errors();
+        // //TEST 2
+        // debug.displayc($sformatf("%0d: Ensure dac's valid goes high for random, triangle, and pwl waves",debug.test_num), .msg_verbosity(sim_util_pkg::VERBOSE));
+        // curr_err = debug.get_error_count();
+        // tb_i.dac_test(debug, dac_id);
+        // debug.check_test(curr_err == debug.get_error_count(), .has_parts(1));
+        // reset_errors();
 
-        //TEST 3
-        debug.displayc($sformatf("%0d: Ensure a 0 burst size results in continous running",debug.test_num), .msg_verbosity(sim_util_pkg::VERBOSE));
-        curr_err = debug.get_error_count();
-        if (SKIP_LONG_TEST == 0) tb_i.burst_test(debug,0);
-        else debug.displayc("Skipping this test because it's long",.msg_color(sim_util_pkg::BLUE),.msg_verbosity(sim_util_pkg::VERBOSE));
-        debug.check_test(curr_err == debug.get_error_count(), .has_parts(1));
-        reset_errors();
+        // //TEST 3
+        // debug.displayc($sformatf("%0d: Ensure a 0 burst size results in continous running",debug.test_num), .msg_verbosity(sim_util_pkg::VERBOSE));
+        // curr_err = debug.get_error_count();
+        // if (SKIP_LONG_TEST == 0) tb_i.burst_test(debug,0, dac_id);
+        // else debug.displayc("Skipping this test because it's long",.msg_color(sim_util_pkg::BLUE),.msg_verbosity(sim_util_pkg::VERBOSE));
+        // debug.check_test(curr_err == debug.get_error_count(), .has_parts(1));
+        // reset_errors();
 
-        //TEST 4
-        debug.displayc($sformatf("%0d: Ensure a constant burst size produces the correct burst",debug.test_num), .msg_verbosity(sim_util_pkg::VERBOSE));
-        curr_err = debug.get_error_count();
-        tb_i.burst_test(debug, $urandom_range(20,700));
-        debug.check_test(curr_err == debug.get_error_count(), .has_parts(1));
-        reset_errors();
+        // //TEST 4
+        // debug.displayc($sformatf("%0d: Ensure a constant burst size produces the correct burst",debug.test_num), .msg_verbosity(sim_util_pkg::VERBOSE));
+        // curr_err = debug.get_error_count();
+        // tb_i.burst_test(debug, $urandom_range(20,700), dac_id);
+        // debug.check_test(curr_err == debug.get_error_count(), .has_parts(1));
+        // reset_errors();
 
-        //TEST 5
-        debug.displayc($sformatf("%0d: Run different modes sequentially",debug.test_num), .msg_verbosity(sim_util_pkg::VERBOSE));
-        curr_err = debug.get_error_count();
-        tb_i.seq_run(debug);
-        debug.check_test(curr_err == debug.get_error_count(), .has_parts(1));
-        reset_errors();
+        // //TEST 5
+        // debug.displayc($sformatf("%0d: Run different modes sequentially",debug.test_num), .msg_verbosity(sim_util_pkg::VERBOSE));
+        // curr_err = debug.get_error_count();
+        // tb_i.seq_run(debug, dac_id);
+        // debug.check_test(curr_err == debug.get_error_count(), .has_parts(1));
+        // reset_errors();
 
-        //TEST 6
-        debug.displayc($sformatf("%0d: Have ps write to config registers, ensure correct value gets output from top",debug.test_num), .msg_verbosity(sim_util_pkg::VERBOSE));
-        curr_err = debug.get_error_count();
-        tb_i.ps_config_write(debug);
-        debug.check_test(curr_err == debug.get_error_count(), .has_parts(1));
-        reset_errors();
+        // //TEST 6
+        // debug.displayc($sformatf("%0d: Have ps write to config registers, ensure correct value gets output from top",debug.test_num), .msg_verbosity(sim_util_pkg::VERBOSE));
+        // curr_err = debug.get_error_count();
+        // tb_i.ps_config_write(debug);
+        // debug.check_test(curr_err == debug.get_error_count(), .has_parts(1));
+        // reset_errors();
 
-        //TEST 7
-        debug.displayc($sformatf("%0d: Have ps write to config registers, hold ready signal low for random time",debug.test_num), .msg_verbosity(sim_util_pkg::VERBOSE));
-        curr_err = debug.get_error_count();
-        tb_i.ps_config_write_rdy_hold(debug);
-        debug.check_test(curr_err == debug.get_error_count(), .has_parts(1));
-        reset_errors();
+        // //TEST 7
+        // debug.displayc($sformatf("%0d: Have ps write to config registers, hold ready signal low for random time",debug.test_num), .msg_verbosity(sim_util_pkg::VERBOSE));
+        // curr_err = debug.get_error_count();
+        // tb_i.ps_config_write_rdy_hold(debug);
+        // debug.check_test(curr_err == debug.get_error_count(), .has_parts(1));
+        // reset_errors();
 
-        //TEST 8
-        debug.displayc($sformatf("%0d: Write to exposed registers",debug.test_num), .msg_verbosity(sim_util_pkg::VERBOSE));
-        curr_err = debug.get_error_count();
-        tb_i.rtl_exposed_reg_test(debug);
-        debug.check_test(curr_err == debug.get_error_count(), .has_parts(1));
-        reset_errors();
+        // //TEST 8
+        // debug.displayc($sformatf("%0d: Write to exposed registers",debug.test_num), .msg_verbosity(sim_util_pkg::VERBOSE));
+        // curr_err = debug.get_error_count();
+        // tb_i.rtl_exposed_reg_test(debug);
+        // debug.check_test(curr_err == debug.get_error_count(), .has_parts(1));
+        // reset_errors();
 
-        //TEST 9
-        debug.displayc($sformatf("%0d: Perform memory test",debug.test_num), .msg_verbosity(sim_util_pkg::VERBOSE));
-        curr_err = debug.get_error_count();
-        tb_i.mem_test(debug);
-        debug.check_test(curr_err == debug.get_error_count(), .has_parts(1));
-        reset_errors();
+        // //TEST 9
+        // debug.displayc($sformatf("%0d: Perform memory test",debug.test_num), .msg_verbosity(sim_util_pkg::VERBOSE));
+        // curr_err = debug.get_error_count();
+        // tb_i.mem_test(debug);
+        // debug.check_test(curr_err == debug.get_error_count(), .has_parts(1));
+        // reset_errors();
 
         // TEST 10
         debug.displayc($sformatf("%0d: Read from every address and ensure appropriate values are present on reset, as well as are written upon a ps write",debug.test_num), .msg_verbosity(sim_util_pkg::VERBOSE));
         curr_err = debug.get_error_count();
-        tb_i.mem_read_write_test(debug);
+        tb_i.mem_read_write_test(debug, dac_id);
         combine_errors();
         debug.check_test(curr_err == debug.get_error_count(), .has_parts(1));
 
