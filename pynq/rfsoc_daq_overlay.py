@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 from pynq import Overlay
 from pynq import allocate
 import xrfclk
@@ -13,6 +14,9 @@ def clog2(x):
 def ns_to_samp(ns, fsamp):
     """Convert ns duration to number of samples at rate fsamp"""
     return int(ns*1e-9*fsamp)
+
+def get_savefile(device_name):
+    return datetime.now().strftime("%Y%m%d_%H%M%S") + f'_{device_name}'
 
 class DAQOverlay(Overlay):
     """Overlay for rfsoc_daq data acquisition system
@@ -237,7 +241,7 @@ class DAQOverlay(Overlay):
             for bank in range(self._num_channels):
                 depth = (depth_word >> (bank * depth_bits)) & mask
                 if depth & (1 << (depth_bits - 1)):
-                    depth = self._adc_buffer_data_depth
+                    depth = bank_size // depth_to_words
                 depth_per_bank.append(depth)
                 channel = bank % self._active_channels
                 total_depth[channel] += depth
@@ -633,6 +637,55 @@ class DAQOverlay(Overlay):
         # xor 2.7V pgood since its logic level is inverted
         return (self._pgood.channel1[1:7].read() ^ 0x4)
     
+    def _get_tvecs_from_timestamps(self,
+                                   channel_list: list[int],
+                                   timestamps: list[np.ndarray],
+                                   num_samples: list[int]):
+        """Generate time vector from timestamp data
+        
+        Arguments:
+            channel_list (list[int]): list of received channels to plot
+            timestamps (list[array_like]): list of timestamp data for each channel
+            num_samples (list[int]): number of samples per channel
+        
+        Returns:
+            tvecs (list[array_like]): list of time vectors (units: seconds)
+        """
+    
+        tvecs = []
+        index_bits = int(np.ceil(np.log2(self._adc_buffer_data_depth)))
+        index_mask = (1 << index_bits) - 1
+        # first get minimum t0
+        min_t0 = np.inf
+        for channel in channel_list:
+            if len(timestamps[channel]) > 0:
+                min_t0 = min(min_t0, int(timestamps[channel][0]) >> index_bits)
+        for channel in channel_list:
+            if len(timestamps[channel]) > 0:
+                tvec = np.empty(num_samples[channel])
+                tstamp = int(timestamps[channel][0])
+                overflow = 0
+                for n in range(len(timestamps[channel])):
+                    tstamp = int(timestamps[channel][n])
+                    toffset = ((tstamp >> index_bits) - min_t0) * self._adc_parallel_samples
+                    sample_index = (tstamp & index_mask) * self._adc_parallel_samples
+                    sample_index += overflow * (1 << index_bits) * self._adc_parallel_samples
+                    if n == len(timestamps[channel]) - 1:
+                        sample_index_next = len(tvec)
+                    else:
+                        tstamp = int(timestamps[channel][n + 1])
+                        sample_index_next = (tstamp & index_mask) * self._adc_parallel_samples
+                        sample_index_next += overflow * (1 << index_bits) * self._adc_parallel_samples
+                        if sample_index_next < sample_index:
+                            overflow += 1
+                            sample_index_next += (1 << index_bits) * self._adc_parallel_samples
+                    n_samples = sample_index_next - sample_index
+                    tvec[sample_index:sample_index_next] = (toffset + np.arange(n_samples))/self._adc_fsamp
+            else:
+                tvec = np.arange(num_samples[channel])/self._adc_fsamp
+            tvecs.append(tvec)
+        return tvecs
+    
     def plot_channels(self,
                       channel_list: list[int],
                       timestamps: list[np.ndarray],
@@ -645,25 +698,34 @@ class DAQOverlay(Overlay):
             samples (list[array_like]): list of sample data for each channel
         """
         fig, axes = plt.subplots(len(channel_list), 1, sharex=True, figsize=(12,8+0.5*len(channel_list)), dpi=90)
-        index_bits = clog2(self._adc_buffer_data_depth)
-        index_mask = (1 << index_bits) - 1
-        for axis, channel in zip(axes, channel_list):
-            if len(timestamps[channel]) > 0:
-                tvec = np.zeros(len(samples[channel]))
-                tstamp = int(timestamps[channel][0])
-                t0 = tstamp >> index_bits
-                for n in range(len(timestamps[channel])):
-                    tstamp = int(timestamps[channel][n])
-                    toffset = ((tstamp >> index_bits) - t0) * self._adc_parallel_samples
-                    sample_index = (tstamp & index_mask) * self._adc_parallel_samples
-                    if n == len(timestamps[channel]) - 1:
-                        sample_index_next = len(tvec)
-                    else:
-                        tstamp = int(timestamps[channel][n + 1])
-                        sample_index_next = (tstamp & index_mask) * self._adc_parallel_samples
-                    n_samples = sample_index_next - sample_index
-                    tvec = (toffset + np.arange(n_samples))/self._adc_fsamp
-                    axis.plot(tvec, np.int16(samples[channel][sample_index:sample_index_next])/2**16)
-            else:
-                tvec = np.arange(len(samples[channel]))/self._adc_fsamp
-                axis.plot(tvec, np.int16(samples[channel])/2**16)
+        tvecs = self._get_tvecs_from_timestamps(channel_list, timestamps, [len(s) for s in samples])
+        for n, axis in enumerate(axes):
+            channel = channel_list[n]
+            axis.plot(tvecs[n], np.int16(samples[channel])/2**15)
+            
+            
+    def generate_pulse(self,
+                       pulse_param_ns: list[float],
+                       fsamp: float):
+        """Generate a pulse based on supplied configuration in ns and sample rate
+        
+        Arguments:
+            pulse_param_ns (list[float]): [rise, hold, fall, init delay, period] of waveform in ns
+            fsamp (float): sample rate in Hz
+        """
+        rise_samples = ns_to_samp(pulse_param_ns[0], fsamp)
+        width_samples = ns_to_samp(pulse_param_ns[1], fsamp)
+        fall_samples = ns_to_samp(pulse_param_ns[2], fsamp)
+        delay_samples = ns_to_samp(pulse_param_ns[3], fsamp)
+        period_samples = ns_to_samp(pulse_param_ns[4], fsamp)
+        data = np.zeros(period_samples)
+        offset = delay_samples
+        # rising edge
+        data[offset:offset+rise_samples] = np.linspace(0, 2**15 - 1, rise_samples)
+        offset += rise_samples
+        # mesa
+        data[offset:offset+width_samples] = 2**15 - 1
+        offset += width_samples
+        # falling edge
+        data[offset:offset+fall_samples] = np.linspace(2**15 - 1, 0, fall_samples)
+        return data
