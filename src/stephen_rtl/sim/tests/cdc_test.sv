@@ -25,15 +25,13 @@ module cdc_test #(parameter IS_INTEGRATED = 0, parameter VERBOSE=sim_util_pkg::D
     int test_num; 
 
     data_handshake #(.DATA_WIDTH(PS_CMD_WIDTH))
-    ps_to_dac(.clk_src(ps_clk), .rst_src(ps_rst),
-              .clk_dst(dac_clk), .rst_dst(dac_rst),
+    ps_to_dac(.src_clk(ps_clk), .src_rst(ps_rst), .dst_clk(dac_clk), 
               .data_in(ps_cmd_in), .valid_in(ps_cmd_valid_in),
               .data_out(ps_cmd_out), .valid_out(ps_cmd_valid_out),
               .rdy(ps_cmd_transfer_rdy), .done(ps_cmd_transfer_done));
 
     data_handshake #(.DATA_WIDTH(DAC_RSP_WIDTH))
-    dac_to_ps(.clk_src(dac_clk), .rst_src(dac_rst),
-              .clk_dst(ps_clk), .rst_dst(ps_rst),
+    dac_to_ps(.src_clk(dac_clk), .src_rst(dac_rst), .dst_clk(ps_clk), 
               .data_in(dac_resp_in), .valid_in(dac_resp_valid_in),
               .data_out(dac_resp_out), .valid_out(dac_resp_valid_out),
               .rdy(dac_resp_transfer_rdy), .done(dac_resp_transfer_done));

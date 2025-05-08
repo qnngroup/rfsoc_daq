@@ -80,12 +80,14 @@ def fpga_to_sv(fpga_cmds):
     for el in li: cmd+=f"48'd{el}, "
     cmd = cmd[:-2]+"};"
     return cmd 
+    
 def test_coords(coords,do_plot=True,show_batches=False,simple_plot=False, ignore=[],mv=0x7fff, scale_plot = False):
     coords.reverse()
     intvc,fpga_cmds = c.main(coords)
     path = c.fpga_to_pwl(fpga_cmds)
     intvp,py_fpga_cmds = p.main(coords)
     py_path = c.fpga_to_pwl(py_fpga_cmds)
+    path = py_path[:]
     waves,_ = p.decode_pwl_cmds(path)
     
     if scale_plot:
@@ -171,37 +173,72 @@ def test_coords(coords,do_plot=True,show_batches=False,simple_plot=False, ignore
         while t <= len(flat_wave):
             plt.axvline(t,color="orange", alpha=0.4)
             t+=batch_size
-    
+            
+    font = FontProperties()
+    font.set_family('serif')
+    font.set_name('Times New Roman')
+    plt.xlabel(r"Time (us)",fontsize=17,fontproperties=font,fontweight='light')
+    plt.ylabel(r"% Of Max DAC Voltage",fontsize=17,fontproperties=font,fontweight='light')
+     
+    plt.show()
     return path,passed,wrong,intvc,intvp
 ##############################################################################################################################################
 
-test_num = int(10)
-do_plot = True
-simple_plot = False
-nxt_perc = 10
-t0 = time()
-n = 10
-intvcs,intvps = [],[]
-avg_dt = 100
-for i in range(test_num):
-    perc = (i/test_num)*100
-    if round(perc) == nxt_perc: 
-        print(f"{nxt_perc}%",end="")
-        if nxt_perc != 90: print(",",end="")
-        nxt_perc+=10        
-    coords = gen_rand_coords(n=n,avg_dt=avg_dt,max_val=max_voltage)
-    # coords = [(0, 0), (9, 64)]
-    ignore = ignore_same_sloped_points(coords)
-    path,result,wrong,intvc,intvp = test_coords(coords[:],do_plot=do_plot,show_batches=False,simple_plot=simple_plot, ignore=ignore,scale_plot = False)
-    intvcs.append(intvc)
-    intvps.append(intvp)
-    if not result:
-        print("\nFailed")
-        print(coords)
-        print(wrong)
-        break
-else:
-    print("\nPassed")
+# test_num = int(10)
+# do_plot = True
+# simple_plot = False
+# nxt_perc = 10
+# t0 = time()
+# n = 10
+# intvcs,intvps = [],[]
+# avg_dt = 100
+# for i in range(test_num):
+#     perc = (i/test_num)*100
+#     if round(perc) == nxt_perc: 
+#         print(f"{nxt_perc}%",end="")
+#         if nxt_perc != 90: print(",",end="")
+#         nxt_perc+=10        
+#     coords = gen_rand_coords(n=n,avg_dt=avg_dt,max_val=max_voltage)
+#     # coords = [(0, 0), (9, 64)]
+#     ignore = ignore_same_sloped_points(coords)
+#     path,result,wrong,intvc,intvp = test_coords(coords[:],do_plot=do_plot,show_batches=False,simple_plot=simple_plot, ignore=ignore,scale_plot = False)
+#     intvcs.append(intvc)
+#     intvps.append(intvp)
+#     if not result:
+#         print("\nFailed")
+#         print(coords)
+#         print(wrong)
+#         break
+# else:
+#     print("\nPassed")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+t = 0
+def f(x): 
+    global t
+    t += x
+    return t
+coords = [(0,t), (100, f(20)), (70,f(76)), (10, f(43)), (60, f(37)), (60, f(60)), (20, f(50)), (0,f(50)), (0, f(60))]
+ignore = ignore_same_sloped_points(coords)
+path,result,wrong,intvc,intvp = test_coords(coords[:],do_plot=True,show_batches=True,simple_plot=False, ignore=ignore,scale_plot = False)
+ 
+ 
+
 
 # avg_intvc = sum(intvcs)/len(intvcs)
 # avg_intvp = sum(intvps)/len(intvps)

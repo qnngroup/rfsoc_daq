@@ -79,28 +79,31 @@ def formatFuncCall(s,fName = "functionName",addition=None):
 
 def parallelize_field(field_name, num_in_parallel, width=None):
     template = lambda i : f"assign {field_name}{i} = {field_name}[{i}];\n"
-    out= f"logic[{num_in_parallel-1}:0][{width}-1:0] {field_name};" if width else f"logic[{num_in_parallel}:0]{field_name};"
-    out += f"\nlogic[{width}-1:0] " if width else "\nlogic "
+    try: width_str = int(width)-1
+    except ValueError: width_str = f"{width}-1:0"
+    out= f"logic[{num_in_parallel-1}:0][{width_str}:0] {field_name};" if width else f"logic[{num_in_parallel}:0]{field_name};"
+    out += f"\nlogic[{width_str}:0] " if width else "\nlogic "
     for i in range(num_in_parallel): out+=f"{field_name}{i},"
     out = out[:-1] + ";\n"
     for i in range(num_in_parallel): out+=template(i)
     return out[:-1]
 
 
-st = """module rgb_controller(input wire clk, rst,
-              		  input wire [7:0] r_in, g_in, b_in,
-              		  output logic r_out, g_out, b_out);
+st = """module pulse_CDC(input wire src_clk, dst_clk, 
+                     input wire signal_in,
+                     output logic signal_out);
                  """
-fName = "dut_i"
+fName = "rst_CDC"
 addition = ""
 out= formatFuncCall(st,fName=fName,addition=addition)
 print(out)
 
-field_name = "dac_batches"
-num_in_parallel = 8
-width = "BATCH_WIDTH"
+field_name = "r_line_in"
+num_in_parallel = 3
+width = 5
 out = parallelize_field(field_name,num_in_parallel,width)
 print(out)
+
 
 
 

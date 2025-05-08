@@ -3,9 +3,9 @@
 
 import mem_layout_pkg::*;
 import axi_params_pkg::*;
-module slave_test #(parameter IS_INTEGRATED = 0, parameter VERBOSE=sim_util_pkg::DEBUG)();
+module slave_test #(parameter IS_INTEGRATED = 0, parameter VERBOSE=sim_util_pkg::VERBOSE)();
 	localparam TIMEOUT = 1000;
-	localparam TEST_NUM = 9*2 + 3; 
+	localparam TEST_NUM = 9*2 + 3;
 	localparam int CLK_RATE_MHZ = 150;
     localparam MAN_SEED = 0; 
 
@@ -135,14 +135,14 @@ module slave_test #(parameter IS_INTEGRATED = 0, parameter VERBOSE=sim_util_pkg:
             wdata = $urandom();
             begin tb_i.ps_write(debug,RST_ADDR, 350); end 
             begin 
-                repeat (3) @(posedge clk); 
+                repeat (4) @(posedge clk); 
                 tb_i.rtl_write(0,wdata); 
                 tb_i.rtl_read(0,rdata,.clr(0)); 
             end 
         join
         debug.disp_test_part(4,rdata == wdata,"Error when rtl writes immediately after ps (rtl read wrong)");
         tb_i.ps_read(RST_ADDR,rdata);
-        debug.disp_test_part(5,rdata == wdata,"Error when rtl writes immediately after ps (ps read wrong)");
+        debug.disp_test_part(5,rdata == wdata,$sformatf("Error when rtl writes immediately after ps (ps read wrong). Should have gotten %0h, got %0h", wdata, rdata));
         //3. rtl writes immediately before ps; no conflict, should read ps value (rtl should read its own at first since the rtl read takes precedence over the ps write)
         fork 
             wdata = $urandom();

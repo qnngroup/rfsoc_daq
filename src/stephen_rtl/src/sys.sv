@@ -1,3 +1,4 @@
+
 `timescale 1ns / 1ps
 `default_nettype none
 
@@ -7,12 +8,12 @@ import daq_params_pkg::*;
 `define memID_to_dacID(i, base, reg_width) ((i-(base))/(reg_width))
 `define memID_to_dacRegID(i,base,reg_width) ((i-(base))%(reg_width))
 
-module sys(input wire ps_clk,ps_rst,dac_clk,dac_rst,
+module sys(input wire ps_clk,sys_rst,dac_clk,
+           output logic dac_rst, 
            //DAC Inputs/Outputs
            input wire[DAC_NUM-1:0] dac_rdys,
            output logic[DAC_NUM-1:0][(BATCH_SIZE)-1:0][(SAMPLE_WIDTH)-1:0] dac_batches, 
            output logic[DAC_NUM-1:0] valid_dac_batches, 
-           output logic pl_rstn, 
            //PS Inputs/Outputs 
            Recieve_Transmit_IF wa_if,
            Recieve_Transmit_IF wd_if,
@@ -25,13 +26,14 @@ module sys(input wire ps_clk,ps_rst,dac_clk,dac_rst,
            Axis_IF buffc_if,    //Buffer Config axi-stream
            Axis_IF cmc_if,      //Channel Mux Config axi-stream
            Axis_IF sdc_if);     //Sample Discriminator Config axi-stream
-
+    
     localparam BS_WIDTH = $clog2(MAX_DAC_BURST_SIZE); 
 
     logic [MEM_SIZE-1:0] fresh_bits,rtl_read_reqs,rtl_write_reqs, rtl_rdy;
     logic[MEM_SIZE-1:0][DATAW-1:0] rtl_wd_in, rtl_rd_out;
-    logic rst_cmd = 1;
-    logic rst, bufft_valid_clear;
+    logic ps_rst = 1; 
+    logic dac_rst_ACK; 
+    logic bufft_valid_clear;
     logic[DAC_NUM-1:0][BS_WIDTH-1:0] dac_burst_sizes; 
     logic[DAC_NUM-1:0] hlt_cmds;
     logic[DAC_NUM-1:0][$clog2(SAMPLE_WIDTH):0] scale_factors; 
@@ -46,10 +48,6 @@ module sys(input wire ps_clk,ps_rst,dac_clk,dac_rst,
     dacBurstStateT[DAC_NUM-1:0] dacBurstStates; 
     scaleParamStateT[DAC_NUM-1:0] scaleParamStates; 
     hltStateT[DAC_NUM-1:0] hltStates; 
-
-    
-    assign rst = ps_rst || rst_cmd;
-    assign pl_rstn = ~rst_cmd; 
 
     // Maps which parts of the system are responssible for writing to which parts of the memory map (Defines ready, read, write, and write_data signals)
     always_comb begin
@@ -69,13 +67,13 @@ module sys(input wire ps_clk,ps_rst,dac_clk,dac_rst,
                 end 
             endcase 
 
-            if ((is_RTLPOLL(i)) || (is_READONLY(i))) {rtl_read_reqs[i], rtl_write_reqs[i], rtl_wd_in[i]} = 0; //If rtl polls, no writing or reading. If it's readonly, just use the package definition
+            if ((is_RTLPOLL(i)) || (is_READONLY(i))) {rtl_read_reqs[i], rtl_write_reqs[i], rtl_wd_in[i]} = '0; //If rtl polls, no writing or reading. If it's readonly, just use the package definition
             else if (i inside {[BUFF_TIME_BASE_ID : BUFF_TIME_VALID_ID]}) begin
-               if (i == BUFF_TIME_VALID_ID) rtl_read_reqs[i] = (bufftState == BUFFT_CLR_FB); 
-               else rtl_read_reqs[i] = 0; 
+                if (i == BUFF_TIME_VALID_ID) rtl_read_reqs[i] = (bufftState == BUFFT_CLR_FB); 
+                else rtl_read_reqs[i] = '0; 
                 if (bufft_valid_clear) begin
                     if (i == BUFF_TIME_VALID_ID) {rtl_wd_in[i], rtl_write_reqs[i]} = 1; 
-                    else {rtl_write_reqs[i], rtl_wd_in[i]} = 0;
+                    else {rtl_write_reqs[i], rtl_wd_in[i]} = '0;
                 end else begin
                     rtl_write_reqs[i] = adc_intf.buff_timestamp_writereq; 
                     if (i == BUFF_TIME_VALID_ID) rtl_wd_in[i] = 1; 
@@ -84,9 +82,9 @@ module sys(input wire ps_clk,ps_rst,dac_clk,dac_rst,
             end else if (i inside {[PWL_PERIOD_IDS[0] : PWL_PERIOD_VALID_IDS[DAC_NUM-1]]}) begin
                 rtl_write_reqs[i] = save_pwl_wave_periods[`memID_to_dacID(i,PWL_PERIOD_IDS[0],PWL_PERIOD_SIZE+1)]; 
                 rtl_wd_in[i] = pwl_wave_periods[`memID_to_dacID(i,PWL_PERIOD_IDS[0],PWL_PERIOD_SIZE+1)][`memID_to_dacRegID(i,PWL_PERIOD_IDS[0],PWL_PERIOD_SIZE)]; 
-                rtl_read_reqs[i] = 0;
+                rtl_read_reqs[i] = '0;
             end
-            else {rtl_read_reqs[i], rtl_write_reqs[i], rtl_wd_in[i]} = 0;
+            else {rtl_read_reqs[i], rtl_write_reqs[i], rtl_wd_in[i]} = '0;
         end
         rtl_rdy[MAPPED_ID_CEILING+:(MEM_SIZE-MAPPED_ID_CEILING)] = -1;
         rtl_read_reqs[MAPPED_ID_CEILING+:(MEM_SIZE-MAPPED_ID_CEILING)] = 0;
@@ -99,7 +97,7 @@ module sys(input wire ps_clk,ps_rst,dac_clk,dac_rst,
         for (genvar dac_i = 0; dac_i < DAC_NUM; dac_i++) begin: DACS
 
             always_ff @(posedge ps_clk) begin
-                if (rst) begin
+                if (ps_rst) begin
                     hlt_cmds[dac_i] <= 0;
                     {dac_burst_sizes[dac_i],scale_factors[dac_i]} <= '0; 
                     dacBurstStates[dac_i] <= IDLE_DB; 
@@ -145,26 +143,32 @@ module sys(input wire ps_clk,ps_rst,dac_clk,dac_rst,
         end 
     endgenerate
 
+    pulse_CDC
+    rst_CDC(.src_clk(ps_clk), .dst_clk(dac_clk),
+            .signal_in(ps_rst), .signal_out(dac_rst));
+    pulse_CDC
+    rst_ACK_CDC(.src_clk(dac_clk), .dst_clk(ps_clk),
+                .signal_in(dac_rst), .signal_out(dac_rst_ACK));
     // Overall system state machine (unparallelized: resets, external reg handling)
     always_ff @(posedge ps_clk) begin
-        if (rst) begin
-            if (ps_rst) rst_cmd <= 1;
-            else rst_cmd <= 0; 
-            bufft_valid_clear <= 0; 
-            rstState <= IDLE_R;
-            bufftState <= IDLE_B; 
-        end 
-        else begin 
+        if (ps_rst) begin
+            if (dac_rst_ACK) begin 
+                ps_rst <= 0; 
+                bufft_valid_clear <= 0; 
+                rstState <= IDLE_R;
+                bufftState <= IDLE_B;
+            end  
+        end else begin 
             case (rstState) 
                 IDLE_R: begin
                     if (fresh_bits[RST_ID]) rstState <= RESP_WAIT; 
+                    if (sys_rst) rstState <= RESET;
                 end 
                 RESP_WAIT: begin
                     if (wr_if.got_pack) rstState <= RESET; 
                 end 
                 RESET: begin
-                    rst_cmd <= 1; 
-                    rstState <= IDLE_R;
+                    if (~sys_rst) ps_rst <= 1; 
                 end 
             endcase 
 
@@ -189,7 +193,7 @@ module sys(input wire ps_clk,ps_rst,dac_clk,dac_rst,
     end
 
     axi_slave 
-    slave(.clk(ps_clk), .rst(rst),
+    slave(.clk(ps_clk), .rst(ps_rst),
           .waddr_if(wa_if),
           .wdata_if(wd_if),
           .raddr_if(ra_if),
@@ -202,10 +206,9 @@ module sys(input wire ps_clk,ps_rst,dac_clk,dac_rst,
           .rtl_wd_in(rtl_wd_in),               //in
           .rtl_rd_out(rtl_rd_out),             //out 
           .fresh_bits(fresh_bits));
-
-
+    
     DAC_Interface #(.DATAW(DATAW), .SAMPLEW(SAMPLE_WIDTH), .BS_WIDTH(BS_WIDTH), .BATCH_WIDTH(BATCH_WIDTH), .BATCH_SIZE(BATCH_SIZE), .PWL_PERIOD_WIDTH(PWL_PERIOD_WIDTH), .PWL_PERIOD_SIZE(PWL_PERIOD_SIZE))
-    dac_intf(.ps_clk(ps_clk),.ps_rst(rst),
+    dac_intf(.ps_clk(ps_clk),.ps_rst(ps_rst),
              .dac_clk(dac_clk),.dac_rst(dac_rst),
              .fresh_bits(fresh_bits), .read_resps(rtl_rd_out),
              .scale_factor_ins(scale_factors), .dac_bs_ins(dac_burst_sizes),
@@ -216,7 +219,7 @@ module sys(input wire ps_clk,ps_rst,dac_clk,dac_rst,
              .pwl_dmas_if(pwl_dmas_if));
 
     ADC_Interface #(.DATAW(DATAW), .SDC_SIZE(SDC_SIZE), .BUFF_CONFIG_WIDTH(BUFF_CONFIG_WIDTH), .CHAN_SIZE(CHAN_SIZE), .BUFF_SIZE(BUFF_SIZE)) 
-    adc_intf(.clk(ps_clk), .rst(rst),
+    adc_intf(.clk(ps_clk), .rst(ps_rst),
              .fresh_bits(fresh_bits),
              .read_resps(rtl_rd_out),
              .bufft(bufft_if.stream_in),
@@ -226,10 +229,3 @@ module sys(input wire ps_clk,ps_rst,dac_clk,dac_rst,
 endmodule 
 
 `default_nettype wire
-
-/*
-TODO:
-1. Idk what MAX_BURST_SIZE_ID corresponds to, figure it out or remove it (DONE)
-2. Idk why the dac_ila has a full vector of write requests when it only needs two: one for placing a sample and one for letting the PS know a sample was placed. Fix that (DONE)
-3. 
-*/

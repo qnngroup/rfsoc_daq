@@ -2,7 +2,8 @@
 `default_nettype none
 
 import daq_params_pkg::DAC_NUM;
-module top_level(input wire ps_clk,ps_rst, dac_clk, dac_rst,
+module top_level(input wire ps_clk,sys_rst, dac_clk,
+                 output logic dac_rstn, 
                  //Inputs from DAC
                  input wire[DAC_NUM-1:0] dac_rdys,
                  //Outpus to DAC
@@ -40,7 +41,8 @@ module top_level(input wire ps_clk,ps_rst, dac_clk, dac_rst,
                  input  wire[DAC_NUM-1:0][(daq_params_pkg::DMA_DATA_WIDTH/8)-1:0] pwl_tkeeps,
                  input  wire[DAC_NUM-1:0] pwl_tlasts, pwl_tvalids,
                  output logic[DAC_NUM-1:0] pwl_treadys);
-
+    
+    logic dac_rst; 
     Recieve_Transmit_IF #(axi_params_pkg::A_BUS_WIDTH,  axi_params_pkg::A_DATA_WIDTH)  wa_if (); 
     Recieve_Transmit_IF #(axi_params_pkg::WD_BUS_WIDTH, axi_params_pkg::WD_DATA_WIDTH) wd_if (); 
     Recieve_Transmit_IF #(axi_params_pkg::A_BUS_WIDTH,  axi_params_pkg::A_DATA_WIDTH)  ra_if (); 
@@ -54,6 +56,8 @@ module top_level(input wire ps_clk,ps_rst, dac_clk, dac_rst,
     Axis_IF #(daq_params_pkg::CHANNEL_MUX_WIDTH) cmc_if();
     Axis_IF #(daq_params_pkg::SDC_DATA_WIDTH) sdc_if();
 
+    assign dac_rstn = ~dac_rst; 
+    assign pl_rstn = ~sys_i.ps_rst; 
     always_comb begin 
         for (int dac_id = 0; dac_id < DAC_NUM; dac_id++) begin
             pwl_dmas_if.data[dac_id] = pwl_tdatas[dac_id];
@@ -111,18 +115,18 @@ module top_level(input wire ps_clk,ps_rst, dac_clk, dac_rst,
     // All of these signals don't apply to read response since a transmitter module doesn't handle setting the packet and valid_packet field: its set directly in the slave module. 
     assign {rr_if.dev_rdy, rr_if.data_to_send, rr_if.send, rr_if.trans_rdy} = 0; 
 
-    sys 
-    sys (.ps_clk(ps_clk), .ps_rst(ps_rst), .dac_clk(dac_clk), .dac_rst(dac_rst), .pl_rstn(pl_rstn),
-         .dac_batches(dac_batches), .valid_dac_batches(valid_dac_batches), .dac_rdys(dac_rdys),
-         .wa_if(wa_if), .wd_if(wd_if),
-         .ra_if(ra_if), .rd_if(rd_if),
-         .wr_if(wr_if), .rr_if(rr_if),
-         .pwl_dmas_if(pwl_dmas_if),
-         .bufft_if(bufft_if), .buffc_if(buffc_if), .cmc_if(cmc_if), .sdc_if(sdc_if)); 
+    sys
+    sys_i (.ps_clk(ps_clk), .sys_rst(sys_rst), .dac_clk(dac_clk), .dac_rst(dac_rst),
+           .dac_batches(dac_batches), .valid_dac_batches(valid_dac_batches), .dac_rdys(dac_rdys),
+           .wa_if(wa_if), .wd_if(wd_if),
+           .ra_if(ra_if), .rd_if(rd_if),
+           .wr_if(wr_if), .rr_if(rr_if),
+           .pwl_dmas_if(pwl_dmas_if),
+           .bufft_if(bufft_if), .buffc_if(buffc_if), .cmc_if(cmc_if), .sdc_if(sdc_if)); 
 
       // sys_ILA sys_ILA (.clk(ps_clk), 
-      //                  .probe0(sys.rst),
-      //                  .probe1(sys.hlt_counter),
+      //                  .probe0(sys_i.rst),
+      //                  .probe1(sys_i.hlt_counter),
       //                  .probe2(waddr_packet),
       //                  .probe3(waddr_valid_packet),
       //                  .probe4(wdata_packet),
@@ -136,18 +140,18 @@ module top_level(input wire ps_clk,ps_rst, dac_clk, dac_rst,
       //                  .probe12(ps_read_rdy),
       //                  .probe13(wresp_out),
       //                  .probe14(rresp_out),
-      //                  .probe15(sys.dac_intf.dacConfigState),
-      //                  .probe16(sys.dac_intf.ps_cmd_in),
-      //                  .probe17(sys.dac_intf.seed_set),
-      //                  .probe18(sys.dac_intf.state_rdy),
-      //                  .probe19(sys.dac_intf.fresh_bits),
-      //                  .probe20(sys.ps_rst),
-      //                  .probe21(sys.rst_cmd),
-      //                  .probe22(sys.rstState),
-      //                  .probe23(sys.dac_intf.resp_out),
-      //                  .probe24(sys.dac_intf.resp_out_valid),
-      //                  .probe25(sys.dac_intf.resp_transfer.dstState),
-      //                  .probe26(sys.dac_intf.pwl_rdy));
+      //                  .probe15(sys_i.dac_intf.dacConfigState),
+      //                  .probe16(sys_i.dac_intf.ps_cmd_in),
+      //                  .probe17(sys_i.dac_intf.seed_set),
+      //                  .probe18(sys_i.dac_intf.state_rdy),
+      //                  .probe19(sys_i.dac_intf.fresh_bits),
+      //                  .probe20(sys_i.ps_rst),
+      //                  .probe21(sys_i.rst_cmd),
+      //                  .probe22(sys_i.rstState),
+      //                  .probe23(sys_i.dac_intf.resp_out),
+      //                  .probe24(sys_i.dac_intf.resp_out_valid),
+      //                  .probe25(sys_i.dac_intf.resp_transfer.dstState),
+      //                  .probe26(sys_i.dac_intf.pwl_rdy));
                         
       //  dac_ILA dac_ILA (.clk(dac_clk), 
       //                  .probe0(dac_rst),
@@ -157,39 +161,39 @@ module top_level(input wire ps_clk,ps_rst, dac_clk, dac_rst,
       //                  .probe4(pwl_tlast),
       //                  .probe5(pwl_tready),
       //                  .probe6(dac_batch),          
-      //                  .probe7(sys.dac_intf.sample_gen.run_shift_regs),
-      //                  .probe8(sys.dac_intf.sample_gen.run_trig_wav),
-      //                  .probe9(sys.dac_intf.sample_gen.run_pwl),
-      //                  .probe10(sys.dac_intf.sample_gen.pwl_gen.pwlState),
-      //                  .probe11(sys.dac_intf.sample_gen.pwl_gen.curr_dma_valid),
-      //                  .probe12(sys.dac_intf.sample_gen.pwl_gen.curr_dma_x),
-      //                  .probe13(sys.dac_intf.sample_gen.pwl_gen.curr_dma_slope),
-      //                  .probe14(sys.dac_intf.sample_gen.pwl_gen.curr_dma_dt),
-      //                  .probe15(sys.dac_intf.sample_gen.pwl_gen.curr_dma_sb),
-      //                  .probe16(sys.dac_intf.sample_gen.pwl_gen.batch_out),
-      //                  .probe17(sys.dac_intf.sample_gen.pwl_gen.valid_batch_out),
-      //                  .probe18(sys.dac_intf.resp_in),
-      //                  .probe19(sys.dac_intf.resp_transfer.srcState),
-      //                  .probe20(sys.dac_intf.resp_transfer_rdy),
-      //                  .probe21(sys.dac_intf.resp_transfer_done),
-      //                  .probe22(sys.dac_intf.resp_in_valid),
-      //                  .probe23(sys.dac_intf.sample_gen.pwl_gen.sbram_we),
-      //                  .probe24(sys.dac_intf.sample_gen.pwl_gen.dbram_we),
-      //                  .probe25(sys.dac_intf.sample_gen.pwl_gen.nxt_dma_valid),
-      //                  .probe26(sys.dac_intf.sample_gen.pwl_gen.intrp_count),
-      //                  .probe27(sys.dac_intf.sample_gen.pwl_gen.intrp_out_dt),
-      //                  .probe28(sys.dac_intf.sample_gen.pwl_gen.valid_intrp_out),
-      //                  .probe29(sys.dac_intf.sample_gen.pwl_gen.save_sarse_cmd_now),
-      //                  .probe30(sys.dac_intf.sample_gen.pwl_gen.push_dense_cmd_now),
-      //                  .probe31(sys.dac_intf.sample_gen.pwl_gen.batch_ptr),
-      //                  .probe32(sys.dac_intf.sample_gen.pwl_gen.dense_batch_in),
-      //                  .probe33(sys.dac_intf.sample_gen.pwl_gen.dense_nxt_bram_bit),
-      //                  .probe34(sys.dac_intf.sample_gen.pwl_gen.gen_mode),
-      //                  .probe35(sys.dac_intf.sample_gen.pwl_gen.sbram_next),
-      //                  .probe36(sys.dac_intf.sample_gen.pwl_gen.dbram_next),
-      //                  .probe37(sys.dac_intf.sample_gen.pwl_gen.dbram_gen_addr),
-      //                  .probe38(sys.dac_intf.sample_gen.pwl_gen.nxt_dma_sb),
-      //                  .probe39(sys.dac_intf.sample_gen.pwl_gen.sbram_gen_addr));
+      //                  .probe7(sys_i.dac_intf.sample_gen.run_shift_regs),
+      //                  .probe8(sys_i.dac_intf.sample_gen.run_trig_wav),
+      //                  .probe9(sys_i.dac_intf.sample_gen.run_pwl),
+      //                  .probe10(sys_i.dac_intf.sample_gen.pwl_gen.pwlState),
+      //                  .probe11(sys_i.dac_intf.sample_gen.pwl_gen.curr_dma_valid),
+      //                  .probe12(sys_i.dac_intf.sample_gen.pwl_gen.curr_dma_x),
+      //                  .probe13(sys_i.dac_intf.sample_gen.pwl_gen.curr_dma_slope),
+      //                  .probe14(sys_i.dac_intf.sample_gen.pwl_gen.curr_dma_dt),
+      //                  .probe15(sys_i.dac_intf.sample_gen.pwl_gen.curr_dma_sb),
+      //                  .probe16(sys_i.dac_intf.sample_gen.pwl_gen.batch_out),
+      //                  .probe17(sys_i.dac_intf.sample_gen.pwl_gen.valid_batch_out),
+      //                  .probe18(sys_i.dac_intf.resp_in),
+      //                  .probe19(sys_i.dac_intf.resp_transfer.srcState),
+      //                  .probe20(sys_i.dac_intf.resp_transfer_rdy),
+      //                  .probe21(sys_i.dac_intf.resp_transfer_done),
+      //                  .probe22(sys_i.dac_intf.resp_in_valid),
+      //                  .probe23(sys_i.dac_intf.sample_gen.pwl_gen.sbram_we),
+      //                  .probe24(sys_i.dac_intf.sample_gen.pwl_gen.dbram_we),
+      //                  .probe25(sys_i.dac_intf.sample_gen.pwl_gen.nxt_dma_valid),
+      //                  .probe26(sys_i.dac_intf.sample_gen.pwl_gen.intrp_count),
+      //                  .probe27(sys_i.dac_intf.sample_gen.pwl_gen.intrp_out_dt),
+      //                  .probe28(sys_i.dac_intf.sample_gen.pwl_gen.valid_intrp_out),
+      //                  .probe29(sys_i.dac_intf.sample_gen.pwl_gen.save_sarse_cmd_now),
+      //                  .probe30(sys_i.dac_intf.sample_gen.pwl_gen.push_dense_cmd_now),
+      //                  .probe31(sys_i.dac_intf.sample_gen.pwl_gen.batch_ptr),
+      //                  .probe32(sys_i.dac_intf.sample_gen.pwl_gen.dense_batch_in),
+      //                  .probe33(sys_i.dac_intf.sample_gen.pwl_gen.dense_nxt_bram_bit),
+      //                  .probe34(sys_i.dac_intf.sample_gen.pwl_gen.gen_mode),
+      //                  .probe35(sys_i.dac_intf.sample_gen.pwl_gen.sbram_next),
+      //                  .probe36(sys_i.dac_intf.sample_gen.pwl_gen.dbram_next),
+      //                  .probe37(sys_i.dac_intf.sample_gen.pwl_gen.dbram_gen_addr),
+      //                  .probe38(sys_i.dac_intf.sample_gen.pwl_gen.nxt_dma_sb),
+      //                  .probe39(sys_i.dac_intf.sample_gen.pwl_gen.sbram_gen_addr));
                         
                        
                        

@@ -1,8 +1,6 @@
 `default_nettype none
 `timescale 1ns / 1ps
 
-
-
 module axi_transmit_tb #(parameter BUS_WIDTH, parameter DATA_WIDTH)
 					   (input wire clk, rst,
 					    Recieve_Transmit_IF intf);

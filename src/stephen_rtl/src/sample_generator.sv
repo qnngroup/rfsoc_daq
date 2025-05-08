@@ -8,7 +8,7 @@ module sample_generator #(parameter FULL_CMD_WIDTH, CMD_WIDTH, RESP_WIDTH,  BS_W
 					  	  input wire valid_ps_cmd,
 					  	  input wire dac_rdy,
 					  	  input wire[BS_WIDTH-1:0] dac_bs,
-					  	  input wire transfer_rdy, transfer_done,
+					  	  input wire transfer_rdy,
 					  	  output logic[RESP_WIDTH-1:0] dac_cmd, 
 					  	  output logic valid_dac_cmd,
 					  	  output logic[BATCH_WIDTH-1:0] dac_batch,
@@ -81,14 +81,19 @@ module sample_generator #(parameter FULL_CMD_WIDTH, CMD_WIDTH, RESP_WIDTH,  BS_W
 		end 
 
 		if (rst || halt) begin
-			{rand_seed,run_rand,run_trig,run_pwl,set_seeds} <= 0;
-			{valid_dac_cmd,dac_cmd,ps_halt_cmd}  <= 0; 
+			{rand_seed,run_rand,run_trig,run_pwl,set_seeds} <= '0;
+			{valid_dac_cmd,dac_cmd,ps_halt_cmd}  <= '0; 
 		end else begin
-			if (~valid_dac_cmd && transfer_rdy && dac_cmd != curr_dac_cmd) begin
-				dac_cmd <= curr_dac_cmd;
-				valid_dac_cmd <= 1; 
+			if (~valid_dac_cmd) begin
+				if (dac_cmd != curr_dac_cmd) begin
+					dac_cmd <= curr_dac_cmd; 
+					valid_dac_cmd <= 1;
+				end
+			end else begin
+				if (transfer_rdy) valid_dac_cmd <= 0; 
+				else dac_cmd <= curr_dac_cmd; 
 			end
-			if (valid_dac_cmd && transfer_rdy) valid_dac_cmd <= 0; 
+			
 			if (set_seeds) set_seeds <= 0; 
 			if (valid_ps_cmd) begin
 				{ps_halt_cmd,run_rand,run_trig,run_pwl} <= ps_cmd[0+:CMD_WIDTH]; 

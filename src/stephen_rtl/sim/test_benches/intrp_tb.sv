@@ -10,10 +10,11 @@ module intrp_tb #(parameter BATCH_SIZE, parameter SAMPLE_WIDTH, parameter INTERP
 	                    output logic[(2*SAMPLE_WIDTH)-1:0] x,slope);
 	logic[INTERPOLATER_DELAY-1:0] intrp_pipe;
     logic intrp_batch_valid; 
-    logic clk;
     int expc_batch [$]; 
     logic[BATCH_SIZE-1:0][SAMPLE_WIDTH-1:0] line; 
+    logic ref_clk; 
 
+    assign ref_clk = clk; 
     assign intrp_batch_valid = intrp_pipe[INTERPOLATER_DELAY-1]; 
     always_ff @(posedge clk) intrp_pipe[INTERPOLATER_DELAY-1:1] <= intrp_pipe[INTERPOLATER_DELAY-2:0];
 
@@ -45,22 +46,23 @@ module intrp_tb #(parameter BATCH_SIZE, parameter SAMPLE_WIDTH, parameter INTERP
         return real'(rand_real)+fract;
     endfunction 
 
-    task automatic check_intrped_batch(inout sim_util_pkg::debug debug, logic[(2*SAMPLE_WIDTH)-1:0] x_in, real slope_in);
+    task automatic check_intrped_batch(inout sim_util_pkg::debug debug, input logic[(2*SAMPLE_WIDTH)-1:0] x_in, input real slope_in);
         logic[(M+N)-1:0] fixed;
     	int expc_sample;
     	for (int i = 0; i < BATCH_SIZE; i++) expc_batch.push_front($floor((fixed_to_float(x_in) + slope_in*i)+0.5));
     	slope <= float_to_fixed(slope_in); 
     	x <= x_in; 
         @(posedge clk);
-    	sim_util_pkg::flash_signal(intrp_pipe[0],clk);
+    	sim_util_pkg::flash_signal(intrp_pipe[0],ref_clk);
     	while (~intrp_batch_valid) @(posedge clk); 
     	for (int i = 0; i < BATCH_SIZE; i++) begin
     		expc_sample = expc_batch.pop_back(); 
     		debug.disp_test_part(i+1, $signed(intrp_batch[i]) == expc_sample,$sformatf("Error on %0dth sample: Expected %0d, Got %0d",i+1, expc_sample, $signed(intrp_batch[i])));
-    	end 
+    	end
+        repeat (20) @(posedge clk);
     endtask 
 
-    task automatic check_slope_bursts(inout sim_util_pkg::debug debug, int burst_size);
+    task automatic check_slope_bursts(inout sim_util_pkg::debug debug, input int burst_size);
         logic[(M+N)-1:0] fixed;
         int expc_sample, samples_seen;
         logic[(2*SAMPLE_WIDTH)-1:0] x_in;        

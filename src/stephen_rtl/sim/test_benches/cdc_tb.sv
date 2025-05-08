@@ -67,3 +67,4 @@ endmodule
 
 `default_nettype wire
 
+//in init, flash dac clock after ps clock 

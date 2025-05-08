@@ -9,8 +9,8 @@ module axi_recieve_tb #(parameter BUS_WIDTH, DATA_WIDTH)
 	logic [DATA_WIDTH-1:0] data_in [$];
 	int samples_to_send = 0;
 	int samples_recieved = 0; 
-	logic clk2; 
-	assign clk2 = clk;
+	logic ref_clk; 
+	assign ref_clk = clk;
 
 	axi_transmit #(.BUS_WIDTH(BUS_WIDTH), .DATA_WIDTH(DATA_WIDTH))
 	transmitter(.clk(clk), .rst(rst),
@@ -38,14 +38,15 @@ module axi_recieve_tb #(parameter BUS_WIDTH, DATA_WIDTH)
 		for (int i = 0; i < samples_to_send; i++) data_in.push_front(mem_layout_pkg::addrs[i]);
 	endtask
 
-	task automatic send_samples();
+	task automatic send_samples(inout sim_util_pkg::debug debug);
 		intf.dev_rdy <= 1;
 		{intf.data_to_send,intf.send} <= 0; 
 		@(posedge clk);
 		for (int i = samples_to_send-1; i >= 0; i--) begin
 			intf.data_to_send <= data_in[i]; 
-			sim_util_pkg::flash_signal(intf.send,clk2);
+			sim_util_pkg::flash_signal(intf.send,ref_clk);
 			while (~intf.valid_data) @(posedge clk);
+			debug.reset_timeout(ref_clk);
 		end
 		repeat(5) @(posedge clk);
 	endtask

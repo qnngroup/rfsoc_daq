@@ -275,7 +275,7 @@ def decode_pwl_cmds(pwl_cmds):
             t+=1 
     coords.append((wave[-1][-1],abs_t-1))
     if len(batch) != 0:
-        print("UNEVEN WAVE CREATED")
+        assert False, "UNEVEN WAVE CREATED"
         return None
     return wave,coords
 

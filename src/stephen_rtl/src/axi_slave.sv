@@ -85,7 +85,6 @@ module axi_slave (input wire clk, rst,
 			end 
 		end
 	end
-	logic[DATAW-1:0] test;
 	
 	always_ff @(posedge clk) begin
 		if (rst) begin 

@@ -12,10 +12,11 @@ module axi_recieve_test #(parameter IS_INTEGRATED = 0,parameter VERBOSE=sim_util
 
 	logic clk, rst; 
 	int total_errors = 0;
-	int seed;
+	int seed, test_num;
 	int i,j,done_tests; 
 	bit addr_test = 0;
 	bit stall = 1;
+	int timeout_counter;
 	logic[5:0][1:0] run,done; 
 	localparam[5:0][7:0] bus_widths = {8'd111, 8'd32, 8'd16, 8'd11, 8'd2, 8'd1};
 	localparam[1:0][7:0] data_widths = {8'd32, 8'd16};
@@ -42,7 +43,7 @@ module axi_recieve_test #(parameter IS_INTEGRATED = 0,parameter VERBOSE=sim_util
 					debug.displayc($sformatf("%0d: Receive 20 random packets (bus_width = %0d, data_width = %0d)",debug.test_num,bus_widths[i], data_widths[j]), .msg_verbosity(sim_util_pkg::VERBOSE));
 					addr_test = 0;
 					tb_i.prepare_rand_samples(20);
-					tb_i.send_samples();
+					tb_i.send_samples(debug);
 					debug.check_test(tb_i.check_samples(debug),.has_parts(1));
 					reset_errors();
 
@@ -51,7 +52,7 @@ module axi_recieve_test #(parameter IS_INTEGRATED = 0,parameter VERBOSE=sim_util
 						debug.displayc($sformatf("%0d: Receive address space (bus_width = %0d, data_width = %0d)",debug.test_num,bus_widths[i], data_widths[j]), .msg_verbosity(sim_util_pkg::VERBOSE));
 						addr_test = 1;
 						tb_i.prepare_addr_samples();
-						tb_i.send_samples();
+						tb_i.send_samples(debug);
 						if (i == 5) begin
 							combine_errors();
 							debug.check_test(tb_i.check_samples(debug,.is_addr(1)),.has_parts(1));
@@ -66,6 +67,8 @@ module axi_recieve_test #(parameter IS_INTEGRATED = 0,parameter VERBOSE=sim_util
 		end
 	endgenerate
 
+	always_ff @(posedge clk) test_num <= debug.test_num;
+	always_ff @(posedge clk) timeout_counter <= debug.timeout_counter;
 	always #(0.5s/(CLK_RATE_MHZ*1_000_000)) clk = ~clk;
 	initial begin
 		if (~IS_INTEGRATED) begin 

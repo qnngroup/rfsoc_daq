@@ -3,7 +3,7 @@
 
 module integrated_test();
 	localparam TIMEOUT = 1000;
-	localparam VERBOSE = sim_util_pkg::DEFAULT;
+	localparam VERBOSE = sim_util_pkg::VERBOSE;
 	int total_errors = 0; 
 
 	sim_util_pkg::debug debug = new(VERBOSE,1,"INTEGRATED_TEST"); 

@@ -4,8 +4,8 @@
 import mem_layout_pkg::*;
 import axi_params_pkg::*;
 import daq_params_pkg::*;
-module top_tb (input wire ps_clk, dac_clk, pl_rstn,
-			   output logic ps_rst, dac_rst, 
+module top_tb (input wire ps_clk, dac_clk, pl_rstn, ps_rst, dac_rst,
+			   output logic sys_rst, 
 			   //DAC
 			   output logic[DAC_NUM-1:0] dac_rdys,
 			   input  wire[DAC_NUM-1:0][(BATCH_SIZE)-1:0][(SAMPLE_WIDTH)-1:0] dac_batches, 
@@ -53,9 +53,9 @@ module top_tb (input wire ps_clk, dac_clk, pl_rstn,
 	logic[DATAW-1:0] big_reg_buff [$];
 	logic[DATAW-1:0] data_piece;
 	int samples_seen,samples_expected;
-	logic ps_clk2,dac_clk2;
-	assign ps_clk2 = ps_clk;	
-	assign dac_clk2 = dac_clk;	
+	int test_part = 0;
+	logic ref_ps_clk;
+	assign ref_ps_clk = ps_clk;	
 
 	logic[DAC_NUM-1:0][DATAW-1:0] bss;
 	logic[DAC_NUM-1:0][DATAW-1:0] scales;
@@ -90,10 +90,7 @@ module top_tb (input wire ps_clk, dac_clk, pl_rstn,
 		`osc_sig(sdc_rdy_in,ps_clk,1,2,0);
 		`osc_sig(buffc_rdy_in,ps_clk,1,2,0); 
 		`osc_sig(cmc_rdy_in,ps_clk,1,2,0);
-		fork 
-			begin sim_util_pkg::flash_signal(ps_rst,  ps_clk2); end 
-			begin sim_util_pkg::flash_signal(dac_rst, dac_clk2); end 
-		join 
+		sim_util_pkg::flash_signal(sys_rst,  ref_ps_clk);
 	endtask 
 
 	task automatic ps_write(inout sim_util_pkg::debug debug, input logic[A_BUS_WIDTH-1:0] waddr, input logic[DATAW-1:0] wdata);
@@ -119,14 +116,40 @@ module top_tb (input wire ps_clk, dac_clk, pl_rstn,
 		@(posedge ps_clk);
 	endtask 
 
-	task automatic reset(inout sim_util_pkg::debug debug);
+	task automatic send_reset(inout sim_util_pkg::debug debug);
 		ps_write(debug,RST_ADDR, 1);
-		while (pl_rstn) @(posedge ps_clk); 
+		while (pl_rstn) @(posedge ps_clk);
+		while (~pl_rstn) @(posedge ps_clk); 
 	endtask 
 
-	task automatic reset_test(inout sim_util_pkg::debug debug); 
+	task automatic async_reset_test(inout sim_util_pkg::debug debug);
+		sys_rst = 1;
+        repeat (30) @(posedge ps_clk);
+        debug.disp_test_part(test_part, ps_rst == 0 && pl_rstn == 1 && dac_rst == 0, "Async sys reset is still high; synch resets should not be active yet");
+        test_part++;
+        sys_rst = 0;
+        repeat (1) @(posedge ps_clk);
+        debug.disp_test_part(test_part, ps_rst == 1 && pl_rstn == 0 && dac_rst == 0, "Async sys reset just fell; synch ps resets should be active");
+        test_part++;
+        while(~dac_rst) @(posedge dac_clk);
+        debug.disp_test_part(test_part, ps_rst == 1 && pl_rstn == 0 && dac_rst == 1, "PS synch reset should be active until dac reset ACK is recieved"); 
+        test_part++;
+        @(posedge dac_clk);
+        debug.disp_test_part(test_part, dac_rst == 0, "Dac reset should not be active for more than one cycle"); 
+        test_part++;
+        while (ps_rst) @(posedge ps_clk);
+        debug.disp_test_part(test_part, ps_rst == 0 && pl_rstn == 1 && dac_rst == 0, "All resets should be cleared now"); 
+        test_part++;
+	endtask
+
+	task automatic synch_reset_test(inout sim_util_pkg::debug debug);
+		send_reset(debug); 
+		debug.disp_test_part(test_part, ps_rst == 0 && pl_rstn == 1 && dac_rst == 0, "PS synch resets should now be deactive"); 
+		test_part++;
+	endtask 
+
+	task automatic reset_rw_test(inout sim_util_pkg::debug debug); 
 		int small_val_index = $urandom_range(0,DAC_NUM-1);
-		int test_part = 0; 
 		for (int i = 0; i < DAC_NUM; i++) begin
 			bss[i] = (i == small_val_index)? MAX_DAC_BURST_SIZE/2 : $urandom();
 			scales[i] = (i == small_val_index)? MAX_SCALE_FACTOR/2 : $urandom();
@@ -154,7 +177,7 @@ module top_tb (input wire ps_clk, dac_clk, pl_rstn,
 			test_part++;
 		end 
 
-		reset(debug); 
+		send_reset(debug); 
 
 		for (int i = 0; i < BUFF_SIZE; i++) begin
 			ps_read(BUFF_TIME_BASE_ADDR+4*i);
@@ -427,24 +450,26 @@ module top_tb (input wire ps_clk, dac_clk, pl_rstn,
 		end
 	endtask 
 
-	task automatic mem_read_write_test(inout sim_util_pkg::debug debug, input int dac_id);	
-		logic[A_BUS_WIDTH-1:0] addr = PS_SEED_BASE_ADDRS[dac_id];
+	task automatic mem_read_write_test(inout sim_util_pkg::debug debug);	
+		logic[A_BUS_WIDTH-1:0] addr = PS_SEED_BASE_ADDRS[0];
 		logic [DATAW-1:0] expc_data, wdata; 
 		logic[MEM_WIDTH-1:0] id; 
-		reset(debug);
+		send_reset(debug);
 
 		while(addr <= ABS_ADDR_CEILING) begin
-			id = ADDR2ID(addr); 
 			if (addr == MEM_TEST_BASE_ADDR) begin
-				addr = MEM_TEST_END_ADDR;
+				addr = MEM_TEST_END_ADDR+4;
 				continue;
 			end
-
+			
+			id = ADDR2ID(addr); 
 			if (addr == VERSION_ADDR) expc_data = FIRMWARE_VERSION;
 			else if (addr == MEM_SIZE_ADDR) expc_data = MEM_SIZE;
 			else if (addr == MAX_DAC_BURST_SIZE_ADDR) expc_data = MAX_DAC_BURST_SIZE;
 			else if (addr == ABS_ADDR_CEILING) expc_data = {(DATAW-2){1'b1}};
-			else if (is_PS_VALID(id) || is_RTL_VALID(id) || addr == RST_ADDR) expc_data = 0; 
+			else if (is_PS_VALID(id) || is_RTL_VALID(id) || addr == RST_ADDR) expc_data = 0;
+			else if (addr >= DAC_BURST_SIZE_ADDRS[0] && addr <= DAC_BURST_SIZE_ADDRS[DAC_NUM-1]) expc_data = 0;
+			else if (addr >= DAC_SCALE_ADDRS[0] && addr <= DAC_SCALE_ADDRS[DAC_NUM-1]) expc_data = 0; 
 			else if (addr <= MAPPED_ADDR_CEILING) expc_data = {DATAW{1'b1}};
 			else expc_data = 0;
 
@@ -457,8 +482,9 @@ module top_tb (input wire ps_clk, dac_clk, pl_rstn,
 			if (addr == VERSION_ADDR) expc_data = FIRMWARE_VERSION;
 			else if (addr == MEM_SIZE_ADDR) expc_data = MEM_SIZE;
 			else if (addr == MAX_DAC_BURST_SIZE_ADDR) expc_data = MAX_DAC_BURST_SIZE;
-			else if (addr == ABS_ID_CEILING) expc_data = {(DATAW-2){1'b1}};
+			else if (addr == ABS_ADDR_CEILING) expc_data = {(DATAW-2){1'b1}};
 			else if (addr == MAPPED_ADDR_CEILING) expc_data = {DATAW{1'b1}};
+			else if (is_PS_BIGREG(id) && is_PS_VALID(id)) expc_data = 0;			
 			else if (addr > MAPPED_ADDR_CEILING) expc_data = 0;
 			else expc_data = wdata;
 
@@ -466,10 +492,11 @@ module top_tb (input wire ps_clk, dac_clk, pl_rstn,
 			else if (addr > MAPPED_ADDR_CEILING) debug.disp_test_part(id, rdata == expc_data, $sformatf("(post-write UNMAPPED) addr %h: Expected %h got %h",addr,expc_data,rdata));
 			else debug.disp_test_part(id, rdata == expc_data, $sformatf("(post-write) addr %h: Expected %h got %h",addr,expc_data,rdata));
 			addr+=4;
+			debug.reset_timeout(ref_ps_clk);
 		end
-		reset(debug);
+		send_reset(debug);
 		ps_read(ABS_ADDR_CEILING+64);
-		debug.disp_test_part(id+1, rdata == {(DATAW-2){1'b1}}, $sformatf("(post-write UNBOUND) addr %h: Expected %h got %h",addr,{(DATAW-2){1'b1}},rdata));
+		debug.disp_test_part(id+1, rdata == {(DATAW-2){1'b1}}, $sformatf("(post-write UNBOUND) addr %h: Expected %h got %h",ABS_ADDR_CEILING+64,{(DATAW-2){1'b1}},rdata));
 	endtask 
 endmodule 
 

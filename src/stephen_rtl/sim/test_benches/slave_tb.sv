@@ -20,9 +20,9 @@ module slave_tb (input wire clk,
 				 Recieve_Transmit_IF wr_if,
 				 Recieve_Transmit_IF rr_if); 
 	
-	logic clk2;
+	logic ref_clk;
 	logic[DATAW-1:0] rdata;
-	assign clk2 = clk; 
+	assign ref_clk = clk; 
 
 	`define iinside(i, ids) (i inside {[ids[0] : ids[DAC_NUM-1]]})
 
@@ -37,7 +37,7 @@ module slave_tb (input wire clk,
 
 	task automatic ps_read(input logic[ADDRW-1:0] addr, output logic[DATAW-1:0] data);
 		ra_if.data_to_send <= addr; 
-		sim_util_pkg::flash_signal(ra_if.send,clk2); 
+		sim_util_pkg::flash_signal(ra_if.send,ref_clk); 
 		while (1) begin
 			if (rd_if.valid_data) begin
 				data = rd_if.data; 
@@ -50,13 +50,13 @@ module slave_tb (input wire clk,
 		for (int i = start; i < end_id; i++) begin
 			rtl_read(i,rdata);
 			$display("%0d = %0d, %h",i, rdata, rdata);
-			debug.reset_timeout(clk2);
+			debug.reset_timeout(ref_clk);
 		end
 	endtask 
 
 	task automatic rtl_read(input logic[$clog2(MEM_SIZE)-1:0] id, output logic[DATAW-1:0] data, input bit clr = 1);
-		if (clr) sim_util_pkg::flash_signal(clr_rd_out,clk2);
-		sim_util_pkg::flash_signal(rtl_read_reqs[id],clk2); 
+		if (clr) sim_util_pkg::flash_signal(clr_rd_out,ref_clk);
+		sim_util_pkg::flash_signal(rtl_read_reqs[id],ref_clk); 
 		@(posedge clk);
 		data = rtl_rd_out[id]; 
 	endtask 
@@ -67,16 +67,16 @@ module slave_tb (input wire clk,
 		wd_if.data_to_send <= data; 
 		if (delay == 0) begin
 			fork 
-				begin sim_util_pkg::flash_signal(wa_if.send,clk2); end
-				begin sim_util_pkg::flash_signal(wd_if.send,clk2); end
+				begin sim_util_pkg::flash_signal(wa_if.send,ref_clk); end
+				begin sim_util_pkg::flash_signal(wd_if.send,ref_clk); end
 			join
 		end else begin
-			if (addr_first) sim_util_pkg::flash_signal(wa_if.send,clk2);
-			else sim_util_pkg::flash_signal(wd_if.send,clk2); 
+			if (addr_first) sim_util_pkg::flash_signal(wa_if.send,ref_clk);
+			else sim_util_pkg::flash_signal(wd_if.send,ref_clk); 
 
 			for (int i = 1; i < delay; i++) @(posedge clk); 
-			if (addr_first) sim_util_pkg::flash_signal(wd_if.send,clk2);
-			else sim_util_pkg::flash_signal(wa_if.send,clk2);
+			if (addr_first) sim_util_pkg::flash_signal(wd_if.send,ref_clk);
+			else sim_util_pkg::flash_signal(wa_if.send,ref_clk);
 		end 
 
 		while (1) begin
@@ -89,7 +89,7 @@ module slave_tb (input wire clk,
 
 	task automatic rtl_write(input logic[$clog2(MEM_SIZE)-1:0] id, input logic[DATAW-1:0] wdata);
 		rtl_wd_in[id] <= wdata; 
-		sim_util_pkg::flash_signal(rtl_write_reqs[id],clk2); 
+		sim_util_pkg::flash_signal(rtl_write_reqs[id],ref_clk); 
 	endtask 
 
 	task automatic mem_test(inout sim_util_pkg::debug debug);
@@ -105,7 +105,7 @@ module slave_tb (input wire clk,
 				debug.disp_test_part(n+1,rdata == (100+j)+10,$sformatf("Expected %0d, Got %0d",(100+j)+10, rdata));
 			end 
 			n+=2; 
-			debug.reset_timeout(clk2);
+			debug.reset_timeout(ref_clk);
 		end 
 	endtask 
 
@@ -113,7 +113,7 @@ module slave_tb (input wire clk,
 		written_val = $urandom_range(2,{DATAW{1'b1}});
 		for (int addr = PS_BASE_ADDR; addr < ABS_ADDR_CEILING; addr+=4) begin
 			ps_write(debug, addr, written_val);
-			debug.reset_timeout(clk2);
+			debug.reset_timeout(ref_clk);
 		end 
 	endtask 
 
@@ -143,7 +143,7 @@ module slave_tb (input wire clk,
 				else if (i == MAPPED_ID_CEILING) debug.disp_test_part(i,rdata == {DATAW{1'b1}}, $sformatf("mapped ceiling value incorrect. Expected 0x%04x, got 0x%04x.", {DATAW{1'b1}}, rdata));
 				else if (i > MAPPED_ID_CEILING) debug.disp_test_part(i,rdata == 0, $sformatf("Can't write to unmapped memory. At id %0d, expected 0, got 0x%04x.", i, rdata));
 				else debug.disp_test_part(i,rdata == written_val, $sformatf("Memory ID %0d should have been written to. Expected 0x%04x, Got 0x%04x.", i, written_val, rdata));
-				debug.reset_timeout(clk2);
+				debug.reset_timeout(ref_clk);
 			end
 		end else begin
 			for (int i = 0; i <= ABS_ID_CEILING; i++) begin
@@ -162,7 +162,7 @@ module slave_tb (input wire clk,
 				else if (i inside {[MEM_TEST_BASE_ID : MEM_TEST_END_ID]}) debug.disp_test_part(i,rdata == {(DATAW-1){1'b1}}, $sformatf("Mem test default value incorrect. At id %0d, Expected 0x%04x, got 0x%04x.", i, {(DATAW-1){1'b1}}, rdata));
 				else if (i <= MAPPED_ID_CEILING) debug.disp_test_part(i,rdata == {DATAW{1'b1}}, $sformatf("mapped ceiling value incorrect. Expected 0x%04x, got 0x%04x.", {DATAW{1'b1}}, rdata));
 				else debug.disp_test_part(i,rdata == 0, $sformatf("Default value for memory ID %0d should be 0. Got 0x%04x.", i, rdata));
-				debug.reset_timeout(clk2);
+				debug.reset_timeout(ref_clk);
 			end 
 		end
 	endtask

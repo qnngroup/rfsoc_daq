@@ -1,5 +1,6 @@
-
+`timescale 1ns / 1ps
 `default_nettype wire
+
 module BRAM #(
   parameter DATA_WIDTH = 18,                   
   parameter BRAM_DEPTH = 2,

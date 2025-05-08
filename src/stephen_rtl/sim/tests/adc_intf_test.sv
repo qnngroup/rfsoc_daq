@@ -1,12 +1,7 @@
 `default_nettype none
 `timescale 1ns / 1ps
 
-import daq_params_pkg::SDC_DATA_WIDTH;
-import daq_params_pkg::SDC_SIZE;
-import daq_params_pkg::BUFF_CONFIG_WIDTH;
-import daq_params_pkg::CHANNEL_MUX_WIDTH;
-import daq_params_pkg::CHAN_SIZE;
-import daq_params_pkg::BUFF_TIMESTAMP_WIDTH;
+import daq_params_pkg::*;
 module adc_intf_test #(parameter IS_INTEGRATED = 0, parameter VERBOSE=sim_util_pkg::DEBUG)();
 	localparam TIMEOUT = 1500;
 	localparam TEST_NUM = 8;
@@ -27,7 +22,7 @@ module adc_intf_test #(parameter IS_INTEGRATED = 0, parameter VERBOSE=sim_util_p
     Axis_IF #(CHANNEL_MUX_WIDTH) cmc();
     Axis_IF #(SDC_DATA_WIDTH) sdc(); 
 
-    ADC_Interface #(.DATAW(axi_params_pkg::DATAW), .SDC_SIZE(daq_params_pkg::SDC_SIZE), .BUFF_CONFIG_WIDTH(BUFF_CONFIG_WIDTH), .CHAN_SIZE(CHAN_SIZE), .BUFF_SIZE(BUFF_SIZE))
+    ADC_Interface #(.DATAW(axi_params_pkg::DATAW), .SDC_SIZE(SDC_SIZE), .BUFF_CONFIG_WIDTH(BUFF_CONFIG_WIDTH), .CHAN_SIZE(CHAN_SIZE), .BUFF_SIZE(BUFF_SIZE))
     dut_i(.clk(clk), .rst(rst),
           .fresh_bits(fresh_bits),
           .read_resps(read_resps),
